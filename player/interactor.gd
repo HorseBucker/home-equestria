@@ -38,7 +38,7 @@ var _meter: Control
 var _kiss_lift := Vector3.ZERO
 ## B while carrying turns her round to face him; she rides a little further out so her face
 ## is not in his. Eased (0 = facing away, 1 = facing him); cleared when she leaves his arms.
-const FACING_EXTRA_REACH := 0.25
+const FACING_EXTRA_REACH := 0.12
 const FACING_TURN_SECONDS := 0.45
 var facing_player := false
 var _facing := 0.0
