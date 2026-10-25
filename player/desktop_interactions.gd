@@ -7,6 +7,8 @@ const OWNER := preload("res://player/desktop_action_owner.gd")
 const TOUCH_REACH := 1.6
 const CONTACT_SECONDS := .16
 const STROKE_SECONDS := .7
+## Where his palms rest relative to her chest's side grips while carrying (negative = inside them).
+const CARRY_PALM := -.03
 var camera: Camera3D
 var body: Node3D
 var inventory: Node
@@ -46,12 +48,23 @@ func _present(kind: String, point: Vector3, normal: Vector3) -> bool:
 	if not is_instance_valid(_avatar): return false
 	if kind in ["carry", "hoof_hold"]:
 		var facing := camera.global_basis.orthonormalized()
-		_avatar.set_hold_target("right", Transform3D(facing, point), "hold")
-		if kind == "carry": _avatar.set_hold_target("left", Transform3D(facing, point-camera.global_basis.x*.18), "hold")
+		var right := point
+		if kind == "carry":
+			# A hand at her chest grip sinks into her chest whichever way she faces: hold her sides.
+			var across := camera.global_basis.x * (_carry_half_width() + CARRY_PALM)
+			right = point + across
+			_avatar.set_hold_target("left", Transform3D(facing, point - across), "hold")
+		_avatar.set_hold_target("right", Transform3D(facing, right), "hold")
 		_held_pose = true
 		return true
 	if kind == "pet" and _avatar.update_action_target(kind, point, normal): return true
 	return _avatar.request_action(kind, point, normal)
+
+
+## Half her chest's width, from her own side grips, so it fits foals and grown ponies alike.
+func _carry_half_width() -> float:
+	var pony: Node3D = interactor.held
+	return pony.get_grip_transform("left_chest").origin.distance_to(pony.get_grip_transform("right_chest").origin) * .5
 
 
 func busy() -> bool:
@@ -288,7 +301,7 @@ func interaction_hint() -> Dictionary:
 	if not _available(): return {}
 	if is_instance_valid(interactor) and is_instance_valid(interactor.held):
 		return {"target": interactor.held, "point": interactor.held.global_position,
-			"text": "Tap G · Put down   Hold G, let go · Throw   %s · Turn around   Hold K · Kiss" % Settings.key_label("carry_turn", "B"), "outline": null, "visible_pick": true}
+			"text": "Tap G · Put down   Hold G, let go · Throw   Tap %s · Turn around   Hold K · Kiss" % Settings.key_label("carry_turn", "B"), "outline": null, "visible_pick": true}
 	if _action == "hoof_hold":
 		return {"target": _target, "point": _point, "text": "E · Release hoof", "outline": null, "visible_pick": true}
 	if not _social_free(): return {}
