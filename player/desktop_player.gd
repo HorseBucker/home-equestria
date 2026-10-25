@@ -21,6 +21,13 @@ const CROUCH_LERP := 12.0
 @export var walk_speed := 4.0
 @export var sprint_speed := 6.0
 @export var crouch_speed := 1.3
+## Alt walks (a human's Ctrl already crouches): tap it to toggle walking, or hold it to walk
+## only while held. Sprint (Shift) still overrides a toggled walk. AnonPony walks on Ctrl as well.
+@export var stroll_speed := 1.8
+const WALK_TAP := 0.3
+var walk_toggled := false
+var _walk_key_down := false
+var _walk_key_since := 0.0
 @export var fly_speed := 30.0
 @export var mouse_sensitivity := 0.0022
 @export var jump_velocity := 5.0
@@ -135,6 +142,7 @@ func apply_scale(s: float) -> void:
 	walk_speed *= s
 	sprint_speed *= s
 	crouch_speed *= s
+	stroll_speed *= s
 	jump_velocity *= sqrt(s)
 	# Bob is a body-scale motion, so it shrinks with the body.
 	bob_amplitude *= s
@@ -386,7 +394,8 @@ func _physics_process(delta: float) -> void:
 				else:
 					_space_hold = 0.0; _slept_hold = false
 			var q_pressed := Input.is_physical_key_pressed(KEY_Q)
-			var force_up := q_pressed and not _q_held
+			# Q in the wake picker means "stay awake" (world/life/wake_picker.gd), not "get up".
+			var force_up := q_pressed and not _q_held and not has_meta("sleep_picking")
 			_q_held = q_pressed
 			if force_up:
 				force_stand_up()
@@ -439,8 +448,9 @@ func _physics_process(delta: float) -> void:
 	elif not controls_locked and Input.is_action_just_pressed("move_jump") and not crouching:
 		velocity.y = jump_velocity
 
-	var speed := crouch_speed if crouching else (sprint_speed if sprinting else walk_speed)
-	if companion_pace.enabled and not crouching: speed = companion_pace.speed(self, delta)
+	var strolling := _walking() and not sprinting
+	var speed := crouch_speed if crouching else (sprint_speed if sprinting else (stroll_speed if strolling else walk_speed))
+	if companion_pace.enabled and not crouching and not strolling: speed = companion_pace.speed(self, delta)
 	if swimming.active: speed = swimming.SPEED
 	if dir != Vector3.ZERO:
 		velocity.x = dir.x * speed + drunk_drift.x
@@ -496,8 +506,18 @@ func _pony_step(delta: float, input: Vector2) -> void:
 		_fly(input, sprinting)
 		_drive(delta, Vector2.ZERO, false, false)
 		return
+	var walking := _walking() and not sprinting
 	var unheld := not controls_locked and not has_meta("kiss_hold")
-	_drive(delta, input, unheld and sprinting, unheld and Input.is_key_pressed(KEY_CTRL))
+	_drive(delta, input, unheld and sprinting, unheld and (Input.is_key_pressed(KEY_CTRL) or walking))
+
+## Alt: a short tap flips walk_toggled; while held it walks either way.
+func _walking() -> bool:
+	var down := not controls_locked and Input.is_physical_key_pressed(KEY_ALT)
+	var now := Time.get_ticks_msec() * .001
+	if down and not _walk_key_down: _walk_key_since = now
+	elif not down and _walk_key_down and now - _walk_key_since < WALK_TAP: walk_toggled = not walk_toggled
+	_walk_key_down = down
+	return walk_toggled or down
 
 
 func _drive(delta: float, move: Vector2, sprint: bool, slow: bool) -> void:

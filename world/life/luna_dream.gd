@@ -7,13 +7,13 @@ extends Node
 ## talking to Luna woke up), or a few minutes pass; then the night goes on to morning, and
 ## Luna remembers the visit.
 ##
-## Chance: 15 % of sleeps, and certainly by the third sleep if he has never dreamed of her. The
-## moon uses a detailed cratered surface far above the world (the town's streaming and sky are
-## paused and restored around it).
+## Only when asked for: at night the wake picker (world/life/wake_picker.gd) takes a held Space / A
+## as a wish to visit her (dev: the old 15 % chance came uninvited). The moon uses a detailed
+## cratered surface far above the world (the town's streaming and sky are paused and restored
+## around it).
 const SHUTDOWN := preload("res://world/shutdown_waits.gd")
 const MOON_TOP := Vector3(0.0, 9000.0, 0.0)
 const MOON_RADIUS := 700.0
-const CHANCE := 0.15
 const MAX_SECONDS := 300.0
 const LUNA_SCENE := "res://world/characters/princesses/luna.tscn"
 const GREETING := "[Observed situation, not player speech] Anon is asleep, and you have drawn his dream up to you on the moon, where you keep watch over the night. You stand together on the grey dust under the stars. Greet him gently as the princess of dreams: perhaps say where he is, or ask what he dreams of. One or two short sentences; no action tags needed."
@@ -54,14 +54,13 @@ func _state() -> Dictionary:
 	if not state.get("luna_dreams") is Dictionary: state["luna_dreams"] = {"sleeps": 0, "visits": 0}
 	return state.luna_dreams
 
-## Called when a sleep begins: does this one become the dream?
-func roll() -> bool:
-	if preload("res://world/dev_tools.gd").user_args().has("--luna-dream"): return true
+## Called when a sleep begins: does this one become the dream? Only when he asked
+## (`--luna-dream` forces it for testing).
+func requested(asked: bool) -> bool:
 	var record := _state()
 	record.sleeps = int(record.sleeps) + 1
-	var yes: bool = (int(record.visits) == 0 and int(record.sleeps) >= 3) or randf() < CHANCE
 	if game.world_context.has_method("_changed"): game.world_context._changed()
-	return yes
+	return asked or preload("res://world/dev_tools.gd").user_args().has("--luna-dream")
 
 ## The dream itself; returns a fresh cover for the rest of the night.
 func visit(cover: Node) -> Node:

@@ -288,7 +288,7 @@ func interaction_hint() -> Dictionary:
 	if not _available(): return {}
 	if is_instance_valid(interactor) and is_instance_valid(interactor.held):
 		return {"target": interactor.held, "point": interactor.held.global_position,
-			"text": "Tap G · Put down   Hold G, let go · Throw   Hold K · Kiss", "outline": null, "visible_pick": true}
+			"text": "Tap G · Put down   Hold G, let go · Throw   B · Turn around   Hold K · Kiss", "outline": null, "visible_pick": true}
 	if _action == "hoof_hold":
 		return {"target": _target, "point": _point, "text": "E · Release hoof", "outline": null, "visible_pick": true}
 	if not _social_free(): return {}

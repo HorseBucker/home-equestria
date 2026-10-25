@@ -6,6 +6,8 @@ const HEARING_RANGE := 12.0
 const MAX_PEERS := 12
 const MAX_OBJECTS := 6
 const EVENT_LIFETIME := 20.0
+## Weather kinds (weather.gd) that reach dialogue; windy and cloudy stay out of it.
+const NOTICED_WEATHER := ["mist", "fog", "drizzle", "sunshower", "rain", "storm", "hail", "snow", "gathering", "blizzard"]
 const PLACES := preload("res://world/navigation/place_directory.gd")
 ## Pegasus-only cloud floors (the Cloudominium).
 const CLOUD_LAYER := 1 << 18
@@ -211,7 +213,8 @@ func sample(id: String, observer: Node3D, characters: Dictionary, player: Node3D
 		elif golden > 0.4: sample.sky = "golden low sun"
 		else: sample.sky = "full daylight"
 	var weather: Node = observer.get_tree().get_first_node_in_group("weather") if observer.is_inside_tree() else null
-	if weather != null and weather.kind != "clear":
+	# Only weather Anon plainly sees or feels: windy and cloudy spells made every chat about gusts.
+	if weather != null and weather.kind in NOTICED_WEATHER:
 		sample.sky = (str(sample.get("sky", "")) + ", " if sample.has("sky") else "") + weather.describe()
 	if weather != null and weather.has_method("describe_season"):
 		sample.season = weather.describe_season()

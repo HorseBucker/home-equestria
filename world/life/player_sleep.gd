@@ -1,15 +1,18 @@
 extends Node
 ## Anon sleeps (dev 2026-09-29: "sleep mechanic", "sleeping in other ponys beds").
-## Lying on any bed or couch, hold A (VR) or Space (desktop) for SLEEP_HOLD seconds: the screen
-## fades out and back in within five seconds for an ordinary nine-hour sleep.
+## Lying on any bed or couch, hold A (VR) or Space (desktop) for SLEEP_HOLD seconds: the eyes grow
+## heavy and he picks when to wake (world/life/wake_picker.gd), then the screen fades out and back
+## in within five seconds.
 ## Residents' nights run on (night_rest.gd
 ## wakes them properly after a clock jump), and the game autosaves on waking.
 ## A bed in somepony else's house is fine; the household hears about it (a world event they
 ## remember), and a partner in that house simply joins him (the existing bed cuddle).
 ## faint(): too much cider knocks him out; he wakes at 07:00 in his own bed (the arrival story's
 ## house), else the Golden Oak guest bed.
-## A sleep may become a dream (world/life/luna_dream.gd) before the morning.
+## At night, holding Space/A in the picker asks for Luna's dream (world/life/luna_dream.gd) before
+## the morning; dreams never come uninvited.
 const SHUTDOWN := preload("res://world/shutdown_waits.gd")
+const PICKER := preload("res://world/life/wake_picker.gd")
 const COVER := preload("res://world/ui/sleep_cover.gd")
 const HOUSE := preload("res://world/buildings/house_interior.gd")
 const SLEEP_HOLD := 1.5
@@ -19,6 +22,8 @@ const TRANSITION_SECONDS := 5.0
 const VISITOR_PREPARE_MSEC := 1700   # hidden loading runs during the two-second fade
 var game: Node
 var sleeping := false
+## The wake picker is open (before the night begins).
+var picking := false
 var _shared_body: Node
 var _sleep_body: Node
 var _sleep_cover: Node
@@ -39,24 +44,31 @@ func _after_hours(day: int, hours: float, duration: float) -> Array:
 	return [day + floori(later / 24.0), fposmod(later, 24.0)]
 
 ## Held A / Space while lying down (xr_grounded_body.gd, desktop_player.gd). Never inside a Luna
-## dream: that dream is already this night's sleep.
+## dream: that dream is already this night's sleep. (The arrival story's old "overnight" wake at
+## 08:00 is gone: that stage is never entered any more, so the guest bed picks like any other.)
 func sleep() -> void:
-	if sleeping or game == null: return
+	if sleeping or picking or game == null: return
 	var dream: Node = get_tree().get_first_node_in_group("luna_dream")
 	if dream != null and bool(dream.get("active")): return
-	var clock := get_node_or_null("/root/TimeOfDay")
-	var target: Array = target_after(int(clock.day), float(clock.hours))
-	# Accepting Twilight's guest bed during the arrival overnight is a full night's
-	# rest, even if the rescue finished early. This follows the player's sleep action.
-	var arrival: Node = game.get("arrival")
-	var camera: Camera3D = game._find_camera(game.player)
-	var home: Node3D = HOUSE.at(get_tree(), camera.global_position) if camera != null else null
-	if arrival != null and arrival.stage() == "overnight" and home != null and home.place_id() == "house:golden_oak_library":
-		var due_day := int(arrival.data.get("morning_day", int(clock.day) + 1))
-		var due_hour := float(arrival.data.get("morning_hour", 8.0))
-		var hours_until_visit := due_day * 24.0 + due_hour - (float(clock.day) * 24.0 + float(clock.hours))
-		if hours_until_visit > 0.0: target = _after_hours(int(clock.day), float(clock.hours), hours_until_visit)
-	await _pass_night(target, "", true)
+	var body: Node = game.player.get_node("Body") if game.xr_active else game.player
+	var cover: Node = COVER.new(); cover.name = "SleepCover"; game.add_child(cover); cover.setup(game)
+	var picker: Node = PICKER.new(); picker.name = "WakePicker"; add_child(picker)
+	picking = true
+	var was_locked := bool(body.get("controls_locked"))
+	if "controls_locked" in body: body.controls_locked = true
+	body.set_meta("sleep_picking", true)
+	var choice: Dictionary = await picker.pick(game, cover)
+	picking = false
+	if is_instance_valid(picker): picker.queue_free()
+	if is_instance_valid(body):
+		body.remove_meta("sleep_picking")
+		if "controls_locked" in body: body.controls_locked = was_locked
+	if choice.is_empty() or not is_instance_valid(body) or not is_inside_tree():
+		if is_instance_valid(cover):
+			await cover.open_eyes(0.4)
+			if is_instance_valid(cover): cover.queue_free()
+		return
+	await _pass_night(choice.target, "", true, bool(choice.luna), cover)
 
 ## Too much cider (world/life/player_needs.gd): wake at home in bed at 07:00.
 func faint(message: String) -> void:
@@ -69,7 +81,7 @@ func faint(message: String) -> void:
 	if bed != null and not is_instance_valid(body.get("seat")): _place_beside(bed)
 	await _pass_night([day, FAINT_WAKE], message, false)
 
-func _pass_night(target: Array, message: String, in_bed: bool) -> void:
+func _pass_night(target: Array, message: String, in_bed: bool, luna := false, cover: Node = null) -> void:
 	var transition_began := Time.get_ticks_msec()
 	sleeping = true
 	_sleep_serial += 1
@@ -77,7 +89,9 @@ func _pass_night(target: Array, message: String, in_bed: bool) -> void:
 	var context: Node = game.get("world_context")
 	var epoch: int = int(context.get("epoch")) if context != null else -1
 	game.player_sleeping = true
-	var cover: Node = COVER.new(); cover.name = "SleepCover"; game.add_child(cover); cover.setup(game)
+	if not is_instance_valid(cover):
+		cover = COVER.new(); cover.name = "SleepCover"; game.add_child(cover); cover.setup(game)
+	cover.hide_picker()
 	_sleep_cover = cover
 	cover.show_text(message)
 	var body: Node = game.player.get_node("Body") if game.xr_active else game.player
@@ -103,7 +117,7 @@ func _pass_night(target: Array, message: String, in_bed: bool) -> void:
 		return
 	if in_bed: _note_bed()
 	var dream: Node = get_tree().get_first_node_in_group("luna_dream")
-	if in_bed and dream != null and dream.roll():
+	if in_bed and dream != null and dream.requested(luna):
 		cover = await dream.visit(cover)
 		if serial == _sleep_serial: _sleep_cover = cover
 		# Loading a checkpoint may detach this world while the dream awaits a frame.

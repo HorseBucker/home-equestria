@@ -36,6 +36,12 @@ var _meter: Control
 ## Holding K while carrying lifts her face to his (dev 2026-10-14: K did nothing while she sat
 ## at his chest, out of kissing reach). Closed loop on her lips; kept while the kiss lasts.
 var _kiss_lift := Vector3.ZERO
+## B while carrying turns her round to face him; she rides a little further out so her face
+## is not in his. Eased (0 = facing away, 1 = facing him); cleared when she leaves his arms.
+const FACING_EXTRA_REACH := 0.25
+const FACING_TURN_SECONDS := 0.45
+var facing_player := false
+var _facing := 0.0
 
 
 func _ready() -> void:
@@ -62,10 +68,11 @@ func _physics_step(delta: float) -> void:
 	_cooldown = maxf(0.0, _cooldown - delta)
 	_update_kiss_lift(delta)
 	_update_meter()
+	_update_facing(delta)
 	if is_instance_valid(held) and held.has_method("update_grab"):
 		held.update_grab(_hold.global_position + _kiss_lift, global_position)
 		if held.has_method("set_hold_yaw"):
-			held.set_hold_yaw(global_basis.get_euler().y)
+			held.set_hold_yaw(global_basis.get_euler().y + PI * smoothstep(0.0, 1.0, _facing))
 
 
 ## G released: a short tap sets her down, a wind-up throws her (a menu may eat the key-up, so
@@ -116,6 +123,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				if _try_pick_up(): get_viewport().set_input_as_handled()
 		KEY_R:
 			_toggle_follow()
+		KEY_B:
+			if is_instance_valid(held):
+				facing_player = not facing_player
+				get_viewport().set_input_as_handled()
 
 
 ## Sit or stand, open or close the door in view, else pet the pony in view. True when handled.
@@ -199,6 +210,12 @@ func _try_pick_up() -> bool:
 		pony.position = Vector3.ZERO
 		pony.rotation = Vector3.ZERO
 	held = pony
+	# She keeps the way she faced him: facing him when lifted, she is held facing him (B turns her).
+	var ahead := -pony.global_basis.z
+	var to_him := global_position - pony.global_position
+	ahead.y = 0.0; to_him.y = 0.0
+	facing_player = ahead.dot(to_him) > 0.0
+	_facing = 1.0 if facing_player else 0.0
 	if is_instance_valid(desktop_actions): desktop_actions.pony_acquired()
 	SOUNDS.play_at(pony, "prop_contact_cloth")
 	print("[interact] picked up %s" % pony.name)
@@ -277,6 +294,16 @@ func _update_kiss_lift(delta: float) -> void:
 			_kiss_lift = (_kiss_lift + (mouth - lips) * minf(1.0, delta * 4.0)).limit_length(0.9)
 		return
 	_kiss_lift = _kiss_lift.move_toward(Vector3.ZERO, delta * 1.5)
+
+
+## Eases her round toward (or away from) him and moves the hold point out to match.
+func _update_facing(delta: float) -> void:
+	if not is_instance_valid(held):
+		facing_player = false
+		_facing = 0.0
+	else:
+		_facing = move_toward(_facing, 1.0 if facing_player else 0.0, delta / FACING_TURN_SECONDS)
+	_hold.position = HOLD_OFFSET + Vector3(0.0, 0.0, -FACING_EXTRA_REACH * smoothstep(0.0, 1.0, _facing))
 
 
 ## The throw meter by the crosshair while G winds up.
