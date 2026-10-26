@@ -1,0 +1,26 @@
+{
+	"targets": [
+		{
+			"name": "HomeEquestria-data.pck",
+			"parts": [
+				{
+					"name": "quest-data.pck.part1",
+					"size": 1967301931
+				},
+				{
+					"name": "quest-data.pck.part2",
+					"size": 1967301930
+				}
+			]
+		},
+		{
+			"name": "HomeEquestria-raw.pck",
+			"parts": [
+				{
+					"name": "quest-raw.pck",
+					"size": 309276792
+				}
+			]
+		}
+	]
+}

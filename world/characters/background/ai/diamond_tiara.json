@@ -1,0 +1,13 @@
+{
+  "id": "diamond_tiara",
+  "name": "Diamond Tiara",
+  "tag": "diamond_tiara",
+  "prompt": "res://world/characters/background/ai/diamond_tiara.md",
+  "tts_speaker_id": 9,
+  "tts_default_emotion": "neutral",
+  "tts_style_strength": 1.0,
+  "earshot_m": 10.0,
+  "voice_status": "character voice",
+  "chatter_bank": "background_bright",
+  "chatter_pitch": 1.3
+}
