@@ -14,8 +14,8 @@ func _init() -> void:
 
 func open(settings_page: Control) -> void:
 	page = settings_page
-	var background := ColorRect.new(); background.color = Color("30203b")
-	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	# The menus' twilight sky (world/ui/menu_card.gd), edge to edge in its own window.
+	var background: Control = preload("res://world/ui/menu_card.gd").new(); background.radius = 0.0; background.inset = 0.0; background.glow = 0.0
 	add_child(background); background.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	page.reparent(self); page.panel = self
 	page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)

@@ -1,20 +1,44 @@
 extends VBoxContainer
-## The one settings page: tab buttons along the top, a scrolling list of rows, a status
-## line and host buttons (Back / Close) at the bottom. Rows come from Settings.TABS, so the
-## home screen, the F7 panel, the desktop pause menu and the VR panel all show the same
-## settings. Built from plain Buttons (◀ value ▶), which work with the mouse, the keyboard
-## focus keys and a VR controller ray on a spatial panel alike.
+## The one settings page: a sidebar of tabs, the chosen tab's rows, a status line and host
+## buttons (Back / Close) at the bottom. Rows come from Settings.TABS, so the home screen, the
+## F7 panel, the desktop pause menu and the VR panel all show the same settings. Every control is
+## a plain Button (steppers, switches, keycaps), which works with the mouse, the keyboard focus
+## keys and a VR controller ray on a spatial panel alike. Look: world/ui/menu_style.gd (dev
+## 2026-10-27: the grid of grey tab buttons and ◀ value ▶ rows were "not really design").
+## Values are picked directly, never stepped through (dev 2026-10-27: "a choice direct instead
+## of cycling by clicking"): numbers on a slider, a few short choices as pills side by side, the
+## rest in a list that unfolds under the row.
 
 signal back_requested
+
+const STYLE := preload("res://world/ui/menu_style.gd")
+const ICON := preload("res://world/ui/menu_icon.gd")
+const PICKER := preload("res://world/ui/menu_picker.gd")
+const CAPTION := preload("res://world/ui/speech_caption.gd")
+## Sidebar order, captions and pictures; a tab missing here is listed at the end.
+const GROUPS := [
+	["Story & AI", [["AI Settings", "chat"], ["Prompts", "quill"], ["Saved notes", "note"]]],
+	["Look & sound", [["Graphics", "sun"], ["Audio", "music"], ["Reading", "book"], ["World", "globe"]]],
+	["Play", [["Controls", "keyboard"], ["Controls map", "map"], ["VR comfort", "headset"], ["Accessibility", "access"], ["Mods", "gem"]]],
+]
+## Choices side by side at most; more go in a list.
+const MOST_SEGMENTS := 5
 
 ## Called after anything visible changes; a SubViewport panel passes its refresh().
 var redraw := Callable()
 var font_size := 20
 var xr := false
 var capturing := ""            # action waiting for a key press
-var _tabs: Array[Button] = []
+var _tabs: Array[Button] = []          # by Settings.TABS index
+var _tab_order: Array[Button] = []     # as the sidebar shows them
 var _lists: Array[VBoxContainer] = []
-var _values: Dictionary = {}   # key -> value Label or bind Button
+## key -> keycap Button, switch CheckButton, slider value Label, pills HBox or picker.
+var _values: Dictionary = {}
+var _sliders: Dictionary = {}  # key -> HSlider
+var _row_cards: Dictionary = {}  # key -> the row's card (greyed out while it does not apply)
+## Width a row's control may take beside its name.
+var _room := 400.0
+var _side_scroll: ScrollContainer
 var _scroll: ScrollContainer
 var _status: Label
 var _quality_note: Label
@@ -27,67 +51,181 @@ var feedback_notes: Control
 ## Settings → Controls map (world/ui/controls_map/controls_map.gd): photos with callout wires.
 var controls_map: Control
 var footer: HBoxContainer
+var _content: VBoxContainer
+var _tab_title: Label
+var _tab_icon: Control
+var _row_idle: StyleBoxFlat
+var _row_hover: StyleBoxFlat
 
 
 ## `size` is the page's full size; `back_text` names the host's button ("" for none).
 func setup(page_size: Vector2, text_size: int, back_text: String, in_xr := false) -> void:
-	theme = preload("res://world/ui/readable_text_theme.gd").make()
+	theme = STYLE.theme()
 	font_size = text_size; xr = in_xr
 	size = page_size; custom_minimum_size = page_size
-	add_theme_constant_override("separation", 8)
-	var title := Label.new(); title.text = "Settings"; title.add_theme_font_size_override("font_size", font_size + 10); add_child(title)
-	var bar := GridContainer.new(); bar.columns = 4; bar.add_theme_constant_override("separation", 4); add_child(bar)
+	add_theme_constant_override("separation", 10)
+	_row_idle = STYLE.box(Color(1, 1, 1, 0.045), Color(1, 1, 1, 0.07), 1, 16, 16, 9)
+	_row_hover = STYLE.box(Color(1, 1, 1, 0.085), Color(STYLE.PINK, 0.45), 1, 16, 16, 9)
+	var body := HBoxContainer.new(); body.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	body.add_theme_constant_override("separation", 16); add_child(body)
+	_build_sidebar(body, _sidebar_width(page_size.x))
+	_room = _room_for(page_size.x)
+	_content = VBoxContainer.new(); _content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_content.add_theme_constant_override("separation", 10); body.add_child(_content)
+	var title_row := HBoxContainer.new(); title_row.add_theme_constant_override("separation", 10); _content.add_child(title_row)
+	_tab_icon = ICON.make("gear", font_size + 8, STYLE.PINK); title_row.add_child(_tab_icon)
+	_tab_icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_tab_title = STYLE.label("", "Subheading", font_size + 6); title_row.add_child(_tab_title)
 	_scroll = ScrollContainer.new(); _scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; add_child(_scroll)
-	var holder := VBoxContainer.new(); holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL; _scroll.add_child(holder)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; _scroll.follow_focus = true
+	_scroll.get_v_scroll_bar().value_changed.connect(func(_value: float) -> void: _redraw())
+	_content.add_child(_scroll)
+	var holder := MarginContainer.new(); holder.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	holder.add_theme_constant_override("margin_right", 14); _scroll.add_child(holder)
+	# Room for a hovered button's lift and focus ring inside the scroll's clip.
+	holder.add_theme_constant_override("margin_left", 6); holder.add_theme_constant_override("margin_top", 4)
+	holder.add_theme_constant_override("margin_bottom", 4)
+	var stack := VBoxContainer.new(); stack.size_flags_horizontal = Control.SIZE_EXPAND_FILL; holder.add_child(stack)
 	for t in Settings.TABS.size():
-		var tab: Array = Settings.TABS[t]
-		var button := _button(bar, str(tab[0]), _show_tab.bind(t))
-		button.toggle_mode = true; button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.custom_minimum_size.x = 0; button.clip_text = true
-		button.add_theme_font_size_override("font_size", font_size - 3)
-		_tabs.append(button)
-		var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 4)
-		list.size_flags_horizontal = Control.SIZE_EXPAND_FILL; holder.add_child(list); _lists.append(list)
-		for row in tab[1]:
-			_row(list, str(row[0]), str(row[1]))
-			if str(row[1]) == "video/quality": _quality_note = _note(list, "")
-		if str(tab[0]) == "Graphics" and "--debug" in preload("res://world/dev_tools.gd").user_args():
-			_lighting_controls = load("res://world/debug/lighting_page.gd").new()
-			list.add_child(_lighting_controls)
-			_lighting_controls.setup(font_size, _redraw)
-		if str(tab[0]) == "Mods": _build_mods(list)
-		if str(tab[0]) == "VR comfort":
-			_note(list, "A comfort vignette is not available yet.")
-		if str(tab[0]) == "Controls":
-			_note(list, "Other keys (E use, F fly, M map, I briefcase, J inspect, F5–F8) are fixed for now.")
-			_note(list, "Wings or Hercules sandals: F takes off/lands. Space flaps; release to glide. S brakes, Shift powers stronger strokes, Ctrl dives. Left/right mouse banks left/right while flying. Wing stamina returns while gliding or resting. Room-scale VR: A takes off/flaps, B lands; pull the move stick back to brake.")
+		var list := VBoxContainer.new(); list.add_theme_constant_override("separation", 6)
+		list.size_flags_horizontal = Control.SIZE_EXPAND_FILL; stack.add_child(list); _lists.append(list)
+		_fill_list(t, list)
 	provider = preload("res://world/ui/provider_settings.gd").new()
-	add_child(provider); provider.setup(self, true)
+	_content.add_child(provider); provider.setup(self, true)
 	provider.custom_minimum_size = Vector2.ZERO
 	provider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	provider.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	prompts = preload("res://world/ui/prompt_settings.gd").new()
-	add_child(prompts); prompts.setup(self, true)
+	_content.add_child(prompts); prompts.setup(self, true)
 	prompts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	prompts.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	feedback_notes = preload("res://world/ui/feedback_notes.gd").new()
-	add_child(feedback_notes); feedback_notes.setup(self, true)
+	_content.add_child(feedback_notes); feedback_notes.setup(self, true)
 	feedback_notes.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	feedback_notes.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	controls_map = preload("res://world/ui/controls_map/controls_map.gd").new()
-	add_child(controls_map); controls_map.setup(font_size, _redraw)
+	_content.add_child(controls_map); controls_map.setup(font_size, _redraw)
 	controls_map.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	controls_map.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	controls_map.hide()
-	_status = Label.new(); _status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status.add_theme_font_size_override("font_size", font_size - 4); _status.add_theme_color_override("font_color", Color("acb4c0"))
+	_status = STYLE.label("", "Muted", font_size - 3); _status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	add_child(_status)
-	footer = HBoxContainer.new(); footer.add_theme_constant_override("separation", 8); add_child(footer)
+	footer = HBoxContainer.new(); footer.add_theme_constant_override("separation", 10); add_child(footer)
 	if not back_text.is_empty():
-		var back := _button(footer, back_text, func(): back_requested.emit()); back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var back := _button(footer, back_text, func(): back_requested.emit())
+		back.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		back.icon = ICON.texture("back", font_size)
 	Settings.changed.connect(_on_changed)
 	show_tab("Graphics")
+
+
+## One tab's rows (and its notes).
+func _fill_list(t: int, list: VBoxContainer) -> void:
+	var tab: Array = Settings.TABS[t]
+	for row in tab[1]:
+		_row(list, str(row[0]), str(row[1]))
+		# A sample caption under its background row, as that row and Subtitle size make it.
+		if str(row[1]) == "access/caption_opacity":
+			var sample := CAPTION.new()
+			sample.preview = true
+			# Menus drawn on demand (title, VR) redraw once its row has its new height.
+			sample.minimum_size_changed.connect(_redraw)
+			list.add_child(sample)
+	if str(tab[0]) == "Graphics" and "--debug" in preload("res://world/dev_tools.gd").user_args():
+		_lighting_controls = load("res://world/debug/lighting_page.gd").new()
+		list.add_child(_lighting_controls)
+		_lighting_controls.setup(font_size, _redraw)
+	if str(tab[0]) == "Mods": _build_mods(list)
+	if str(tab[0]) == "VR comfort":
+		_note(list, "A comfort vignette is not available yet.")
+	if str(tab[0]) == "Controls":
+		_note(list, "Other keys (E use, F fly, M map, I briefcase, J inspect, F5–F8) are fixed for now.")
+		_note(list, "Wings or Hercules sandals: F takes off/lands. Space flaps; release to glide. S brakes, Shift powers stronger strokes, Ctrl dives. Left/right mouse banks left/right while flying. Wing stamina returns while gliding or resting. Room-scale VR: A takes off/flaps, B lands; pull the move stick back to brake.")
+
+
+static func _sidebar_width(page_width: float) -> float:
+	return clampf(page_width * 0.25, 188.0, 250.0)
+
+
+## What a row's control may take: the page minus sidebar, gaps, scroll bar, row padding and a
+## name column.
+func _room_for(page_width: float) -> float:
+	return page_width - _sidebar_width(page_width) - 16.0 - 14.0 - 12.0 - 32.0 - 12.0 - font_size * 10.0
+
+
+## A new page size (a host resized in place: F7, the pause menu, the title): the sidebar and the
+## setting rows are laid out again for it. The rows hold nothing unsaved (every value applies at
+## once), unlike Prompts, AI Settings and Saved notes, which stay as they are.
+func relayout(page_size: Vector2) -> void:
+	custom_minimum_size = page_size
+	_side_scroll.custom_minimum_size.x = _sidebar_width(page_size.x)
+	var room := _room_for(page_size.x)
+	if not is_equal_approx(room, _room):
+		_room = room
+		_values.clear(); _sliders.clear(); _row_cards.clear(); _quality_note = null; _lighting_controls = null
+		for t in _lists.size():
+			for child in _lists[t].get_children():
+				# A row's own signal may be what resized the window (Window size): it is taken out
+				# now and freed once that signal is done.
+				_lists[t].remove_child(child); child.queue_free()
+			_fill_list(t, _lists[t])
+	# After the rows: set before, the old wider rows would stretch the page and it would stay so.
+	size = page_size
+	refresh()
+
+
+func _build_sidebar(body: HBoxContainer, width: float) -> void:
+	# It scrolls when the page is short (the VR panel shrinks it for its keyboard, settings_menu.gd).
+	_side_scroll = ScrollContainer.new(); _side_scroll.custom_minimum_size.x = width
+	_side_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; _side_scroll.follow_focus = true
+	_side_scroll.get_v_scroll_bar().value_changed.connect(func(_v: float) -> void: _redraw())
+	body.add_child(_side_scroll)
+	var side := VBoxContainer.new(); side.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	side.add_theme_constant_override("separation", 3); _side_scroll.add_child(side)
+	var heading := HBoxContainer.new(); heading.add_theme_constant_override("separation", 8); side.add_child(heading)
+	heading.add_child(STYLE.label("Settings", "Heading", font_size + 12))
+	var spark := ICON.make("sparkle", font_size, STYLE.BUTTER); spark.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	heading.add_child(spark)
+	_tabs.resize(Settings.TABS.size())
+	var listed: Array[String] = []
+	var groups: Array = GROUPS.duplicate(true)
+	var rest: Array = []
+	for t in Settings.TABS.size():
+		var name := str(Settings.TABS[t][0])
+		var known := false
+		for group: Array in GROUPS:
+			for entry: Array in group[1]: known = known or str(entry[0]) == name
+		if not known: rest.append([name, "sparkle"])
+	if not rest.is_empty(): groups.append(["More", rest])
+	for group: Array in groups:
+		var caption := STYLE.label(str(group[0]).to_upper(), "Faint", maxi(12, font_size - 7))
+		caption.add_theme_constant_override("line_spacing", 0)
+		var gap := Control.new(); gap.custom_minimum_size.y = 6; side.add_child(gap)
+		side.add_child(caption)
+		for entry: Array in group[1]:
+			var index := _tab_index(str(entry[0]))
+			if index < 0 or str(entry[0]) in listed: continue
+			listed.append(str(entry[0]))
+			var button := _button(side, str(entry[0]), _show_tab.bind(index))
+			button.theme_type_variation = "Tab"; button.toggle_mode = true
+			button.alignment = HORIZONTAL_ALIGNMENT_LEFT; button.clip_text = true
+			button.custom_minimum_size = Vector2(0, font_size * 2.05)
+			button.add_theme_font_size_override("font_size", font_size - 2)
+			button.icon = _icon_texture(str(entry[1]))
+			button.expand_icon = false
+			button.set_meta("icon_kind", str(entry[1]))
+			button.set_meta("no_sparkle", true)
+			_tabs[index] = button; _tab_order.append(button)
+
+
+func _tab_index(title: String) -> int:
+	for i in Settings.TABS.size():
+		if str(Settings.TABS[i][0]) == title: return i
+	return -1
+
+
+func _icon_texture(kind: String) -> Texture2D:
+	return ICON.texture(kind, font_size + 4)
 
 
 func _row(list: VBoxContainer, label_text: String, key: String) -> void:
@@ -95,32 +233,205 @@ func _row(list: VBoxContainer, label_text: String, key: String) -> void:
 		var action := key.get_slice(":", 1)
 		# The controls map is a page of its own, not a Settings action.
 		var run := (func(): show_tab("Controls map")) if action == "controls_map" else (func(): Settings.run_action(action))
-		_button(list, label_text, run).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var button := _button(list, label_text, run)
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		button.icon = _icon_texture("map" if action == "controls_map" else "sparkle")
 		return
-	var line := HBoxContainer.new(); line.add_theme_constant_override("separation", 6); list.add_child(line)
-	var label := Label.new(); label.text = Settings.row_label(label_text, key); label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	label.add_theme_font_size_override("font_size", font_size); line.add_child(label)
+	var card := PanelContainer.new(); card.add_theme_stylebox_override("panel", _row_idle)
+	_row_cards[key] = card
+	card.mouse_filter = Control.MOUSE_FILTER_PASS
+	card.mouse_entered.connect(func() -> void: card.add_theme_stylebox_override("panel", _row_hover); _redraw())
+	card.mouse_exited.connect(func() -> void: card.add_theme_stylebox_override("panel", _row_idle); _redraw())
+	list.add_child(card)
+	var stack := VBoxContainer.new(); stack.add_theme_constant_override("separation", 4); card.add_child(stack)
+	var line := HBoxContainer.new(); line.add_theme_constant_override("separation", 12); stack.add_child(line)
+	var texts := VBoxContainer.new(); texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	texts.alignment = BoxContainer.ALIGNMENT_CENTER; texts.add_theme_constant_override("separation", 1); line.add_child(texts)
+	var name_label := STYLE.label(label_text, "", font_size)
+	name_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; texts.add_child(name_label)
+	var note := str(Settings.SPECS.get(key, {}).get("note", ""))
+	if not note.is_empty():
+		var caption := STYLE.label(note[0].to_upper() + note.substr(1), "Faint", font_size - 5)
+		texts.add_child(caption)
+	if key == "video/quality":
+		_quality_note = STYLE.label("", "Muted", font_size - 5); _quality_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		stack.add_child(_quality_note)
 	if key.begins_with("bind:"):
 		var action := key.get_slice(":", 1)
-		var bind := _button(line, "", _capture.bind(action)); bind.custom_minimum_size.x = font_size * 13
+		var bind := _button(line, "", _capture.bind(action)); bind.theme_type_variation = "Key"
+		bind.custom_minimum_size = Vector2(font_size * 7, font_size * 2.0); bind.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		_values[key] = bind
 		if xr: bind.disabled = true
 		return
-	_button(line, "◀", func(): Settings.cycle(key, -1))
+	var spec: Dictionary = Settings.SPECS.get(key, {})
+	if str(spec.get("type", "")) == "bool" and Array(spec.get("labels", ["Off", "On"])) == ["Off", "On"]:
+		var state := STYLE.label("", "Muted", font_size - 2); state.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		line.add_child(state)
+		var switch := CheckButton.new(); switch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		switch.focus_mode = Control.FOCUS_ALL; switch.set_meta("no_lift", true)
+		switch.toggled.connect(func(_on: bool) -> void: Settings.cycle(key, 1))
+		switch.focus_entered.connect(_redraw); switch.mouse_entered.connect(_redraw); switch.mouse_exited.connect(_redraw)
+		switch.set_meta("state_label", state)
+		line.add_child(switch)
+		_values[key] = switch
+		return
+	if str(spec.get("type", "")) in ["int", "float"]:
+		_slider(line, key, spec)
+		return
+	var options := _options(key)
+	if _segments_fit(options): _segments(line, key, options)
+	else: _dropdown(stack, line, key, options)
+
+
+## The [value, label] pairs a row chooses among (Window size: only the sizes this screen holds).
+func _options(key: String) -> Array:
+	var spec: Dictionary = Settings.SPECS.get(key, {})
+	if key == "video/window_size": return Settings.window_sizes()
+	if str(spec.get("type", "")) == "bool":
+		var labels: Array = spec.get("labels", ["Off", "On"])
+		return [[false, labels[0]], [true, labels[1]]]
+	return spec.get("options", [])
+
+
+## An option's words. Render scale adds the size the 3D world is drawn at in this window.
+func _option_text(key: String, option: Array) -> String:
+	# The main window's size, also while this page is still being built outside the tree.
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var quality := root.get_node_or_null("Quality")
+	if key != "video/render_scale" or xr or quality == null or bool(quality.xr_mode): return str(option[1])
+	var window := Vector2(root.get_visible_rect().size)
+	var scale: float = int(option[0]) / 100.0 if int(option[0]) > 0 else quality.auto_render_scale(window)
+	return "%s · %d × %d" % [option[1], roundi(window.x * scale), roundi(window.y * scale)]
+
+
+func _text_width(text: String, size: int) -> float:
+	return STYLE.BOLD.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
+
+
+## A few short choices fit side by side.
+func _segments_fit(options: Array) -> bool:
+	if options.size() < 2 or options.size() > MOST_SEGMENTS: return false
+	var width := 10.0 + 4.0 * (options.size() - 1)
+	for option: Array in options: width += _text_width(str(option[1]), font_size - 3) + 30.0
+	return width <= _room
+
+
+## Every choice as a pill in one track; the chosen one is lit, one press picks another.
+func _segments(line: HBoxContainer, key: String, options: Array) -> void:
+	var track := PanelContainer.new(); track.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	track.add_theme_stylebox_override("panel", STYLE.rounded(STYLE.box(Color(0.05, 0.02, 0.09, 0.4), Color(1, 1, 1, 0.1), 1, 99, 4, 4)))
+	line.add_child(track)
+	var pills := HBoxContainer.new(); pills.add_theme_constant_override("separation", 4); track.add_child(pills)
+	for option: Array in options:
+		var pill := _button(pills, str(option[1]), func() -> void: Settings.set_value(key, option[0]); refresh())
+		pill.theme_type_variation = "Segment"; pill.toggle_mode = true
+		pill.custom_minimum_size = Vector2(0, font_size * 1.75)
+		pill.add_theme_font_size_override("font_size", font_size - 3)
+		pill.set_meta("value", option[0])
+	_values[key] = pills
+
+
+## A face showing the choice; pressing it unfolds every option under the row.
+func _dropdown(stack: VBoxContainer, line: HBoxContainer, key: String, options: Array) -> void:
+	var picker: Control = PICKER.new()
+	picker.font_size = font_size - 2; picker.redraw = _redraw; picker.list_height = font_size * 15.0
+	var widest := 0.0
+	for option: Array in options:
+		var text := _option_text(key, option)
+		picker.add_item(text); picker.set_item_metadata(picker.item_count - 1, option[0])
+		widest = maxf(widest, _text_width(text, font_size - 2))
+	picker.set_meta("options", options)
+	picker.item_selected.connect(func(index: int) -> void: Settings.set_value(key, picker.get_item_metadata(index)); refresh())
+	stack.add_child(picker)
+	picker.detach_head(line)
+	var face: Button = picker.head()
+	face.theme_type_variation = "Drop"; face.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	face.custom_minimum_size = Vector2(minf(_room, widest + 64.0), font_size * 1.9)
+	face.focus_entered.connect(_redraw)
+	_values[key] = picker
+
+
+## Numbers on a slider, the value beside it (a list of presets slides by position).
+func _slider(line: HBoxContainer, key: String, spec: Dictionary) -> void:
+	var box := HBoxContainer.new(); box.add_theme_constant_override("separation", 14)
+	box.size_flags_vertical = Control.SIZE_SHRINK_CENTER; line.add_child(box)
+	var slider := HSlider.new(); slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	slider.scrollable = false; slider.focus_mode = Control.FOCUS_ALL
+	var presets: Array = spec.get("presets", [])
+	var ends: Array = [spec.get("min", 0), spec.get("max", 0)]
+	if not presets.is_empty():
+		slider.min_value = 0; slider.max_value = presets.size() - 1; slider.step = 1
+		ends = [presets[0], presets[-1]]
+	else:
+		slider.min_value = float(spec.min); slider.max_value = float(spec.max); slider.step = float(spec.get("step", 1))
 	var value: Control
-	if bool(Settings.SPECS.get(key, {}).get("typed", false)) and not xr:
-		# A typed exact value (mouse sensitivity): Enter or leaving the field applies it.
-		var field := LineEdit.new(); field.alignment = HORIZONTAL_ALIGNMENT_CENTER
-		field.text_submitted.connect(func(text: String): _apply_typed(key, text); field.release_focus())
-		field.focus_exited.connect(func(): _apply_typed(key, field.text))
+	var typed := bool(spec.get("typed", false)) and not xr
+	if typed:
+		# An exact value can be typed too (mouse sensitivity): Enter or leaving the field applies it.
+		var field := LineEdit.new(); field.alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		field.text_submitted.connect(func(text: String) -> void: _apply_typed(key, text); field.release_focus())
+		field.focus_exited.connect(func() -> void: _apply_typed(key, field.text))
+		field.focus_entered.connect(_redraw)
 		value = field
 	else:
-		var text_label := Label.new(); text_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		value = text_label
-	value.custom_minimum_size.x = font_size * 12
-	value.add_theme_font_size_override("font_size", font_size); line.add_child(value)
-	_values[key] = value
-	_button(line, "▶", func(): Settings.cycle(key, 1))
+		var label := Label.new(); label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		value = label
+	value.add_theme_font_override("font", STYLE.BOLD); value.add_theme_font_size_override("font_size", font_size - 1)
+	var widest := 0.0
+	for end: Variant in ends + [0]:
+		var text := str(spec.zero) if float(end) == 0.0 and spec.has("zero") else str(spec.get("fmt", "%d")) % end
+		widest = maxf(widest, _text_width(text, font_size - 1))
+	value.custom_minimum_size.x = widest + (32.0 if typed else 4.0)
+	# The arrow keys move by `arrow_step` where a fine range has one (mouse sensitivity).
+	if spec.has("arrow_step"): slider.custom_step = float(spec.arrow_step)
+	slider.custom_minimum_size = Vector2(clampf(_room - widest - 14.0, font_size * 7.0, font_size * 14.0), font_size * 1.6)
+	slider.value_changed.connect(func(at: float) -> void:
+		Settings.set_value(key, presets[int(at)] if not presets.is_empty() else at))
+	slider.mouse_entered.connect(_redraw); slider.mouse_exited.connect(_redraw); slider.focus_entered.connect(_redraw)
+	box.add_child(slider); box.add_child(value)
+	_values[key] = value; _sliders[key] = slider
+
+
+## Greys a row out and turns its controls off (or back on) while its setting does not apply.
+func _set_row_enabled(key: String, enabled: bool) -> void:
+	var card: Control = _row_cards.get(key)
+	if not is_instance_valid(card): return
+	card.modulate.a = 1.0 if enabled else 0.45
+	var node: Control = _values.get(key)
+	if node != null and node.has_method("set_open"):
+		if not enabled: node.set_open(false)
+		(node.head() as Button).disabled = not enabled
+	elif node != null:
+		for button in node.find_children("*", "BaseButton", true, false): (button as BaseButton).disabled = not enabled
+	var slider: HSlider = _sliders.get(key)
+	if slider != null: slider.editable = enabled
+
+
+## A row's options can mix kinds ("preset" beside 80 m): == between a String and an int is an
+## error in a debug build, so the kinds are compared first.
+static func _same(a: Variant, b: Variant) -> bool:
+	return typeof(a) == typeof(b) and a == b
+
+
+## Where `key`'s value sits among its choices, 0..count-1.
+static func _option_index(key: String) -> int:
+	var spec: Dictionary = Settings.SPECS.get(key, {})
+	var value: Variant = Settings.get_value(key)
+	match str(spec.get("type", "")):
+		"choice":
+			var options: Array = spec.options
+			for i in options.size():
+				if _same(options[i][0], value): return i
+		"bool": return 1 if bool(value) else 0
+		"float":
+			var presets: Array = spec.get("presets", [])
+			var best := 0
+			for i in presets.size():
+				if absf(float(presets[i]) - float(value)) < absf(float(presets[best]) - float(value)): best = i
+			return best
+		"int": return int((int(value) - int(spec.min)) / maxi(1, int(spec.step)))
+	return 0
 
 
 ## Settings → Mods (world/modding/mod_loader.gd): every mod pack found this launch with an On/Off
@@ -180,9 +491,15 @@ func _apply_typed(key: String, text: String) -> void:
 
 
 func _note(list: VBoxContainer, text: String) -> Label:
-	var label := Label.new(); label.text = text; label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_size_override("font_size", font_size - 5); label.add_theme_color_override("font_color", Color("acb4c0"))
-	list.add_child(label)
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", STYLE.rounded(STYLE.box(Color(STYLE.SKY, 0.07), Color(STYLE.SKY, 0.25), 1, 14, 14, 10)))
+	list.add_child(card)
+	var line := HBoxContainer.new(); line.add_theme_constant_override("separation", 10); card.add_child(line)
+	var mark := ICON.make("info", font_size - 2, STYLE.SKY); mark.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	line.add_child(mark)
+	var label := STYLE.label(text, "Muted", font_size - 4); label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	line.add_child(label)
 	return label
 
 
@@ -195,24 +512,38 @@ func _button(parent: Node, text: String, callback: Callable) -> Button:
 
 
 func _show_tab(index: int) -> void:
+	var changed := index != _tab
 	_tab = index
 	for i in _lists.size():
 		_lists[i].visible = i == index
-		_tabs[i].set_pressed_no_signal(i == index)
+		if _tabs[i] != null: _tabs[i].set_pressed_no_signal(i == index)
 	_scroll.scroll_vertical = 0
 	feedback_notes.hide()
 	controls_map.hide()
+	var shown: Control = _scroll
 	if current_tab() == "Controls map":
-		_scroll.hide(); provider.hide(); prompts.hide(); controls_map.open()
+		_scroll.hide(); provider.hide(); prompts.hide(); controls_map.open(); shown = controls_map
 	elif current_tab() == "AI Settings":
-		_scroll.hide(); prompts.hide(); provider.open()
+		_scroll.hide(); prompts.hide(); provider.open(); shown = provider
 	elif current_tab() == "Prompts":
-		_scroll.hide(); provider.hide(); prompts.open()
+		_scroll.hide(); provider.hide(); prompts.open(); shown = prompts
 	elif current_tab() == "Saved notes":
-		_scroll.hide(); provider.hide(); prompts.hide(); feedback_notes.open()
+		_scroll.hide(); provider.hide(); prompts.hide(); feedback_notes.open(); shown = feedback_notes
 	else:
 		provider.hide(); prompts.hide(); _scroll.show()
+	_tab_title.text = current_tab()
+	if _tabs[index] != null: _tab_icon.kind = str(_tabs[index].get_meta("icon_kind", "gear"))
+	if changed: _appear(shown)
 	refresh()
+
+
+## The newly shown tab drifts up into place.
+func _appear(node: Control) -> void:
+	if STYLE.still() or not is_inside_tree(): return
+	node.modulate.a = 0.0
+	var tween := create_tween().set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(node, "modulate:a", 1.0, 0.2)
+	tween.parallel().tween_method(func(_v: float) -> void: _redraw(), 0.0, 1.0, 0.2)
 
 
 func show_tab(title: String) -> void:
@@ -232,12 +563,31 @@ func refresh() -> void:
 		if key.begins_with("bind:"):
 			var action := key.get_slice(":", 1)
 			(node as Button).text = "Press a key…" if capturing == action else Settings.key_name(Settings.binding(action))
-		elif node is LineEdit:
-			if not node.has_focus(): (node as LineEdit).text = Settings.display(key)
+		elif node is CheckButton:
+			var on := bool(Settings.get_value(key))
+			(node as CheckButton).set_pressed_no_signal(on)
+			(node.get_meta("state_label") as Label).text = Settings.display(key)
+		elif node is Label or node is LineEdit:
+			# A slider's value beside it; a typed one is left alone while it is being typed.
+			if node is Label: (node as Label).text = Settings.display(key)
+			elif not node.has_focus(): (node as LineEdit).text = Settings.display(key)
+			var slider: HSlider = _sliders.get(key)
+			if slider != null: slider.set_value_no_signal(_option_index(key) if Settings.SPECS[key].has("presets") else float(Settings.get_value(key)))
+		elif node is HBoxContainer:
+			for pill: Node in node.get_children(): (pill as Button).set_pressed_no_signal(_same(pill.get_meta("value"), Settings.get_value(key)))
 		else:
-			(node as Label).text = Settings.display(key)
+			var options: Array = node.get_meta("options")
+			var chosen := -1
+			for i in options.size():
+				if key == "video/render_scale": node.set_item_text(i, _option_text(key, options[i]))
+				if _same(options[i][0], Settings.get_value(key)): chosen = i
+			node.selected = chosen
+	# Window size only means something for a window (dev 2026-10-27: "grey it out when not windowed").
+	_set_row_enabled("video/window_size", str(Settings.get_value("video/window")) == "windowed")
+	_set_row_enabled("access/caption_opacity", Settings.get_value("access/caption_card") == true)
 	if is_instance_valid(_quality_note): _quality_note.text = _quality_description()
 	_status.text = Settings.message
+	_status.visible = not Settings.message.is_empty()
 	_redraw()
 
 
@@ -249,14 +599,19 @@ func _quality_description() -> String:
 		detail = "Simpler scenery and effects; distant ponies use simpler detail sooner."
 	elif base == "Medium":
 		detail = "Balanced scenery and effects, with simpler detail on distant ponies."
-	var heading := "Custom, based on %s: " % base if chosen == "Custom" else "%s: " % chosen
+	var heading := "Custom, based on %s: " % base if chosen == "Custom" else ""
 	return heading + detail + " Nearby interactions and pony population stay the same."
+
+
+## Where keyboard and stick focus starts: the open tab's own button.
+func first_focus() -> Control:
+	return _tabs[_tab] if _tabs[_tab] != null else _tab_order[0]
 
 
 ## Focusable buttons of the visible tab, top to bottom (title screen / VR stick focus).
 func focusables() -> Array:
 	var out: Array = []
-	out.append_array(_tabs)
+	out.append_array(_tab_order)
 	if current_tab() == "AI Settings":
 		out.append_array(provider.controls)
 		out.append_array(footer.get_children())
@@ -273,8 +628,9 @@ func focusables() -> Array:
 		out.append_array(controls_map.controls)
 		out.append_array(footer.get_children())
 		return out
-	for node in _lists[_tab].find_children("*", "Button", true, false):
-		if not (node as Button).disabled: out.append(node)
+	for node in _lists[_tab].find_children("*", "Control", true, false):
+		if node is HSlider and (node as Control).is_visible_in_tree(): out.append(node)
+		elif node is Button and not (node as Button).disabled and (node as Control).is_visible_in_tree(): out.append(node)
 	out.append_array(footer.get_children())
 	return out
 

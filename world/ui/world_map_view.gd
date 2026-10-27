@@ -5,6 +5,8 @@ signal expand_requested
 signal zoom_lock_changed(locked: bool)
 const LOCAL_PLACES := preload("res://world/ui/named_map_places.gd")
 const PLACE_FONT := preload("res://world/ui/fonts/CelestiaMediumRedux.ttf")
+## The menus' look (world/ui/menu_style.gd): names on rounded dusk tags in cream, Atkinson Bold.
+const STYLE := preload("res://world/ui/menu_style.gd")
 var _local_refresh_at := 0
 const PONY_DATA := preload("res://world/ui/pony_map_data.gd")
 const ATLAS := preload("res://docs/reference/equestria-map.jpg")
@@ -43,6 +45,8 @@ const MARKER_KEYS := ["id", "tracking", "coat", "name", "icon_id", "kind"]
 var _drawn_ponies: Array = []
 var _drawn_live := Vector2.INF
 var _drawn_heading := Vector2.ZERO
+## One name tag, recoloured for each name as it is drawn (_tag()).
+var _tag_box := STYLE.box(STYLE.INK, Color.WHITE, 1, 7, 0, 0)
 
 func _ready() -> void:
 	add_to_group("world_map_views")
@@ -205,8 +209,9 @@ func _notification(what: int) -> void:
 
 func _draw() -> void:
 	_drawn_ponies = pony_markers; _drawn_live = live_position if has_position else Vector2.INF; _drawn_heading = live_heading
-	var font := ThemeDB.fallback_font
-	draw_rect(Rect2(Vector2.ZERO, size), Color("263f4b"))
+	var font: Font = STYLE.BOLD
+	# Deep blue-violet beyond the world's edge, between its sea and the card around it.
+	draw_rect(Rect2(Vector2.ZERO, size), Color("22203f"))
 	if _aerial.available():
 		_aerial.draw_into(self)
 	else:
@@ -250,14 +255,14 @@ func _draw() -> void:
 		var text_size := place_font.get_string_size(marker.name, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 		var pos := pixel + Vector2(10, -11)
 		pos.x = clampf(pos.x, 4, maxf(4, size.x - text_size.x - 12)); pos.y = clampf(pos.y, 4, maxf(4, size.y - 22))
-		var box := Rect2(pos, text_size + Vector2(8, 6))
+		var box := Rect2(pos, text_size + Vector2(12, 6))
 		var overlaps := false
 		for occupied in labels:
 			if occupied.intersects(box): overlaps = true; break
 		if overlaps or (compact and labels.size() >= 4 and not chosen): continue
 		labels.append(box.grow(3))
-		draw_rect(box, Color(0, 0, 0, 0.86 * alpha))
-		draw_string(place_font, pos + Vector2(4, font_size + 2), marker.name, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(GOLD if chosen else Color.WHITE, alpha))
+		_tag(box, chosen, alpha)
+		draw_string(place_font, pos + Vector2(6, font_size + 2), marker.name, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(GOLD if chosen else STYLE.CREAM, alpha))
 	_draw_ponies(font, area)
 	if cursor.x >= 0:
 		draw_arc(cursor, 9, 0, TAU, 24, CYAN, 2.0, true); draw_circle(cursor, 2, CYAN)
@@ -270,8 +275,12 @@ func _draw() -> void:
 			draw_colored_polygon(arrow, CYAN)
 			draw_string_outline(font, pixel + Vector2(18, 5), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, 4, INK)
 			draw_string(font, pixel + Vector2(18, 5), "YOU", HORIZONTAL_ALIGNMENT_LEFT, -1, 12, CYAN)
-	draw_string_outline(font, Vector2(size.x - 23, 23), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, 4, INK)
-	draw_string(font, Vector2(size.x - 23, 23), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color.WHITE)
+	# North on a small dusk disc.
+	var north := Vector2(size.x - 18, 18)
+	draw_circle(north, 12, Color(STYLE.INK, 0.85))
+	draw_arc(north, 12, 0, TAU, 32, Color(STYLE.LILAC, 0.7), 1.0, true)
+	var n_size := font.get_string_size("N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14)
+	draw_string(font, north + Vector2(-n_size.x * 0.5, 5), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, STYLE.CREAM)
 	var length_m := pow(10.0, floor(log(90.0 / zoom) / log(10.0)))
 	if length_m * zoom < 35: length_m *= 5
 	var from := Vector2(14, size.y - 16)
@@ -355,5 +364,12 @@ func _draw_ponies(font: Font, area: Rect2) -> void:
 			var width:=font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,label_font_size).x
 			var at:=pixel+Vector2(radius+5,-label_font_size*.5)
 			at.x=clampf(at.x,4,maxf(4,size.x-width-12)); at.y=clampf(at.y,4,maxf(4,size.y-label_font_size-8))
-			draw_rect(Rect2(at-Vector2(3,0),Vector2(width+8,label_font_size+7)),INK)
+			_tag(Rect2(at-Vector2(5,0),Vector2(width+10,label_font_size+7)),true)
 			draw_string(font,at+Vector2(0,label_font_size),label,HORIZONTAL_ALIGNMENT_LEFT,-1,label_font_size,GOLD)
+
+
+## A name's tag: rounded dusk, a faint rim, gold for the chosen one.
+func _tag(box: Rect2, chosen: bool, alpha := 1.0) -> void:
+	_tag_box.bg_color = Color(STYLE.INK, 0.88 * alpha)
+	_tag_box.border_color = Color(GOLD, 0.8 * alpha) if chosen else Color(1, 1, 1, 0.16 * alpha)
+	draw_style_box(_tag_box, box)

@@ -8,6 +8,15 @@ var display: Sprite3D
 var content: Control
 var _last_pixel := Vector2(-1, -1)
 var _pressed := false
+## Seconds between redraws while the page moves on its own (the menu card's drift and twinkle,
+## world/ui/menu_card.gd); 0 redraws only on change. Hosts turn it on while a card shows;
+## Reduced motion keeps it off.
+var tick := 0.0
+var _tick_left := 0.0
+## The page in layout pixels (PIXELS unless a host reshapes it, resize()) and rendered pixels per
+## layout pixel. Pixels handed to and from the panel (ray_to_pixel, point_at) are rendered ones.
+var pixels := PIXELS
+var resolution := 1.0
 
 func _ready() -> void:
 	viewport = SubViewport.new()
@@ -28,8 +37,27 @@ func _ready() -> void:
 	display.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(display)
 
+## Reshapes the page to `layout` pixels at the same metres per pixel, drawn `sharpness` times finer
+## (the title's desktop pages widen to the window and fill a big one without going soft).
+func resize(layout: Vector2i, sharpness := 1.0) -> void:
+	pixels = layout; resolution = sharpness
+	viewport.size = Vector2i((Vector2(layout) * sharpness).round())
+	preload("res://world/ui/menu_style.gd").sharpen(viewport, sharpness)
+	content.scale = Vector2.ONE * sharpness
+	content.size = layout
+	display.pixel_size = PIXEL_SIZE * float(layout.x) / float(viewport.size.x)
+	refresh()
+
 func refresh() -> void:
 	viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+func _process(delta: float) -> void:
+	if tick <= 0.0 or not visible: return
+	_tick_left -= delta
+	if _tick_left > 0.0: return
+	_tick_left = tick
+	if not preload("res://world/ui/menu_style.gd").still(): refresh()
 
 func ray_to_pixel(origin: Vector3, direction: Vector3) -> Vector2:
 	var local_origin := to_local(origin)
@@ -38,11 +66,11 @@ func ray_to_pixel(origin: Vector3, direction: Vector3) -> Vector2:
 	var distance := -local_origin.z / local_direction.z
 	if distance < 0.0: return Vector2(-1, -1)
 	var point := local_origin + local_direction * distance
-	var pixel := Vector2(point.x, -point.y) / PIXEL_SIZE + Vector2(PIXELS) * 0.5
-	return pixel if Rect2(Vector2.ZERO, PIXELS).has_point(pixel) else Vector2(-1, -1)
+	var pixel := Vector2(point.x, -point.y) / display.pixel_size + Vector2(viewport.size) * 0.5
+	return pixel if Rect2(Vector2.ZERO, Vector2(viewport.size)).has_point(pixel) else Vector2(-1, -1)
 
 func pixel_to_world(pixel: Vector2) -> Vector3:
-	var local := (pixel - Vector2(PIXELS) * 0.5) * PIXEL_SIZE
+	var local := (pixel - Vector2(viewport.size) * 0.5) * display.pixel_size
 	return to_global(Vector3(local.x, -local.y, 0.005))
 
 func point_at(pixel: Vector2) -> void:

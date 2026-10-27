@@ -1,13 +1,21 @@
 extends CanvasLayer
 ## Desktop/live editor map. The same atlas can later be hosted by a VR wrist viewport.
+## Dressed like the menus (world/ui/menu_style.gd): the twilight card around the map, themed
+## toolbar, drop-downs and tooltips (2026-10-27: "tooltips or the save F6 here are a bit ugly").
 signal expanded_changed(open: bool)
 const MAP_VIEW := preload("res://world/ui/world_map_view.gd")
+const STYLE := preload("res://world/ui/menu_style.gd")
+const ICON := preload("res://world/ui/menu_icon.gd")
+const CARD := preload("res://world/ui/menu_card.gd")
+## The card's glow reaches this far outside the panel.
+const GLOW := 10.0
 var tracked: Node3D
 var map: Control
 var expanded := false
 var preferences_path := "user://world_map.cfg"
 var panel: Panel
-var toolbar: HBoxContainer
+## Wraps onto more rows when the window is too narrow for one (_toolbar_height()).
+var toolbar: HFlowContainer
 var title: Label
 var status: Label
 var ponies: OptionButton
@@ -17,6 +25,7 @@ var places: OptionButton
 var keep_zoom: CheckButton
 var whole_map: Button
 var _root: Control
+var _card: Control
 var _timer := 0.0
 var _pony_marker_clock := 0.0
 var _previous_mouse_mode := Input.MOUSE_MODE_VISIBLE
@@ -26,27 +35,33 @@ func _ready() -> void:
 	layer = 110
 	_root = Control.new(); add_child(_root); _root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.theme = STYLE.theme()
 	panel = Panel.new(); _root.add_child(panel)
-	var style := StyleBoxFlat.new(); style.bg_color = Color("13232f"); style.border_color = Color("587783")
-	style.set_border_width_all(1); style.set_corner_radius_all(8)
-	panel.add_theme_stylebox_override("panel", style)
-	title = Label.new(); title.text = ""; title.add_theme_color_override("font_color", Color("ffdc8c"))
+	panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	_card = CARD.new(); _card.radius = 16.0; _card.inset = GLOW; _card.glow = 0.3
+	panel.add_child(_card)
+	title = STYLE.label("", "Heading", 26)
 	panel.add_child(title)
 	map = MAP_VIEW.new(); map.preferences_path = preferences_path; panel.add_child(map)
 	map.marker_selected.connect(func(marker): _selected = marker; _update_status())
 	map.expand_requested.connect(func(): set_expanded(true))
-	toolbar = HBoxContainer.new(); toolbar.add_theme_constant_override("separation", 5); panel.add_child(toolbar)
-	_button("−", func(): map.zoom_at(0.8, map.size * 0.5))
-	_button("+", func(): map.zoom_at(1.25, map.size * 0.5))
-	whole_map = _button("Whole map", func(): map.frame_world())
-	_button("Follow me", func(): map.follow())
+	toolbar = HFlowContainer.new(); panel.add_child(toolbar)
+	toolbar.add_theme_constant_override("h_separation", 6); toolbar.add_theme_constant_override("v_separation", 6)
+	# Its buttons take clicks; the space around them is the map's (its rect can lag a reflow).
+	toolbar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_button("−", func(): map.zoom_at(0.8, map.size * 0.5)).tooltip_text = "Zoom out"
+	_button("+", func(): map.zoom_at(1.25, map.size * 0.5)).tooltip_text = "Zoom in"
+	whole_map = _button("Whole map", func(): map.frame_world(), "globe")
+	_button("Follow me", func(): map.follow(), "pony")
 	keep_zoom = CheckButton.new(); keep_zoom.text = "Keep zoom"; keep_zoom.focus_mode = Control.FOCUS_NONE
+	keep_zoom.add_theme_font_size_override("font_size", 16)
 	keep_zoom.tooltip_text = "Remember this zoom when closing, reopening or restarting. You can still adjust it with the wheel or +/−."
 	toolbar.add_child(keep_zoom)
 	keep_zoom.toggled.connect(func(value): map.set_zoom_locked(value))
 	map.zoom_lock_changed.connect(_update_zoom_lock)
 	_update_zoom_lock(map.zoom_locked)
 	places = OptionButton.new(); places.custom_minimum_size.x = 190; places.clip_text = true
+	places.add_theme_font_size_override("font_size", 16); places.focus_mode = Control.FOCUS_NONE
 	toolbar.add_child(places); places.add_item("Find a place…")
 	var sorted: Array = map.markers.duplicate(); sorted.sort_custom(func(a,b): return a.name < b.name)
 	for marker in sorted:
@@ -58,6 +73,7 @@ func _ready() -> void:
 		if not map.zoom_locked: map.zoom = maxf(map.zoom, 1.8 if marker.get("local_place", false) else 0.15)
 		map.queue_redraw())
 	ponies=OptionButton.new(); ponies.custom_minimum_size.x=180; ponies.clip_text=true
+	ponies.add_theme_font_size_override("font_size", 16); ponies.focus_mode = Control.FOCUS_NONE
 	toolbar.add_child(ponies); ponies.add_item("Find a pony…")
 	ponies.item_selected.connect(func(index):
 		if index==0: return
@@ -67,13 +83,15 @@ func _ready() -> void:
 		map.center=marker.position; map.following=false
 		if not map.zoom_locked: map.zoom=maxf(map.zoom,1.8)
 		map.queue_redraw())
-	_button("Close · M", func(): set_expanded(false))
-	status = Label.new(); status.add_theme_font_size_override("font_size", 13); status.clip_text = true
+	_button("Close · M", func(): set_expanded(false), "close")
+	status = STYLE.label("", "", 14); status.clip_text = true
 	panel.add_child(status)
 	_root.resized.connect(_layout); _layout(); _update_status()
 
-func _button(text: String, callback: Callable) -> Button:
+func _button(text: String, callback: Callable, icon := "") -> Button:
 	var button := Button.new(); button.text = text; button.focus_mode = Control.FOCUS_NONE
+	button.theme_type_variation = "Chip"
+	if not icon.is_empty(): button.icon = ICON.texture(icon, 16)
 	button.pressed.connect(callback); toolbar.add_child(button)
 	return button
 
@@ -138,14 +156,40 @@ func _layout() -> void:
 	var screen := get_viewport().get_visible_rect().size
 	panel.size = Vector2(minf(1100, screen.x - 32), minf(760, screen.y - 32)) if expanded else Vector2(310, 248)
 	panel.position = (screen - panel.size) * 0.5 if expanded else Vector2(screen.x - panel.size.x - 16, 16)
+	_card.position = -Vector2.ONE * GLOW; _card.size = panel.size + Vector2.ONE * GLOW * 2.0
 	# No title on the mini map (dev: "remove the LIVE MAP text").
-	title.position = Vector2(12, 8); title.text = "EQUESTRIA"; title.visible = expanded
-	toolbar.position = Vector2(12, 36); toolbar.visible = expanded
-	map.position = Vector2(8, 78 if expanded else 8)
-	map.size = panel.size - Vector2(16, 122 if expanded else 40)
+	title.position = Vector2(16, 4); title.text = "Equestria"; title.visible = expanded
+	toolbar.position = Vector2(14, 44); toolbar.visible = expanded
+	var rows := _toolbar_height(panel.size.x - 28.0)
+	toolbar.size = Vector2(panel.size.x - 28.0, rows)
+	# The map under the toolbar's rows (one in a wide window, more in a narrow one), above the
+	# status, sized now so that framing the world on opening fits it.
+	var top := toolbar.position.y + maxf(38.0, rows) + 8.0 if expanded else 8.0
+	map.position = Vector2(8, top)
+	map.size = panel.size - Vector2(16, top + 38.0)
 	if not expanded and not map.zoom_locked: map.zoom = map.size.x / 4400.0
-	status.position = Vector2(12, panel.size.y - 32); status.size = Vector2(panel.size.x - 24, 28)
+	status.position = Vector2(14, panel.size.y - 30); status.size = Vector2(panel.size.x - 28, 26)
 	map.queue_redraw()
+
+
+## How tall the toolbar's rows are at `width`, wrapped as its flow container wraps them (which
+## it only does a frame later).
+func _toolbar_height(width: float) -> float:
+	var gap := float(toolbar.get_theme_constant("h_separation"))
+	var row_gap := float(toolbar.get_theme_constant("v_separation"))
+	var height := 0.0
+	var row_width := -1.0
+	var row_height := 0.0
+	for child: Node in toolbar.get_children():
+		var control := child as Control
+		if control == null or not control.visible: continue
+		var need := control.get_combined_minimum_size()
+		if row_width >= 0.0 and row_width + gap + need.x <= width:
+			row_width += gap + need.x; row_height = maxf(row_height, need.y)
+			continue
+		if row_width >= 0.0: height += row_height + row_gap
+		row_width = need.x; row_height = need.y
+	return height + row_height
 
 func _update_status() -> void:
 	if status == null: return

@@ -4,6 +4,7 @@ extends Node
 ## parked low in the camera's view (no post-process, so it is drawn into both eyes).
 
 const OVERHEAD := preload("res://world/ai/overhead_dialogue.gd")
+const CAPTION := preload("res://world/ui/speech_caption.gd")
 
 const COLORS := {
 	"off": Color(0.55, 0.55, 0.55, 0.35),
@@ -21,6 +22,9 @@ var detail := ""
 var _texture: Texture2D
 var _rect: TextureRect
 var _label: Label
+## Her words at the bottom of the screen on desktop (world/ui/speech_caption.gd); `_label` is
+## for the listening/thinking status.
+var _caption: CAPTION
 var _sprite: Sprite3D
 var _label3d: Label3D
 var _time := 0.0
@@ -42,7 +46,8 @@ func start_line(speaker:String,text:String,actor:Node,cues:Array=[]) -> void:
 	_speaker=speaker;_line_text=text;_voice=weakref(actor);_revealed=0
 	_word_cues=cues.duplicate(true)
 	_dialogue=OVERHEAD.new()
-	_dialogue.set_fallback_labels(_label, _label3d, speaker)
+	_dialogue.set_fallback_labels(_caption, _label3d, speaker)
+	_dialogue.caption_full=text
 	add_child(_dialogue)
 	var camera: Node3D = _viewer.get_ref() if _viewer != null else null
 	_dialogue.show_for(actor, camera)
@@ -54,7 +59,7 @@ func start_line(speaker:String,text:String,actor:Node,cues:Array=[]) -> void:
 func finish_line() -> void:
 	if not _line_text.is_empty():
 		var page := preload("res://world/ai/speech_sentences.gd").display_page(_line_text,_line_text.length())
-		if is_instance_valid(_dialogue): _dialogue.text=page
+		if is_instance_valid(_dialogue): _dialogue.text=page; _dialogue.caption_text=_line_text
 		set_state("speaking",_speaker+": "+page)
 	# Retain the weak actor anchor through the short completed-line pause.
 	_line_text="";_word_cues=[]
@@ -83,7 +88,7 @@ func _reveal_words() -> void:
 	if end!=_revealed:
 		_revealed=end
 		var page := preload("res://world/ai/speech_sentences.gd").display_page(_line_text,end)
-		if is_instance_valid(_dialogue): _dialogue.text=page
+		if is_instance_valid(_dialogue): _dialogue.text=page; _dialogue.caption_text=_line_text.left(end)
 		set_state("speaking",_speaker+": "+page)
 
 func _exit_tree() -> void:
@@ -152,6 +157,8 @@ func setup(camera: Node3D, xr: bool) -> void:
 		_label.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.8))
 		_label.add_theme_constant_override("outline_size", 4)
 		layer.add_child(_label)
+		_caption = CAPTION.new()
+		layer.add_child(_caption)
 	set_state(state, detail)
 
 

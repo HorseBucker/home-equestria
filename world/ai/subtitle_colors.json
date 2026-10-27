@@ -1,0 +1,1869 @@
+{
+	"_why": "Subtitle colours per character: a pale fill, an outline in the character's colour and a dark drop shadow, made to read over the show without a box behind the words. From a per-character .ass style sheet (366 styles) shared with the project on 2026-10-27; world/ai/subtitle_colors.gd reads it.",
+	"aliases": {
+		"big_mcintosh": "bigmac",
+		"coco_pommel": "coco",
+		"derpy_hooves": "derpy",
+		"lightning_dust": "lightingdust",
+		"lily_valley": "lillyvalley",
+		"lyra_heartstrings": "lyra",
+		"mayor_mare": "mayor",
+		"minuette": "minuette",
+		"nurse_redheart": "redheart",
+		"octavia_melody": "octavia",
+		"prim_hemline": "prim",
+		"prince_blueblood": "blueblood",
+		"roseluck": "rose",
+		"shoeshine": "shoeshine",
+		"suri_polomare": "suri",
+		"sweetie_drops": "bonbon",
+		"trixie": "trixie",
+		"twilight_sparkle": "twilight"
+	},
+	"styles": {
+		"adagiodazzle": {
+			"name": "AdagioDazzle",
+			"fill": "#EEEDB5",
+			"outline": "#855100"
+		},
+		"ahuizotl": {
+			"name": "Ahuizotl",
+			"fill": "#62B7D2",
+			"outline": "#493F60"
+		},
+		"alice": {
+			"name": "Alice",
+			"fill": "#EDEBB1",
+			"outline": "#278B78"
+		},
+		"aloe": {
+			"name": "Aloe",
+			"fill": "#F9B5DD",
+			"outline": "#1C7B95"
+		},
+		"amethyststar": {
+			"name": "AmethystStar",
+			"fill": "#FDEBFF",
+			"outline": "#5E248E"
+		},
+		"applebloom": {
+			"name": "AppleBloom",
+			"fill": "#F4FAC0",
+			"outline": "#FF006F"
+		},
+		"applejack": {
+			"name": "AppleJack",
+			"fill": "#FFFFFF",
+			"outline": "#FF5A00"
+		},
+		"applerose": {
+			"name": "AppleRose",
+			"fill": "#FFECDC",
+			"outline": "#CA5964"
+		},
+		"applesauce": {
+			"name": "Applesauce",
+			"fill": "#F4FFE9",
+			"outline": "#55C012",
+			"shadow": "#111211"
+		},
+		"appleteeny": {
+			"name": "AppleTeeny",
+			"fill": "#FFFFFF",
+			"outline": "#FF5A00"
+		},
+		"ariablaze": {
+			"name": "AriaBlaze",
+			"fill": "#BEF8FA",
+			"outline": "#5F1C7A"
+		},
+		"auntholiday": {
+			"name": "AuntHoliday",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"auntielofty": {
+			"name": "AuntieLofty",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"auntorange": {
+			"name": "AuntOrange",
+			"fill": "#F8F8C6",
+			"outline": "#C8852E"
+		},
+		"aurora": {
+			"name": "Aurora",
+			"fill": "#C6F2EE",
+			"outline": "#356E66"
+		},
+		"autumnblaze": {
+			"name": "AutumnBlaze",
+			"fill": "#F4F3DD",
+			"outline": "#C15C28"
+		},
+		"babsseed": {
+			"name": "BabsSeed",
+			"fill": "#E6CBAB",
+			"outline": "#E50846"
+		},
+		"baker": {
+			"name": "Baker",
+			"fill": "#BDEED1",
+			"outline": "#36523F"
+		},
+		"barley": {
+			"name": "Barley",
+			"fill": "#F2F2F2",
+			"outline": "#969EC6"
+		},
+		"battiwigs": {
+			"name": "Battiwigs",
+			"fill": "#929DE6",
+			"outline": "#000000"
+		},
+		"berrypinch": {
+			"name": "BerryPinch",
+			"fill": "#E2A8C3",
+			"outline": "#C05B8C"
+		},
+		"bettybouffant": {
+			"name": "BettyBouffant",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"bge": {
+			"name": "BGE",
+			"fill": "#E1DFDF",
+			"outline": "#215147",
+			"shadow": "#6B494E"
+		},
+		"biff": {
+			"name": "Biff",
+			"fill": "#BFA767",
+			"outline": "#393839"
+		},
+		"bigbucks": {
+			"name": "BigBucks",
+			"fill": "#F2CEF5",
+			"outline": "#04015C"
+		},
+		"bigmac": {
+			"name": "BigMac",
+			"fill": "#FFE1C2",
+			"outline": "#DE0000"
+		},
+		"biscuit": {
+			"name": "Biscuit",
+			"fill": "#51A5FF",
+			"outline": "#6E2D2F"
+		},
+		"blueblood": {
+			"name": "Blueblood",
+			"fill": "#E0E5EC",
+			"outline": "#A99432"
+		},
+		"blueishgreenchangeling": {
+			"name": "BlueishGreenChangeling",
+			"fill": "#89E7B2",
+			"outline": "#445B65"
+		},
+		"bluepony": {
+			"name": "Bluepony",
+			"fill": "#F1F0CD",
+			"outline": "#C15FC6"
+		},
+		"bonbon": {
+			"name": "BonBon",
+			"fill": "#FFDFF8",
+			"outline": "#385890"
+		},
+		"bori": {
+			"name": "Bori",
+			"fill": "#FABFDA",
+			"outline": "#B62A6B"
+		},
+		"bowhothoof": {
+			"name": "BowHothoof",
+			"fill": "#D6D7E9",
+			"outline": "#1E3364"
+		},
+		"bowtieg1": {
+			"name": "BowTieG1",
+			"fill": "#FFE1C2",
+			"outline": "#DE0000"
+		},
+		"braeburn": {
+			"name": "Braeburn",
+			"fill": "#F0EC97",
+			"outline": "#C28A1F"
+		},
+		"brightmac": {
+			"name": "BrightMac",
+			"fill": "#ECE499",
+			"outline": "#E24134"
+		},
+		"bufogren": {
+			"name": "Bufogren",
+			"fill": "#E0CB65",
+			"outline": "#3C3A33"
+		},
+		"bulkbiceps": {
+			"name": "BulkBiceps",
+			"fill": "#FFFFFF",
+			"outline": "#ACB6B9"
+		},
+		"burntoak": {
+			"name": "BurntOak",
+			"fill": "#B5ABA1",
+			"outline": "#615A54"
+		},
+		"businessshy": {
+			"name": "BusinessShy",
+			"fill": "#FFF9D2",
+			"outline": "#A42369",
+			"shadow": "#607173"
+		},
+		"buttercup": {
+			"name": "Buttercup",
+			"fill": "#F7DEB5",
+			"outline": "#B26B0F"
+		},
+		"butternut": {
+			"name": "ButterNut",
+			"fill": "#FBE184",
+			"outline": "#6A863A"
+		},
+		"caballeron": {
+			"name": "Caballeron",
+			"fill": "#EAE8DB",
+			"outline": "#000000"
+		},
+		"canterlotlibrarian": {
+			"name": "CanterlotLibrarian",
+			"fill": "#ADDBDC",
+			"outline": "#438D92"
+		},
+		"capper": {
+			"name": "Capper",
+			"fill": "#ED8F33",
+			"outline": "#875E05"
+		},
+		"captaincelaeno": {
+			"name": "CaptainCelaeno",
+			"fill": "#EBE9BA",
+			"outline": "#8EBC6B"
+		},
+		"celestia": {
+			"name": "Celestia",
+			"fill": "#FDF8FB",
+			"outline": "#CC2ADA"
+		},
+		"chancellorneighsay": {
+			"name": "ChancellorNeighsay",
+			"fill": "#D6DAD4",
+			"outline": "#13220C"
+		},
+		"cheerilee": {
+			"name": "Cheerilee",
+			"fill": "#EEAED0",
+			"outline": "#772056"
+		},
+		"cheesesandwich": {
+			"name": "CheeseSandwich",
+			"fill": "#FFDFA3",
+			"outline": "#411403"
+		},
+		"cherryfizzy": {
+			"name": "CherryFizzy",
+			"fill": "#D7B973",
+			"outline": "#232323"
+		},
+		"cherryjubilee": {
+			"name": "CherryJubilee",
+			"fill": "#F4E8AA",
+			"outline": "#791932"
+		},
+		"chestnut": {
+			"name": "Chestnut",
+			"fill": "#EEB270",
+			"outline": "#333333"
+		},
+		"chiefthunderhooves": {
+			"name": "ChiefThunderhooves",
+			"fill": "#8C7965",
+			"outline": "#403D45"
+		},
+		"chrysalis": {
+			"name": "Chrysalis",
+			"fill": "#4EBFCE",
+			"outline": "#0B1F12"
+		},
+		"chrysalisfemaleguard": {
+			"name": "ChrysalisFemaleGuard",
+			"fill": "#74C9C6",
+			"outline": "#695D88"
+		},
+		"cinch": {
+			"name": "Cinch",
+			"fill": "#FFFFFF",
+			"outline": "#000000"
+		},
+		"clearsky": {
+			"name": "ClearSky",
+			"fill": "#FEE9EC",
+			"outline": "#C4456C"
+		},
+		"cloudyquartz": {
+			"name": "CloudyQuartz",
+			"fill": "#D0DBE1",
+			"outline": "#12373B"
+		},
+		"clump": {
+			"name": "Clump",
+			"fill": "#FFFFFF",
+			"outline": "#FF5A00"
+		},
+		"coco": {
+			"name": "Coco",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"coconutcream": {
+			"name": "CoconutCream",
+			"fill": "#EBF4F3",
+			"outline": "#E399E8"
+		},
+		"coloratura": {
+			"name": "Coloratura",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"comment": {
+			"name": "Comment",
+			"fill": "#FFFFFF",
+			"outline": "#000000"
+		},
+		"cookiecrumbles": {
+			"name": "CookieCrumbles",
+			"fill": "#EED8F3",
+			"outline": "#670482"
+		},
+		"coriandercumin": {
+			"name": "CorianderCumin",
+			"fill": "#FFF2DE",
+			"outline": "#A66F06"
+		},
+		"coronet": {
+			"name": "Coronet",
+			"fill": "#E69AC8",
+			"outline": "#9D286D"
+		},
+		"cozyglow": {
+			"name": "CozyGlow",
+			"fill": "#D8EFF6",
+			"outline": "#BE6D6E"
+		},
+		"cranky": {
+			"name": "Cranky",
+			"fill": "#F4EBDC",
+			"outline": "#67654F"
+		},
+		"crowd": {
+			"name": "Crowd",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"crystalclear": {
+			"name": "CrystalClear",
+			"fill": "#FDFB91",
+			"outline": "#AA92EA"
+		},
+		"customer1": {
+			"name": "Customer1",
+			"fill": "#E293D3",
+			"outline": "#B53790"
+		},
+		"customer2": {
+			"name": "Customer2",
+			"fill": "#F3F7EE",
+			"outline": "#AF9777"
+		},
+		"customer3": {
+			"name": "Customer3",
+			"fill": "#D4D3D8",
+			"outline": "#5C2960"
+		},
+		"customer4": {
+			"name": "Customer4",
+			"fill": "#F9EFF4",
+			"outline": "#9D8AC3"
+		},
+		"customer5": {
+			"name": "Customer5",
+			"fill": "#CB6966",
+			"outline": "#701D19"
+		},
+		"customer6": {
+			"name": "Customer6",
+			"fill": "#737F94",
+			"outline": "#170942"
+		},
+		"customer7": {
+			"name": "Customer7",
+			"fill": "#E5AC63",
+			"outline": "#B7640E"
+		},
+		"customer8": {
+			"name": "Customer8",
+			"fill": "#F8F8D8",
+			"outline": "#3A68BD"
+		},
+		"cyanchangeling": {
+			"name": "CyanChangeling",
+			"fill": "#80EDD3",
+			"outline": "#AA4231",
+			"shadow": "#AA4231"
+		},
+		"daisy": {
+			"name": "Daisy",
+			"fill": "#FEDFFC",
+			"outline": "#61AA00"
+		},
+		"dandygrandeur": {
+			"name": "DandyGrandeur",
+			"fill": "#E9EEC6",
+			"outline": "#8F5CAB"
+		},
+		"daringdo": {
+			"name": "DaringDo",
+			"fill": "#E0CB65",
+			"outline": "#3C3A33"
+		},
+		"davenport": {
+			"name": "Davenport",
+			"fill": "#D2C892",
+			"outline": "#63563D"
+		},
+		"daybreaker": {
+			"name": "DayBreaker",
+			"fill": "#EAEAEB",
+			"outline": "#AB3410"
+		},
+		"default": {
+			"name": "Default",
+			"fill": "#FFFFFF",
+			"outline": "#000000"
+		},
+		"deliverer1": {
+			"name": "Deliverer1",
+			"fill": "#CFEAF9",
+			"outline": "#68BDBD"
+		},
+		"deliverer2": {
+			"name": "Deliverer2",
+			"fill": "#E2F4EF",
+			"outline": "#A886C8"
+		},
+		"demonbaby": {
+			"name": "Demonbaby",
+			"fill": "#BC477D",
+			"outline": "#511048"
+		},
+		"derpy": {
+			"name": "Derpy",
+			"fill": "#F5FBAB",
+			"outline": "#6F7BA6"
+		},
+		"designer": {
+			"name": "Designer",
+			"fill": "#CEBDDC",
+			"outline": "#7C2F94"
+		},
+		"diamondtiara": {
+			"name": "DiamondTiara",
+			"fill": "#FAE6FF",
+			"outline": "#8A5FAD"
+		},
+		"discord": {
+			"name": "Discord",
+			"fill": "#EEE7DA",
+			"outline": "#9D6A1A"
+		},
+		"doctor": {
+			"name": "Doctor",
+			"fill": "#CEBB7A",
+			"outline": "#6D5F55"
+		},
+		"doublediamond": {
+			"name": "DoubleDiamond",
+			"fill": "#FFFFFF",
+			"outline": "#9FA9BD"
+		},
+		"drwhooves": {
+			"name": "DrWhooves",
+			"fill": "#EDDDB7",
+			"outline": "#322717"
+		},
+		"dumbbell": {
+			"name": "Dumbbell",
+			"fill": "#DDD5BF",
+			"outline": "#615A54"
+		},
+		"dustypages": {
+			"name": "DustyPages",
+			"fill": "#E8E5F2",
+			"outline": "#AB8088"
+		},
+		"dwk": {
+			"name": "DWK",
+			"fill": "#FFFFFF",
+			"outline": "#3A2464"
+		},
+		"eeskorka": {
+			"name": "Eeskorka",
+			"fill": "#FFFFFF",
+			"outline": "#6D3792"
+		},
+		"ember": {
+			"name": "Ember",
+			"fill": "#AAFFED",
+			"outline": "#0F2757"
+		},
+		"emberg1": {
+			"name": "EmberG1",
+			"fill": "#F2CEF5",
+			"outline": "#04015C"
+		},
+		"fancypants": {
+			"name": "FancyPants",
+			"fill": "#FFFFFF",
+			"outline": "#99AAAB"
+		},
+		"fanseller": {
+			"name": "FanSeller",
+			"fill": "#C5B786",
+			"outline": "#477D36"
+		},
+		"fashionplate": {
+			"name": "FashionPlate",
+			"fill": "#D2EAF5",
+			"outline": "#1D2325"
+		},
+		"featherbangs": {
+			"name": "FeatherBangs",
+			"fill": "#DED4B4",
+			"outline": "#61412B"
+		},
+		"featherweight": {
+			"name": "Featherweight",
+			"fill": "#FFFFFF",
+			"outline": "#000000"
+		},
+		"fido": {
+			"name": "Fido",
+			"fill": "#BCD3E2",
+			"outline": "#576872"
+		},
+		"filthyrich": {
+			"name": "FilthyRich",
+			"fill": "#EAE4D3",
+			"outline": "#948455"
+		},
+		"fireflyg1": {
+			"name": "FireflyG1",
+			"fill": "#FFFFFF",
+			"outline": "#E80093"
+		},
+		"firelight": {
+			"name": "Firelight",
+			"fill": "#7FEEC4",
+			"outline": "#844AAF"
+		},
+		"firstfolio": {
+			"name": "FirstFolio",
+			"fill": "#EDEBE2",
+			"outline": "#878340"
+		},
+		"flashmagnus": {
+			"name": "FlashMagnus",
+			"fill": "#FEFF98",
+			"outline": "#333333"
+		},
+		"flashsentry": {
+			"name": "FlashSentry",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"fleetfoot": {
+			"name": "Fleetfoot",
+			"fill": "#FCFCFC",
+			"outline": "#8FDFDE"
+		},
+		"flimflam": {
+			"name": "FlimFlam",
+			"fill": "#F4F6B6",
+			"outline": "#C03042"
+		},
+		"flurryheart": {
+			"name": "FlurryHeart",
+			"fill": "#F2BCE3",
+			"outline": "#9055A6"
+		},
+		"flutterguy": {
+			"name": "FlutterGuy",
+			"fill": "#FFF9D2",
+			"outline": "#D64295"
+		},
+		"fluttershy": {
+			"name": "FlutterShy",
+			"fill": "#FFF9D2",
+			"outline": "#D64295"
+		},
+		"fume": {
+			"name": "Fume",
+			"fill": "#FFFFFF",
+			"outline": "#FF5A00"
+		},
+		"gabby": {
+			"name": "Gabby",
+			"fill": "#E0F0EB",
+			"outline": "#6D8A82"
+		},
+		"galaappleby": {
+			"name": "GalaAppleby",
+			"fill": "#EDF1AB",
+			"outline": "#E8576B"
+		},
+		"gallus": {
+			"name": "Gallus",
+			"fill": "#86E3F9",
+			"outline": "#01517B"
+		},
+		"garble": {
+			"name": "Garble",
+			"fill": "#FAEC9A",
+			"outline": "#731908"
+		},
+		"gilda": {
+			"name": "Gilda",
+			"fill": "#FFFFFF",
+			"outline": "#907629"
+		},
+		"gloriosadaisy": {
+			"name": "GloriosaDaisy",
+			"fill": "#FAE8EB",
+			"outline": "#841246"
+		},
+		"goldenharvest": {
+			"name": "GoldenHarvest",
+			"fill": "#FDFF9C",
+			"outline": "#D08813"
+		},
+		"goldiedelicious": {
+			"name": "GoldieDelicious",
+			"fill": "#F0ECE3",
+			"outline": "#C4902B"
+		},
+		"gothshy": {
+			"name": "GothShy",
+			"fill": "#FFF9D2",
+			"outline": "#B85D8E",
+			"shadow": "#3D3747"
+		},
+		"grandpear": {
+			"name": "GrandPear",
+			"fill": "#EDCB67",
+			"outline": "#875726"
+		},
+		"grannysmith": {
+			"name": "GrannySmith",
+			"fill": "#FFFFFF",
+			"outline": "#7BA300"
+		},
+		"greenapple": {
+			"name": "GreenApple",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"greenchangeling": {
+			"name": "GreenChangeling",
+			"fill": "#89E795",
+			"outline": "#445B65"
+		},
+		"greenteacher": {
+			"name": "Greenteacher",
+			"fill": "#E4FED5",
+			"outline": "#207C1F"
+		},
+		"grogar": {
+			"name": "Grogar",
+			"fill": "#348BBF",
+			"outline": "#020A48"
+		},
+		"grubber": {
+			"name": "Grubber",
+			"fill": "#47B9B6",
+			"outline": "#5D5D5D"
+		},
+		"gruff": {
+			"name": "Gruff",
+			"fill": "#D0CBCB",
+			"outline": "#453F3D"
+		},
+		"guard": {
+			"name": "Guard",
+			"fill": "#FFFFFF",
+			"outline": "#80838B"
+		},
+		"gummy": {
+			"name": "Gummy",
+			"fill": "#E4FED5",
+			"outline": "#207C1F"
+		},
+		"hipstershy": {
+			"name": "HipsterShy",
+			"fill": "#FFF9D2",
+			"outline": "#D64295",
+			"shadow": "#8957AA"
+		},
+		"hoitytoity": {
+			"name": "HoityToity",
+			"fill": "#D1D8F1",
+			"outline": "#3B475F"
+		},
+		"hoofar": {
+			"name": "HooFar",
+			"fill": "#B3C7FC",
+			"outline": "#183FDC"
+		},
+		"hooffield": {
+			"name": "Hooffield",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"hoops": {
+			"name": "Hoops",
+			"fill": "#DCB66C",
+			"outline": "#7D5F47"
+		},
+		"igneousrock": {
+			"name": "IgneousRock",
+			"fill": "#C6A75D",
+			"outline": "#744923"
+		},
+		"indigozap": {
+			"name": "IndigoZap",
+			"fill": "#F7EAC8",
+			"outline": "#164266"
+		},
+		"inkyrose": {
+			"name": "InkyRose",
+			"fill": "#FFFFFF",
+			"outline": "#635971"
+		},
+		"ironwill": {
+			"name": "IronWill",
+			"fill": "#839EC1",
+			"outline": "#1C3346"
+		},
+		"jackpot": {
+			"name": "Jackpot",
+			"fill": "#DAEFFA",
+			"outline": "#034367"
+		},
+		"jeffletrotski": {
+			"name": "JeffLetrotski",
+			"fill": "#F3EEE0",
+			"outline": "#B78525"
+		},
+		"joe": {
+			"name": "Joe",
+			"fill": "#EEE09C",
+			"outline": "#A8713B"
+		},
+		"juniper": {
+			"name": "Juniper",
+			"fill": "#FAFACA",
+			"outline": "#0E6A7B"
+		},
+		"kettlecorn": {
+			"name": "KettleCorn",
+			"fill": "#E0D89B",
+			"outline": "#DE96AF"
+		},
+		"kingsombra": {
+			"name": "KingSombra",
+			"fill": "#C6C6C6",
+			"outline": "#C80E0F",
+			"shadow": "#111211"
+		},
+		"kirinleader": {
+			"name": "KirinLeader",
+			"fill": "#DED7C0",
+			"outline": "#245D57"
+		},
+		"kiwilollipop": {
+			"name": "KiwiLollipop",
+			"fill": "#C3F7F8",
+			"outline": "#8B2753"
+		},
+		"lemonhearts": {
+			"name": "LemonHearts",
+			"fill": "#FCFFC8",
+			"outline": "#0D5B6B"
+		},
+		"librarian": {
+			"name": "Librarian",
+			"fill": "#FFF4F9",
+			"outline": "#9191CA"
+		},
+		"librariangray": {
+			"name": "Librarian_Gray",
+			"fill": "#F2F2F2",
+			"outline": "#969EC6"
+		},
+		"lighthoof": {
+			"name": "Lighthoof",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"lightingdust": {
+			"name": "LightingDust",
+			"fill": "#F0FFFA",
+			"outline": "#00B497"
+		},
+		"lillyvalley": {
+			"name": "LillyValley",
+			"fill": "#F6EDB4",
+			"outline": "#B44772"
+		},
+		"limestonepie": {
+			"name": "LimestonePie",
+			"fill": "#AB9CFF",
+			"outline": "#4E5C66"
+		},
+		"littlestrongheart": {
+			"name": "LittleStrongheart",
+			"fill": "#EAA43C",
+			"outline": "#894316"
+		},
+		"lizadoolots": {
+			"name": "LizaDoolots",
+			"fill": "#DBF5EE",
+			"outline": "#A668CD"
+		},
+		"lorddragon": {
+			"name": "LordDragon",
+			"fill": "#DCB398",
+			"outline": "#112932"
+		},
+		"lotusblossom": {
+			"name": "LotusBlossom",
+			"fill": "#A5DFEF",
+			"outline": "#A97291"
+		},
+		"loudspeaker": {
+			"name": "Loudspeaker",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"luna": {
+			"name": "Luna",
+			"fill": "#D7D6FF",
+			"outline": "#1644BB"
+		},
+		"lunarcv": {
+			"name": "LunaRCV",
+			"fill": "#D7D6FF",
+			"outline": "#1644BB"
+		},
+		"lusterdawn": {
+			"name": "LusterDawn",
+			"fill": "#F5DB8C",
+			"outline": "#EF77D1"
+		},
+		"lyra": {
+			"name": "Lyra",
+			"fill": "#DDF6F2",
+			"outline": "#19613A"
+		},
+		"lyricalilac": {
+			"name": "LyricaLilac",
+			"fill": "#FBFF96",
+			"outline": "#9185C2"
+		},
+		"magnum": {
+			"name": "Magnum",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"maneallgood": {
+			"name": "ManeAllgood",
+			"fill": "#FBE0D1",
+			"outline": "#D46539"
+		},
+		"marblepie": {
+			"name": "MarblePie",
+			"fill": "#C8D2D3",
+			"outline": "#233737"
+		},
+		"matilda": {
+			"name": "Matilda",
+			"fill": "#FEEDC1",
+			"outline": "#645F2A"
+		},
+		"maudpie": {
+			"name": "MaudPie",
+			"fill": "#D8D0FF",
+			"outline": "#543F82"
+		},
+		"mayor": {
+			"name": "Mayor",
+			"fill": "#C2AE73",
+			"outline": "#2C2C2C"
+		},
+		"mccolt": {
+			"name": "McColt",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"meadowbrook": {
+			"name": "Meadowbrook",
+			"fill": "#B0FFFB",
+			"outline": "#333333"
+		},
+		"meathead": {
+			"name": "MeatHead",
+			"fill": "#B5E3F4",
+			"outline": "#C84B00"
+		},
+		"medleyg1": {
+			"name": "MedleyG1",
+			"fill": "#FFFFFF",
+			"outline": "#1E9BD2"
+		},
+		"megang1": {
+			"name": "MeganG1",
+			"fill": "#F9DF99",
+			"outline": "#911800"
+		},
+		"microchips": {
+			"name": "MicroChips",
+			"fill": "#E6D7F5",
+			"outline": "#6676A3"
+		},
+		"midnightsparkle": {
+			"name": "MidnightSparkle",
+			"fill": "#9369B2",
+			"outline": "#111825"
+		},
+		"minuette": {
+			"name": "Minuette",
+			"fill": "#FFFFFF",
+			"outline": "#3C6AA1"
+		},
+		"mirror": {
+			"name": "Mirror",
+			"fill": "#A5DED8",
+			"outline": "#785B1D",
+			"shadow": "#010201"
+		},
+		"misssparkle": {
+			"name": "MissSparkle",
+			"fill": "#FFF0E8",
+			"outline": "#5E2A75"
+		},
+		"mistmane": {
+			"name": "Mistmane",
+			"fill": "#FEF8D7",
+			"outline": "#7F32B0"
+		},
+		"mistyfly": {
+			"name": "MistyFly",
+			"fill": "#FFF9D2",
+			"outline": "#A42369",
+			"shadow": "#607173"
+		},
+		"moondancer": {
+			"name": "Moondancer",
+			"fill": "#FDFEF0",
+			"outline": "#BC124D"
+		},
+		"mrcake": {
+			"name": "MrCake",
+			"fill": "#E4D164",
+			"outline": "#F49532"
+		},
+		"mrmoochick": {
+			"name": "MrMoochick",
+			"fill": "#FFE1C2",
+			"outline": "#DE0000"
+		},
+		"mrscake": {
+			"name": "MrsCake",
+			"fill": "#95E1F2",
+			"outline": "#DC5D88"
+		},
+		"mrshy": {
+			"name": "MrShy",
+			"fill": "#CBF5D9",
+			"outline": "#8D3877"
+		},
+		"mrsshy": {
+			"name": "MrsShy",
+			"fill": "#FFFBD1",
+			"outline": "#84204F"
+		},
+		"mrzoom": {
+			"name": "MrZoom",
+			"fill": "#F2CC97",
+			"outline": "#5C852E"
+		},
+		"mudbriar": {
+			"name": "Mudbriar",
+			"fill": "#D8D2CA",
+			"outline": "#4C3E28"
+		},
+		"mysterypony": {
+			"name": "MysteryPony",
+			"fill": "#15242B",
+			"outline": "#BCCCD7"
+		},
+		"nightlight": {
+			"name": "NightLight",
+			"fill": "#EDF6FF",
+			"outline": "#25376C"
+		},
+		"nightmaremoon": {
+			"name": "NightmareMoon",
+			"fill": "#929DE6",
+			"outline": "#000000"
+		},
+		"nutsconductor": {
+			"name": "NutsConductor",
+			"fill": "#F2EEC2",
+			"outline": "#548786"
+		},
+		"oaknut": {
+			"name": "OakNut",
+			"fill": "#DDAE61",
+			"outline": "#993A41"
+		},
+		"oceanflow": {
+			"name": "OceanFlow",
+			"fill": "#F1F0CD",
+			"outline": "#C15FC6"
+		},
+		"ocellus": {
+			"name": "Ocellus",
+			"fill": "#B4DFE3",
+			"outline": "#498C7C"
+		},
+		"octavia": {
+			"name": "Octavia",
+			"fill": "#CFCDC6",
+			"outline": "#333033"
+		},
+		"oldladychangeling": {
+			"name": "OldLadyChangeling",
+			"fill": "#74C77D",
+			"outline": "#445B65"
+		},
+		"orangehairstudent": {
+			"name": "OrangeHairStudent",
+			"fill": "#BEEFD9",
+			"outline": "#D26726"
+		},
+		"owlowiscious": {
+			"name": "Owlowiscious",
+			"fill": "#F5EAAF",
+			"outline": "#49412C"
+		},
+		"partyfavor": {
+			"name": "PartyFavor",
+			"fill": "#C0E9EC",
+			"outline": "#1E5997"
+		},
+		"petunia": {
+			"name": "Petunia",
+			"fill": "#D4F3E9",
+			"outline": "#6DDCC1"
+		},
+		"petuniapetals": {
+			"name": "PetuniaPetals",
+			"fill": "#F2F2F2",
+			"outline": "#969EC6"
+		},
+		"pharynx": {
+			"name": "Pharynx",
+			"fill": "#AE1742",
+			"outline": "#0B1F12"
+		},
+		"photofinish": {
+			"name": "PhotoFinish",
+			"fill": "#D9F2FB",
+			"outline": "#9F2E80"
+		},
+		"pickle": {
+			"name": "Pickle",
+			"fill": "#F2F2F2",
+			"outline": "#969EC6"
+		},
+		"pinacolada": {
+			"name": "PinaColada",
+			"fill": "#DCC0E0",
+			"outline": "#AE4FAA"
+		},
+		"pinkamena": {
+			"name": "Pinkamena",
+			"fill": "#D4CFD0",
+			"outline": "#856470"
+		},
+		"pinkiepie": {
+			"name": "PinkiePie",
+			"fill": "#FFFFFF",
+			"outline": "#E80093"
+		},
+		"pinkiepiebright": {
+			"name": "PinkiePieBright",
+			"fill": "#FFFFFF",
+			"outline": "#F20050"
+		},
+		"pinkpony": {
+			"name": "Pinkpony",
+			"fill": "#FFFFFF",
+			"outline": "#E80093"
+		},
+		"pinkstudentpony": {
+			"name": "PinkStudentPony",
+			"fill": "#E9A8CE",
+			"outline": "#4E1D7E"
+		},
+		"pinkteapony": {
+			"name": "PinkTeaPony",
+			"fill": "#BEF2D7",
+			"outline": "#B07974"
+		},
+		"pipsqueak": {
+			"name": "Pipsqueak",
+			"fill": "#FFF2DE",
+			"outline": "#A66F06"
+		},
+		"pistachio": {
+			"name": "Pistachio",
+			"fill": "#FCFBD3",
+			"outline": "#6E862F"
+		},
+		"ponyofshadows": {
+			"name": "PonyOfShadows",
+			"fill": "#B5ABA1",
+			"outline": "#615A54"
+		},
+		"postcrush": {
+			"name": "PostCrush",
+			"fill": "#FFFFFF",
+			"outline": "#000000"
+		},
+		"prim": {
+			"name": "Prim",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"princesscadence": {
+			"name": "PrincessCadence",
+			"fill": "#FEF8D7",
+			"outline": "#7F32B0"
+		},
+		"princessskystar": {
+			"name": "PrincessSkystar",
+			"fill": "#FDF992",
+			"outline": "#0E9F8E"
+		},
+		"principalcinch": {
+			"name": "PrincipalCinch",
+			"fill": "#DFFDF9",
+			"outline": "#6F1F5B"
+		},
+		"purplepony": {
+			"name": "Purplepony",
+			"fill": "#F2CEF5",
+			"outline": "#04015C"
+		},
+		"purpleteapony": {
+			"name": "PurpleTeaPony",
+			"fill": "#BEF2D7",
+			"outline": "#723788"
+		},
+		"queennovo": {
+			"name": "QueenNovo",
+			"fill": "#EED8F3",
+			"outline": "#670482"
+		},
+		"quibblepants": {
+			"name": "QuibblePants",
+			"fill": "#F6D191",
+			"outline": "#3C3A33"
+		},
+		"rainbowdash": {
+			"name": "RainbowDash",
+			"fill": "#FFFFFF",
+			"outline": "#1E9BD2"
+		},
+		"rainbowshine": {
+			"name": "RainbowShine",
+			"fill": "#BFA7FF",
+			"outline": "#594EC0"
+		},
+		"rarity": {
+			"name": "Rarity",
+			"fill": "#F0FBFF",
+			"outline": "#500069"
+		},
+		"redapple": {
+			"name": "RedApple",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"redheart": {
+			"name": "Redheart",
+			"fill": "#FFFFFF",
+			"outline": "#FF0000"
+		},
+		"reference": {
+			"name": "Reference",
+			"fill": "#FFFFFF",
+			"outline": "#000000"
+		},
+		"remark": {
+			"name": "Remark",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"revizorreal": {
+			"name": "RevizorReal",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"rockhoof": {
+			"name": "Rockhoof",
+			"fill": "#A5DED8",
+			"outline": "#785B1D",
+			"shadow": "#010201"
+		},
+		"rogue": {
+			"name": "Rogue",
+			"fill": "#79B9DE",
+			"outline": "#566B6D"
+		},
+		"rollingthunder": {
+			"name": "RollingThunder",
+			"fill": "#D7EDF8",
+			"outline": "#654E98"
+		},
+		"rose": {
+			"name": "Rose",
+			"fill": "#E8E7C5",
+			"outline": "#A03553"
+		},
+		"rover": {
+			"name": "Rover",
+			"fill": "#BCBCBC",
+			"outline": "#484848"
+		},
+		"royalribbon": {
+			"name": "RoyalRibbon",
+			"fill": "#DD91D2",
+			"outline": "#5C78CA"
+		},
+		"rumble": {
+			"name": "Rumble",
+			"fill": "#C8C6C6",
+			"outline": "#576569"
+		},
+		"rustybucket": {
+			"name": "RustyBucket",
+			"fill": "#FFFFFF",
+			"outline": "#FF5A00"
+		},
+		"rutherford": {
+			"name": "Rutherford",
+			"fill": "#B8985F",
+			"outline": "#773D17"
+		},
+		"saffronmasala": {
+			"name": "SaffronMasala",
+			"fill": "#F9DF99",
+			"outline": "#911800"
+		},
+		"sandalwood": {
+			"name": "Sandalwood",
+			"fill": "#E8CE9C",
+			"outline": "#276C38"
+		},
+		"sandbar": {
+			"name": "Sandbar",
+			"fill": "#E7FBB9",
+			"outline": "#6E874B"
+		},
+		"sanssmirk": {
+			"name": "SansSmirk",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"sapphireshores": {
+			"name": "SapphireShores",
+			"fill": "#F8F4C3",
+			"outline": "#679FF7"
+		},
+		"sassy": {
+			"name": "Sassy",
+			"fill": "#D2F2FF",
+			"outline": "#92342D"
+		},
+		"scootaloo": {
+			"name": "Scootaloo",
+			"fill": "#FFDAA0",
+			"outline": "#A00078"
+		},
+		"scorpan": {
+			"name": "Scorpan",
+			"fill": "#FBE88A",
+			"outline": "#DC6600"
+		},
+		"seaspray": {
+			"name": "SeaSpray",
+			"fill": "#D0C9F9",
+			"outline": "#357671"
+		},
+		"security": {
+			"name": "Security",
+			"fill": "#FFFFFF",
+			"outline": "#000000"
+		},
+		"shadow": {
+			"name": "Shadow",
+			"fill": "#C6C6C6",
+			"outline": "#C80E0F",
+			"shadow": "#111211"
+		},
+		"shadowbolt": {
+			"name": "Shadowbolt",
+			"fill": "#A7CAD2",
+			"outline": "#2B69BA"
+		},
+		"sheep": {
+			"name": "Sheep",
+			"fill": "#C3C1B4",
+			"outline": "#312E23"
+		},
+		"sheriff": {
+			"name": "Sheriff",
+			"fill": "#CDC785",
+			"outline": "#715919"
+		},
+		"sheriffsilverstar": {
+			"name": "SheriffSilverstar",
+			"fill": "#A8925C",
+			"outline": "#382822"
+		},
+		"shimmyshake": {
+			"name": "ShimmyShake",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"shiningarmor": {
+			"name": "ShiningArmor",
+			"fill": "#FFFFFF",
+			"outline": "#3B477C"
+		},
+		"shoeshine": {
+			"name": "Shoeshine",
+			"fill": "#9BE7FD",
+			"outline": "#9CB3DD"
+		},
+		"shortfuse": {
+			"name": "ShortFuse",
+			"fill": "#F6EA65",
+			"outline": "#E34C38"
+		},
+		"silverspoon": {
+			"name": "SilverSpoon",
+			"fill": "#FFFFFF",
+			"outline": "#7F959A"
+		},
+		"silverstream": {
+			"name": "SilverStream",
+			"fill": "#F6E8F7",
+			"outline": "#775A82"
+		},
+		"skeedaddle": {
+			"name": "Skeedaddle",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"skybeak": {
+			"name": "SkyBeak",
+			"fill": "#E1E5EA",
+			"outline": "#6C7FDF"
+		},
+		"skystinger": {
+			"name": "SkyStinger",
+			"fill": "#66ABC3",
+			"outline": "#154B6D"
+		},
+		"sludge": {
+			"name": "Sludge",
+			"fill": "#DFE7A7",
+			"outline": "#787C56"
+		},
+		"smolder": {
+			"name": "Smolder",
+			"fill": "#FBE88A",
+			"outline": "#DC6600"
+		},
+		"snails": {
+			"name": "Snails",
+			"fill": "#FFF2DE",
+			"outline": "#A66F06"
+		},
+		"snake": {
+			"name": "Snake",
+			"fill": "#BBD27B",
+			"outline": "#324216"
+		},
+		"snapshutter": {
+			"name": "SnapShutter",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"snips": {
+			"name": "Snips",
+			"fill": "#F3F9F8",
+			"outline": "#2C6B62"
+		},
+		"soarin": {
+			"name": "Soarin",
+			"fill": "#D1F4FF",
+			"outline": "#20428A"
+		},
+		"somepony": {
+			"name": "Somepony",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"someponyblueonyellow": {
+			"name": "SomeponyBlueOnYellow",
+			"fill": "#FEFF98",
+			"outline": "#2B6BB7"
+		},
+		"someponybluishwhite": {
+			"name": "SomeponyBluishWhite",
+			"fill": "#D8E2FF",
+			"outline": "#333333"
+		},
+		"someponydirector": {
+			"name": "SomeponyDirector",
+			"fill": "#DFD9B1",
+			"outline": "#9D6A1A"
+		},
+		"someponygreenybrown": {
+			"name": "SomeponyGreenyBrown",
+			"fill": "#9BFFCE",
+			"outline": "#9A7464"
+		},
+		"someponygrey": {
+			"name": "SomeponyGrey",
+			"fill": "#F2F2F2",
+			"outline": "#969EC6"
+		},
+		"someponylightbluepurplehair": {
+			"name": "SomeponyLightBluePurplehair",
+			"fill": "#CAF8FF",
+			"outline": "#8A5FAD"
+		},
+		"someponylightcyan": {
+			"name": "SomeponyLightCyan",
+			"fill": "#B0FFFB",
+			"outline": "#333333"
+		},
+		"someponylightpink": {
+			"name": "SomeponyLightPink",
+			"fill": "#FEB2B6",
+			"outline": "#632626"
+		},
+		"someponyorange": {
+			"name": "SomeponyOrange",
+			"fill": "#FEB258",
+			"outline": "#333333"
+		},
+		"someponyorangeongrey": {
+			"name": "SomeponyOrangeOnGrey",
+			"fill": "#C8CDD9",
+			"outline": "#9B5B1C"
+		},
+		"someponypinkishwhite": {
+			"name": "SomeponyPinkishWhite",
+			"fill": "#FAE6FF",
+			"outline": "#E488D9"
+		},
+		"someponypurple": {
+			"name": "SomeponyPurple",
+			"fill": "#964AB4",
+			"outline": "#FFFFFF",
+			"shadow": "#FFFFFF"
+		},
+		"someponystatist": {
+			"name": "SomeponyStatist",
+			"fill": "#FFDFF8",
+			"outline": "#385890"
+		},
+		"someponywhiteondarkblue": {
+			"name": "SomeponyWhiteOnDarkBlue",
+			"fill": "#FFFFFF",
+			"outline": "#002288"
+		},
+		"someponyyellow": {
+			"name": "SomeponyYellow",
+			"fill": "#FEFF98",
+			"outline": "#333333"
+		},
+		"someponyyellowandgray": {
+			"name": "SomeponyYellowandGray",
+			"fill": "#FDEBA4",
+			"outline": "#A67949"
+		},
+		"somnambula": {
+			"name": "Somnambula",
+			"fill": "#F7B18E",
+			"outline": "#10621B"
+		},
+		"sonatadusk": {
+			"name": "SonataDusk",
+			"fill": "#CFF7FB",
+			"outline": "#3A347B"
+		},
+		"songbird": {
+			"name": "Songbird",
+			"fill": "#F9F8C3",
+			"outline": "#000000"
+		},
+		"soursweet": {
+			"name": "SourSweet",
+			"fill": "#FFFBD1",
+			"outline": "#84204F"
+		},
+		"spearhead": {
+			"name": "Spearhead",
+			"fill": "#CE8147",
+			"outline": "#84541B"
+		},
+		"spike": {
+			"name": "Spike",
+			"fill": "#F9FFF9",
+			"outline": "#229320"
+		},
+		"spitfire": {
+			"name": "Spitfire",
+			"fill": "#FDF6BE",
+			"outline": "#BE6300"
+		},
+		"spoiledrich": {
+			"name": "SpoiledRich",
+			"fill": "#F3D6DA",
+			"outline": "#51185F"
+		},
+		"spot": {
+			"name": "Spot",
+			"fill": "#D9C3A5",
+			"outline": "#7D6D5E"
+		},
+		"spur": {
+			"name": "Spur",
+			"fill": "#65EBD8",
+			"outline": "#693E1C"
+		},
+		"stalwartstallion": {
+			"name": "StalwartStallion",
+			"fill": "#DFE3C6",
+			"outline": "#211200"
+		},
+		"starlightequal": {
+			"name": "StarlightEqual",
+			"fill": "#F8EAFF",
+			"outline": "#636363"
+		},
+		"starlightglimmer": {
+			"name": "StarlightGlimmer",
+			"fill": "#F2CEF5",
+			"outline": "#04015C"
+		},
+		"starswirl": {
+			"name": "Starswirl",
+			"fill": "#EAEAEA",
+			"outline": "#3F3F3F"
+		},
+		"startracker": {
+			"name": "StarTracker",
+			"fill": "#43578E",
+			"outline": "#BDBD7A"
+		},
+		"stellarflare": {
+			"name": "StellarFlare",
+			"fill": "#F7B886",
+			"outline": "#DF1211"
+		},
+		"stevenmagnet": {
+			"name": "StevenMagnet",
+			"fill": "#FFFD7F",
+			"outline": "#8E4D95"
+		},
+		"stormking": {
+			"name": "StormKing",
+			"fill": "#27F0DD",
+			"outline": "#000000"
+		},
+		"stygian": {
+			"name": "Stygian",
+			"fill": "#CFCDC6",
+			"outline": "#696691"
+		},
+		"sugarbelle": {
+			"name": "SugarBelle",
+			"fill": "#FFCAEA",
+			"outline": "#561F59"
+		},
+		"sugarcoat": {
+			"name": "SugarCoat",
+			"fill": "#EBFEFA",
+			"outline": "#14555E"
+		},
+		"sunburst": {
+			"name": "Sunburst",
+			"fill": "#FCFFDB",
+			"outline": "#CC370D"
+		},
+		"sunnyflare": {
+			"name": "SunnyFlare",
+			"fill": "#E3FCF5",
+			"outline": "#6C2C7D"
+		},
+		"sunnyskies": {
+			"name": "SunnySkies",
+			"fill": "#F2F2F2",
+			"outline": "#969EC6"
+		},
+		"sunsetshimmer": {
+			"name": "SunsetShimmer",
+			"fill": "#F9DF99",
+			"outline": "#911800"
+		},
+		"supernovazap": {
+			"name": "SupernovaZap",
+			"fill": "#F3FAB1",
+			"outline": "#5D2B9C"
+		},
+		"suri": {
+			"name": "Suri",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"svengallop": {
+			"name": "Svengallop",
+			"fill": "#FFFFFF",
+			"outline": "#807E7D"
+		},
+		"sweetiebelle": {
+			"name": "SweetieBelle",
+			"fill": "#FFF0E8",
+			"outline": "#5E2A75"
+		},
+		"tallorder": {
+			"name": "TallOrder",
+			"fill": "#E1E9F7",
+			"outline": "#604426"
+		},
+		"teddiesafari": {
+			"name": "TeddieSafari",
+			"fill": "#E4E8A7",
+			"outline": "#D8811B"
+		},
+		"tempestshadow": {
+			"name": "TempestShadow",
+			"fill": "#BC477D",
+			"outline": "#511048"
+		},
+		"terramar": {
+			"name": "Terramar",
+			"fill": "#FDFFF1",
+			"outline": "#9DA282"
+		},
+		"thorax": {
+			"name": "Thorax",
+			"fill": "#DAE9A7",
+			"outline": "#428A33"
+		},
+		"tiger": {
+			"name": "Tiger",
+			"fill": "#DB9128",
+			"outline": "#2A2C27"
+		},
+		"timberspruce": {
+			"name": "TimberSpruce",
+			"fill": "#ECD3C9",
+			"outline": "#266A45"
+		},
+		"tirek": {
+			"name": "Tirek",
+			"fill": "#DCB398",
+			"outline": "#112932"
+		},
+		"toolaroola": {
+			"name": "ToolaRoola",
+			"fill": "#F2D3E6",
+			"outline": "#DB66A4"
+		},
+		"tornadobolt": {
+			"name": "TornadoBolt",
+			"fill": "#E3E3E3",
+			"outline": "#856BB6"
+		},
+		"treehugger": {
+			"name": "TreeHugger",
+			"fill": "#ACE76A",
+			"outline": "#549A37",
+			"shadow": "#111211"
+		},
+		"trixie": {
+			"name": "Trixie",
+			"fill": "#DAEFFA",
+			"outline": "#034367"
+		},
+		"troubleshoes": {
+			"name": "Troubleshoes",
+			"fill": "#C5A6A6",
+			"outline": "#50292E"
+		},
+		"tunderlane": {
+			"name": "Tunderlane",
+			"fill": "#9DD2CE",
+			"outline": "#555356",
+			"shadow": "#010201"
+		},
+		"twilight": {
+			"name": "Twilight",
+			"fill": "#FFFFFF",
+			"outline": "#6D3792"
+		},
+		"twilightvelvet": {
+			"name": "TwilightVelvet",
+			"fill": "#EFEFEF",
+			"outline": "#512E72"
+		},
+		"twinkleshine": {
+			"name": "TwinkleShine",
+			"fill": "#FDFFF4",
+			"outline": "#BA6AA9"
+		},
+		"twins": {
+			"name": "Twins",
+			"fill": "#FAE6FF",
+			"outline": "#E488D9"
+		},
+		"twist": {
+			"name": "Twist",
+			"fill": "#EAEAEB",
+			"outline": "#CB4F2D"
+		},
+		"uncleorange": {
+			"name": "UncleOrange",
+			"fill": "#E7DC75",
+			"outline": "#4B941B"
+		},
+		"undefined": {
+			"name": "Undefined",
+			"fill": "#94F990",
+			"outline": "#890000"
+		},
+		"vaportrail": {
+			"name": "VaporTrail",
+			"fill": "#F8FBF2",
+			"outline": "#529486"
+		},
+		"vignettevalencia": {
+			"name": "VignetteValencia",
+			"fill": "#FFFF99",
+			"outline": "#B670BA"
+		},
+		"wallflower": {
+			"name": "Wallflower",
+			"fill": "#BAF5D4",
+			"outline": "#0AB842"
+		},
+		"warning": {
+			"name": "Warning",
+			"fill": "#FFB0B0",
+			"outline": "#804040"
+		},
+		"willow": {
+			"name": "Willow",
+			"fill": "#EAE4D3",
+			"outline": "#948455"
+		},
+		"windrider": {
+			"name": "Windrider",
+			"fill": "#C7ECFE",
+			"outline": "#6B6646"
+		},
+		"windsprint": {
+			"name": "WindSprint",
+			"fill": "#DEDAFA",
+			"outline": "#213D79"
+		},
+		"windywhistles": {
+			"name": "WindyWhistles",
+			"fill": "#CFCFE7",
+			"outline": "#91413A"
+		},
+		"withers": {
+			"name": "Withers",
+			"fill": "#CACED2",
+			"outline": "#3E5367"
+		},
+		"wonderbolt": {
+			"name": "Wonderbolt",
+			"fill": "#FAEEAF",
+			"outline": "#0486BF"
+		},
+		"wonderlane": {
+			"name": "Wonderlane",
+			"fill": "#227FBB",
+			"outline": "#555356"
+		},
+		"yigrid": {
+			"name": "Yigrid",
+			"fill": "#EAEED6",
+			"outline": "#603C66"
+		},
+		"yona": {
+			"name": "Yona",
+			"fill": "#CD9288",
+			"outline": "#8B2F27"
+		},
+		"zecora": {
+			"name": "Zecora",
+			"fill": "#EAEAEA",
+			"outline": "#3F3F3F"
+		},
+		"zephyrbreeze": {
+			"name": "ZephyrBreeze",
+			"fill": "#AAFFED",
+			"outline": "#0F2757"
+		},
+		"zipporwhill": {
+			"name": "Zipporwhill",
+			"fill": "#D9D4C2",
+			"outline": "#766D5C"
+		}
+	}
+}

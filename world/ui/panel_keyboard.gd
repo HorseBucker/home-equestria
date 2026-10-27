@@ -23,10 +23,11 @@ func setup(surface: Node, width: float, font: int) -> void:
 	custom_minimum_size.x = width
 	add_theme_constant_override("separation", 4)
 	var hint := Label.new(); hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.add_theme_font_size_override("font_size", font - 4); hint.add_theme_color_override("font_color", Color("acb4c0"))
+	hint.add_theme_font_size_override("font_size", font - 4); hint.theme_type_variation = "Muted"
 	hint.text = "Typing into the field above. Or put the key in api_key.txt (next to the game; on a headset in the app's files folder, Android/data/.../files) and press Load key file."
 	add_child(hint)
-	var key_width := (width - 4.0 * 11.0) / 12.0
+	# The bottom row is 13.1 keys and 5 gaps wide, the letter rows 12 and 11: both fit `width`.
+	var key_width := minf((width - 4.0 * 11.0) / 12.0, (width - 4.0 * 5.0) / 13.1)
 	for row: String in ROWS:
 		var line := HBoxContainer.new(); line.add_theme_constant_override("separation", 4); add_child(line)
 		for ch in row:
@@ -46,6 +47,8 @@ func setup(surface: Node, width: float, font: int) -> void:
 
 func _key(parent: Node, text: String, width: float, font: int) -> Button:
 	var b := Button.new(); b.text = text; b.focus_mode = Control.FOCUS_NONE
+	# Keycaps of the menu theme (world/ui/menu_style.gd "Key") where the host page uses it.
+	b.theme_type_variation = "Key"; b.set_meta("no_lift", true)
 	b.custom_minimum_size = Vector2(width, 48); b.add_theme_font_size_override("font_size", font)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; parent.add_child(b)
 	return b

@@ -15,6 +15,8 @@ extends RefCounted
 const SAVE_FILE := preload("res://world/save_file.gd")
 const LAYOUT := preload("res://world/world_layout.gd")
 const FORM := preload("res://world/life/player_form.gd")
+## The player's names, tags and stars, and each world folder's look (dev 2026-10-27).
+const SHELF := preload("res://world/saves/save_shelf.gd")
 const ROOT := "user://worlds"
 ## Keep aligned with GameSaves.FORMAT (tools/title/test_continue_latest.gd checks the title copy).
 const HEADER_FORMAT := 5
@@ -110,6 +112,12 @@ static func world_name(world_id: String) -> String:
 	return "%s %s" % [NAME_A[a % NAME_A.size()], NAME_B[b % NAME_B.size()]]
 
 
+## The name a world goes by: the player's own (world/saves/save_shelf.gd), else world_name().
+static func world_title(root: String, world_id: String) -> String:
+	var name := str(SHELF.read(root.path_join(world_id)).world.get("name", ""))
+	return name if not name.is_empty() else world_name(world_id)
+
+
 ## "Sep 22, 2026" for world-20260922-… / world-2026-09-22-… ids (local time of New game), else "".
 static func world_started(world_id: String) -> String:
 	var found := RegEx.create_from_string("^world-(\\d{4})-?(\\d{2})-?(\\d{2})").search(world_id)
@@ -160,12 +168,18 @@ static func kind_text(entry: Dictionary) -> String:
 	return text
 
 
+## The save's own name when the player gave it one, else what kind of save it is.
+static func title_text(entry: Dictionary) -> String:
+	var name := str(entry.get("name", ""))
+	return name if not name.is_empty() else kind_text(entry)
+
+
 ## One line for Continue: "Clover Hollow · Ponyville · Day 5, 14:20 · Quit save, today 21:03".
 static func line(entry: Dictionary) -> String:
 	var parts: Array[String] = [str(entry.get("world_name", ""))]
 	if not str(entry.get("place", "")).is_empty(): parts.append(str(entry.place))
 	parts.append(game_time_text(entry))
-	parts.append(kind_text(entry) + ", " + when_text(float(entry.get("saved_at", 0.0))))
+	parts.append(title_text(entry) + ", " + when_text(float(entry.get("saved_at", 0.0))))
 	return " · ".join(parts)
 
 
@@ -234,19 +248,25 @@ static func _paths(folder: String) -> Array[String]:
 	return files
 
 
-static func _entry(path: String, header: Dictionary) -> Dictionary:
+static func _entry(path: String, header: Dictionary, shelf: Dictionary = {}) -> Dictionary:
 	var name := path.get_file().get_basename()
 	var archived := path.get_base_dir().get_file() == "archive"
-	var label := "Autosave" if name == "autosave" and not archived else ("Slot " + name.trim_prefix("slot_") if name.begins_with("slot_") and not archived else "Archive " + name)
+	var label := "Autosave" if name == "autosave" and not archived else ("Slot " + name.trim_prefix("slot_") if name.begins_with("slot_") and not archived else
+		("Save" if name.begins_with("save_") and not archived else "Archive " + name))
 	var newer := int(header.get("format", 0)) > HEADER_FORMAT
 	if newer: label += " (newer version)"
 	var world_id := str(header.get("world_id", _world_of(path)))
 	var preview := preview_path(path)
+	var look := SHELF.world_look(world_id, shelf)
+	var own: Dictionary = (shelf.get("saves", {}) as Dictionary).get(SHELF.key_of(path), {})
 	return {"path": path, "world_id": world_id, "label": label, "saved_at": _number(header.get("saved_at")),
 		"hours": _number(header.get("hours")), "day": _number(header.get("day")), "archived": archived, "newer": newer,
 		"backup": bool(header.get("backup", false)), "kind": str(header.get("kind", _kind_from_path(path))),
 		"place": str(header.get("place", "")), "form": str(header.get("form", "Human")),
-		"play_seconds": _number(header.get("play_seconds")), "world_name": world_name(world_id),
+		"play_seconds": _number(header.get("play_seconds")),
+		"world_name": str(look.name) if not str(look.name).is_empty() else world_name(world_id),
+		"world_icon": str(look.icon), "world_color": int(look.color),
+		"name": str(own.get("name", "")), "tags": Array(own.get("tags", [])), "star": bool(own.get("star", false)),
 		"world_started": world_started(world_id), "preview": preview if FileAccess.file_exists(preview) else ""}
 
 
@@ -259,9 +279,10 @@ static func _newest_first(entries: Array[Dictionary]) -> Array[Dictionary]:
 static func world_entries(folder: String) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	if folder.is_empty() or not DirAccess.dir_exists_absolute(folder): return result
+	var shelf := SHELF.read(folder.get_base_dir())
 	for path in _paths(folder):
 		var header := _header(path)
-		if not header.is_empty(): result.append(_entry(path, header))
+		if not header.is_empty(): result.append(_entry(path, header, shelf))
 	return _newest_first(result)
 
 
@@ -293,6 +314,7 @@ static func groups(entries: Array[Dictionary]) -> Array[Dictionary]:
 		var id := str(entry.world_id)
 		if not by_world.has(id):
 			by_world[id] = {"world_id": id, "world_name": entry.world_name, "world_started": entry.world_started,
+				"world_icon": entry.get("world_icon", "heart"), "world_color": int(entry.get("world_color", 0)),
 				"form": entry.form, "entries": [], "archived": [], "newest": -1.0}
 			order.append(by_world[id])
 		var group: Dictionary = by_world[id]
@@ -310,7 +332,6 @@ static func groups(entries: Array[Dictionary]) -> Array[Dictionary]:
 	return result
 
 
-## Moves or removes a checkpoint's sidecars along with it (archive, delete). Game code only.
+## Moves or removes a checkpoint's sidecars along with it (archive, delete).
 static func sidecars(save_path: String) -> Array[String]:
-	var base := save_path.get_basename()
-	return [base + ".preview.jpg", base + ".preview.meta", base + ".story.db", base + ".story.db.previous"]
+	return SHELF.sidecars(save_path)

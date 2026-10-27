@@ -558,6 +558,36 @@ func set_preview_mode(enabled: bool) -> void:
 var _applied := false
 
 
+func _init() -> void:
+	_adopt_patched_settings()
+
+
+## The Settings autoload mounts the patch packs (tools/build/packs.gd) in its _init, after the
+## engine already read its script from the base pack, so a patched settings.gd never ran (its
+## window size, the magic switch). Quality is created next, before either enters the tree: it
+## compiles the pack's settings.gd (packed as text) and hands it to the Settings node, whose
+## new _init then skips mounting again; only when the pack's REVISION is higher than the running
+## script's (0 without one), so a build that already carries the change keeps its own.
+const SETTINGS_SOURCE := "res://autoload/settings.gd"
+static func _adopt_patched_settings() -> void:
+	if not OS.has_feature("template"): return
+	var loop := Engine.get_main_loop() as SceneTree
+	var node: Node = Settings if loop != null else null
+	if node == null or node.get_script() == null: return
+	var have := int((node.get_script() as Script).get_script_constant_map().get("REVISION", 0))
+	var text := FileAccess.get_file_as_string(SETTINGS_SOURCE)
+	var found := RegEx.create_from_string("const\\s+REVISION\\s*:?=\\s*(\\d+)").search(text)
+	if found == null or int(found.get_string(1)) <= have: return
+	var patched := GDScript.new()
+	patched.source_code = text
+	if patched.reload() != OK or int(patched.get_script_constant_map().get("REVISION", 0)) <= have:
+		push_warning("[quality] the patch pack's settings.gd did not compile; keeping the built-in one")
+		return
+	Engine.set_meta(&"home_equestria_packs_mounted", true)
+	node.set_script(patched)
+	print("[quality] Settings runs the patch pack's script (revision %d)" % int(patched.get_script_constant_map().get("REVISION", 0)))
+
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_parse_diagnostic_overrides()
@@ -750,14 +780,24 @@ func _apply_physics_rate() -> void:
 ## requested eye size by scaling_3d_scale), so render_scale stays a plain per-tier VR knob.
 const AUTO_SCALE_PIXELS := 1920.0 * 1080.0
 
+## The most "Auto" draws a window of `size` at: about 1080p's pixel count (no cap below it).
+static func auto_cap(size: Vector2) -> float:
+	if size.x * size.y <= AUTO_SCALE_PIXELS: return INF
+	return snappedf(maxf(sqrt(AUTO_SCALE_PIXELS / (size.x * size.y)), 0.5), 0.05)
+
+
+## The 3D scale Render scale "Auto" gives a desktop window of `size` on the current tier
+## (Settings → Graphics shows it in pixels).
+func auto_render_scale(size: Vector2) -> float:
+	return minf(float(CONFIG[preset].get("render_scale", 1.0)), auto_cap(size))
+
+
 func _apply_render_scale(vp: Viewport, cfg: Dictionary, android: bool = OS.has_feature("android")) -> void:
 	var scale := float(cfg["render_scale"])
 	var mode: int = cfg.get("scaling_mode", Viewport.SCALING_3D_MODE_BILINEAR)
 	var aa: int = cfg["screen_space_aa"]
 	if not xr_mode and not android and not user_overrides.has("render_scale") and not diagnostic_overrides.has("render_scale"):
-		var size := Vector2(vp.get_visible_rect().size)
-		if size.x * size.y > AUTO_SCALE_PIXELS:
-			scale = minf(scale, snappedf(maxf(sqrt(AUTO_SCALE_PIXELS / (size.x * size.y)), 0.5), 0.05))
+		scale = minf(scale, auto_cap(Vector2(vp.get_visible_rect().size)))
 	# Headsets render their eye buffers 1:1 (see _apply_viewport_settings); a window resize must
 	# not bring the preset's scale back.
 	if xr_mode or android:

@@ -7,35 +7,48 @@ var panel: Node
 var store: RefCounted
 var _list: ItemList
 var _detail: TextEdit
-var _scope: OptionButton
+var _scope: Control
 var _keep: Button
 var _delete: Button
 var _status: Label
+var _scroll: ScrollContainer
 var _shown: Array[Dictionary] = []
 var _selected := ""
 
-func setup(surface: Node, _in_tab := true) -> void:
+func setup(surface: Node, in_tab := true) -> void:
 	panel = surface
-	theme = preload("res://world/ui/readable_text_theme.gd").make()
+	theme = preload("res://world/ui/menu_style.gd").theme()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var margin := MarginContainer.new(); add_child(margin); margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Scrolls when the unfolded "Applies to" list makes the page taller than its room.
+	_scroll = ScrollContainer.new(); add_child(_scroll); _scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; _scroll.follow_focus = true
+	_scroll.get_v_scroll_bar().value_changed.connect(func(_v: float) -> void: _redraw())
+	var margin := MarginContainer.new(); _scroll.add_child(margin)
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL; margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	for side: String in ["left", "right", "top", "bottom"]: margin.add_theme_constant_override("margin_" + side, 12)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 8); margin.add_child(box)
+	# Inside the settings page the tab's own title names it.
 	var title := Label.new(); title.text = "Saved notes"; title.add_theme_font_size_override("font_size", 26); box.add_child(title)
+	title.visible = not in_tab
 	var note := Label.new(); note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; note.add_theme_font_size_override("font_size", 16)
 	note.text = "Style notes last until you delete them. Pretend actions belong to the current scene. Older or uncertain feedback stays here for review and is never sent to ponies unless you keep it as a style note."
 	box.add_child(note)
 	_list = ItemList.new(); _list.custom_minimum_size.y = 120; _list.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_list.add_theme_color_override("font_color", Color("eef2f5"))
 	_list.add_theme_font_size_override("font_size", 17); _list.item_selected.connect(_pick); box.add_child(_list)
 	_detail = TextEdit.new(); _detail.editable = false; _detail.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-	_detail.add_theme_color_override("font_readonly_color", Color("eef2f5"))
 	_detail.custom_minimum_size.y = 100; _detail.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_detail.add_theme_font_size_override("font_size", 17); box.add_child(_detail)
-	var scope_row := HBoxContainer.new(); box.add_child(scope_row)
+	var scope_row := HBoxContainer.new(); scope_row.add_theme_constant_override("separation", 10); box.add_child(scope_row)
 	var label := Label.new(); label.text = "Applies to"; label.add_theme_font_size_override("font_size", 17); scope_row.add_child(label)
-	_scope = OptionButton.new(); _scope.size_flags_horizontal = Control.SIZE_EXPAND_FILL; _scope.custom_minimum_size.y = 42
-	_scope.add_theme_font_size_override("font_size", 17); scope_row.add_child(_scope)
+	label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	# An in-page dropdown (world/ui/menu_picker.gd): an OptionButton's popup is a bare window on a
+	# panel. Its face sits in the row; its list unfolds under the whole row.
+	_scope = preload("res://world/ui/menu_picker.gd").new(); _scope.list_height = 220.0
+	_scope.font_size = 17; _scope.redraw = _redraw; box.add_child(_scope)
+	_scope.detach_head(scope_row)
+	_scope.head().size_flags_horizontal = Control.SIZE_EXPAND_FILL; _scope.head().custom_minimum_size.y = 42
+	_scope.toggled_open.connect(_scope_toggled)
+	_scope.entries_changed.connect(func() -> void: _order_controls(); _redraw())
 	_scope.add_item("Choose a pony or all ponies…"); _scope.set_item_metadata(0, "")
 	_scope.add_item("All ponies"); _scope.set_item_metadata(1, "*")
 	_scope.item_selected.connect(func(_i: int) -> void: _update_buttons(); _redraw())
@@ -45,10 +58,25 @@ func setup(surface: Node, _in_tab := true) -> void:
 	for button: Button in [_keep, _delete]:
 		button.custom_minimum_size.y = 44; button.size_flags_horizontal = Control.SIZE_EXPAND_FILL; button.add_theme_font_size_override("font_size", 17)
 	_status = Label.new(); _status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; _status.add_theme_font_size_override("font_size", 16); box.add_child(_status)
-	controls.append_array([_list, _detail, _scope, _keep, _delete])
+	controls.append_array([_list, _detail, _scope.head(), _keep, _delete])
 	for control: Control in controls:
 		control.focus_entered.connect(_redraw); control.mouse_entered.connect(_redraw); control.mouse_exited.connect(_redraw)
 	hide()
+
+## Stick focus order; an unfolded list's entries follow its face.
+func _order_controls() -> void:
+	controls.clear()
+	controls.append_array([_list, _detail, _scope.head()])
+	if _scope.is_open(): controls.append_array(_scope.controls)
+	controls.append_array([_keep, _delete])
+
+## An unfolded list scrolls into view.
+func _scope_toggled(open: bool) -> void:
+	_order_controls()
+	_redraw()
+	if not open: return
+	await get_tree().process_frame
+	if is_instance_valid(_scope) and _scope.is_open(): _scroll.ensure_control_visible(_scope); _redraw()
 
 func open() -> void:
 	var director := get_tree().get_first_node_in_group("conversation_director")

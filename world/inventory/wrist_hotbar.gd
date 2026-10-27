@@ -103,6 +103,8 @@ func _build_hud() -> void:
 	bar.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	var width := SLOTS * 72 - 6
 	bar.offset_left = -width * .5; bar.offset_right = width * .5; bar.offset_top = -80; bar.offset_bottom = -14
+	# Pony speech captions sit above the bar and its hint (world/ui/speech_caption.gd).
+	bar.add_to_group("caption_clearance")
 	for i in SLOTS:
 		var panel := Panel.new(); panel.size = Vector2(66, 66)
 		panel.position = Vector2(i * 72, 0)
@@ -127,6 +129,7 @@ func _build_hud() -> void:
 	_hud_hint.size = Vector2(720, 36); _hud_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hud_hint.text = DESKTOP_HINT
 	_hud_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE; bar.add_child(_hud_hint)
+	_hud_hint.add_to_group("caption_clearance")
 
 func select(index: int) -> void:
 	selected = index; refresh()

@@ -446,4 +446,5 @@ func _option_style(selected: bool, lit: bool) -> StyleBoxFlat:
 
 func _swatch_style(colour: Color, selected: bool, lit: bool) -> StyleBoxFlat:
 	var border: Color = Color.WHITE if lit else (GOLD if selected else Color(0, 0, 0, 0.45))
-	return _style(colour, border, 4 if lit or selected else 1, 20, 0.0, 0.0)
+	# 19 on its 40-pixel circle: a radius of half its size folds the border into points.
+	return _style(colour, border, 4 if lit or selected else 1, 19, 0.0, 0.0)

@@ -12,16 +12,21 @@ const LILAC := Color("c06fdb")
 const PLUM := Color("6b3f86")
 const WHITE := Color(1, 1, 1)
 const DEEP := Color(0.25, 0.13, 0.31)
+## The menus' twilight sky (world/ui/menu_card.gd) fills the screen behind the question.
+const CARD := preload("res://world/ui/menu_card.gd")
+const ICON := preload("res://world/ui/menu_icon.gd")
 var _remember: CheckBox
 
 
 func _ready() -> void:
 	layer = 100
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	var back := ColorRect.new()
-	back.color = DEEP
+	var back := Control.new()
 	back.set_anchors_preset(Control.PRESET_FULL_RECT)
+	back.theme = preload("res://world/ui/menu_style.gd").theme()
 	add_child(back)
+	var sky := CARD.new(); sky.radius = 0.0; sky.inset = 0.0; sky.glow = 0.0
+	sky.set_anchors_preset(Control.PRESET_FULL_RECT); back.add_child(sky)
 	var box := VBoxContainer.new()
 	box.set_anchors_preset(Control.PRESET_CENTER)
 	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -30,13 +35,17 @@ func _ready() -> void:
 	back.add_child(box)
 	box.add_child(_label("How do you want to play?", 48, WHITE))
 	var desktop := _button("Desktop", "off")
+	desktop.icon = ICON.texture("keyboard", 40)
 	box.add_child(desktop)
-	box.add_child(_button("VR headset", "on"))
+	var headset := _button("VR headset", "on")
+	headset.icon = ICON.texture("headset", 40)
+	box.add_child(headset)
 	_remember = CheckBox.new()
 	_remember.text = "Remember my choice"
 	_remember.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	_remember.add_theme_font_override("font", FONT)
 	_remember.add_theme_font_size_override("font_size", 28)
+	_remember.add_theme_constant_override("h_separation", 14)
 	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
 		_remember.add_theme_color_override(state, WHITE)
 	box.add_child(_remember)
@@ -61,8 +70,9 @@ func _button(text: String, mode: String) -> Button:
 	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	button.add_theme_font_override("font", FONT)
 	button.add_theme_font_size_override("font_size", 36)
-	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
+	for state in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color", "icon_normal_color", "icon_hover_color", "icon_focus_color", "icon_pressed_color"]:
 		button.add_theme_color_override(state, WHITE)
+	button.add_theme_constant_override("h_separation", 18)
 	button.add_theme_stylebox_override("normal", _style(LILAC))
 	button.add_theme_stylebox_override("hover", _style(PINK))
 	button.add_theme_stylebox_override("focus", _style(PINK))

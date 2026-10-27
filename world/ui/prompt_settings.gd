@@ -17,35 +17,50 @@ var panel: Node
 var controls: Array[Control] = []
 var editor: TextEdit
 var _search: LineEdit
-var _group: OptionButton
+var _group: Control
 var _list: ItemList
 var _info: Label
 var _status: Label
 var _entries: Array = []      # {kind: "fragment"|"persona", id, group, label, path?}
 var _shown: Array = []
 var _current: Dictionary = {}
+var _scroll: ScrollContainer
+var _buttons_only: Array[Control] = []
 
-func setup(surface: Node, _in_tab := true) -> void:
+func setup(surface: Node, in_tab := true) -> void:
 	panel = surface
-	theme = preload("res://world/ui/readable_text_theme.gd").make()
+	theme = preload("res://world/ui/menu_style.gd").theme()
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var margin := MarginContainer.new(); add_child(margin); margin.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Scrolls when the unfolded group list makes the page taller than its room.
+	_scroll = ScrollContainer.new(); add_child(_scroll); _scroll.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; _scroll.follow_focus = true
+	_scroll.get_v_scroll_bar().value_changed.connect(func(_v: float) -> void: _refresh())
+	var margin := MarginContainer.new(); _scroll.add_child(margin)
+	margin.size_flags_horizontal = Control.SIZE_EXPAND_FILL; margin.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	for side in ["left", "right"]: margin.add_theme_constant_override("margin_" + side, 24)
 	margin.add_theme_constant_override("margin_top", 12); margin.add_theme_constant_override("margin_bottom", 12)
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 8); margin.add_child(box)
+	# Inside the settings page the tab's own title names it.
 	var title := Label.new(); title.text = "Prompts"; title.add_theme_font_size_override("font_size", 28); box.add_child(title)
+	title.visible = not in_tab
 	var note := Label.new(); note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; note.add_theme_font_size_override("font_size", 17)
 	note.text = "Every instruction the ponies receive. Edits apply to the next request and are kept across saves. Longer prompts cost more tokens on every request; Revert restores the shipped text."
 	box.add_child(note)
 	var filters := HBoxContainer.new(); filters.add_theme_constant_override("separation", 8); box.add_child(filters)
 	_search = LineEdit.new(); _search.placeholder_text = "Search prompts"; _search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_search.custom_minimum_size.y = 44; _search.text_changed.connect(func(_t: String): _fill_list()); filters.add_child(_search)
-	_group = OptionButton.new(); _group.custom_minimum_size = Vector2(260, 44); _group.item_selected.connect(func(_i: int): _fill_list())
-	filters.add_child(_group)
+	# An in-page dropdown (world/ui/menu_picker.gd): an OptionButton's popup is a bare window on a
+	# panel. Its face sits beside the search; its list unfolds under the whole row.
+	_group = preload("res://world/ui/menu_picker.gd").new(); _group.item_selected.connect(func(_i: int): _fill_list())
+	_group.redraw = func() -> void: _refresh()
+	_group.list_height = 220.0; box.add_child(_group)
+	_group.detach_head(filters); _group.head().custom_minimum_size = Vector2(260, 44)
+	_group.toggled_open.connect(_group_toggled)
+	_group.entries_changed.connect(_order_controls)
 	_list = ItemList.new(); _list.custom_minimum_size.y = 150; _list.add_theme_font_size_override("font_size", 17)
 	_list.item_selected.connect(_pick); box.add_child(_list)
 	_info = Label.new(); _info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; _info.add_theme_font_size_override("font_size", 16)
-	_info.add_theme_color_override("font_color", Color("acb4c0")); box.add_child(_info)
+	_info.theme_type_variation = "Muted"; box.add_child(_info)
 	editor = TextEdit.new(); editor.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY; editor.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	editor.custom_minimum_size.y = 160; editor.add_theme_font_size_override("font_size", 17)
 	editor.text_changed.connect(_edited); box.add_child(editor)
@@ -54,17 +69,31 @@ func setup(surface: Node, _in_tab := true) -> void:
 		var b := Button.new(); b.text = entry[0]; b.custom_minimum_size.y = 44; b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b.pressed.connect(entry[1]); buttons.add_child(b); controls.append(b)
 	_status = Label.new(); _status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; _status.add_theme_font_size_override("font_size", 17); box.add_child(_status)
-	var buttons_only := controls.duplicate()
-	controls.clear()
-	controls.append_array([_search, _group, _list, editor]); controls.append_array(buttons_only)
+	_buttons_only = controls.duplicate()
+	_order_controls()
 	hide()
+
+## Stick focus order; an unfolded list's entries follow its face.
+func _order_controls() -> void:
+	controls.clear()
+	controls.append_array([_search, _group.head()])
+	if _group.is_open(): controls.append_array(_group.controls)
+	controls.append_array([_list, editor]); controls.append_array(_buttons_only)
+
+## An unfolded list scrolls into view.
+func _group_toggled(open: bool) -> void:
+	_order_controls()
+	_refresh()
+	if not open: return
+	await get_tree().process_frame
+	if is_instance_valid(_group) and _group.is_open(): _scroll.ensure_control_visible(_group); _refresh()
 
 func open() -> void:
 	_load_entries()
 	var groups := [ALL, EDITED, PERSONAS]
 	for e: Dictionary in _entries:
 		if not str(e.group) in groups: groups.append(str(e.group))
-	var keep := _group.get_item_text(_group.selected) if _group.item_count > 0 else ALL
+	var keep: String = _group.get_item_text(_group.selected) if _group.item_count > 0 else ALL
 	_group.clear()
 	for g: String in groups: _group.add_item(g)
 	_group.select(maxi(0, groups.find(keep)))
@@ -84,7 +113,7 @@ func _load_entries() -> void:
 				"label": "System prompt (all ponies)" if file == "system.md" else file.get_basename().capitalize()})
 
 func _fill_list() -> void:
-	var group := _group.get_item_text(_group.selected) if _group.item_count > 0 else ALL
+	var group: String = _group.get_item_text(_group.selected) if _group.item_count > 0 else ALL
 	var needle := _search.text.strip_edges().to_lower()
 	_list.clear(); _shown.clear()
 	for e: Dictionary in _entries:

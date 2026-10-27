@@ -5,15 +5,46 @@ extends Node
 ## AI, physics, sounds and the clock stop); this menu, the saves panel and the save writer run
 ## on (PROCESS_MODE_ALWAYS). The player cannot move and the mouse is free.
 ## VR keeps its left-menu-button settings panel, which offers the same quit actions.
+##
+## Look (dev 2026-10-27 menu redesign, world/ui/menu_style.gd): the world blurs softly behind a
+## storybook column on the left (the logo, where and when the player is, the actions); settings,
+## support and credits open on menu cards in the middle.
 
 const TITLE_SCENE := "res://world/ui/title_screen.tscn"
 const LOG_BUNDLE := "res://world/debug/log_bundle.gd"
 const VERSION := "res://world/debug/version.gd"
-const GOLD := Color("edd6a2")
 const DESKTOP_OWNER := preload("res://player/desktop_action_owner.gd")
 const SOUNDS := preload("res://world/audio/interaction_sounds.gd")
 const VIEW := preload("res://world/player_view.gd")
 const PLAYER_FORM := preload("res://world/life/player_form.gd")
+const STYLE := preload("res://world/ui/menu_style.gd")
+const ICON := preload("res://world/ui/menu_icon.gd")
+const CARD := preload("res://world/ui/menu_card.gd")
+const FX := preload("res://world/ui/menu_fx.gd")
+const CATALOGUE := preload("res://world/saves/save_catalogue.gd")
+const SHELF := preload("res://world/saves/save_shelf.gd")
+const LOGO := preload("res://world/ui/title/logo.png")
+const SEASON_NAMES := ["Spring", "Summer", "Autumn", "Winter"]   # weather.gd SEASONS order
+## The world behind the menu, softly out of focus and dusk-tinted towards the edges.
+const BACKDROP := """
+shader_type canvas_item;
+uniform sampler2D screen_tex : hint_screen_texture, filter_linear_mipmap;
+uniform float blur = 2.6;
+uniform vec4 tint : source_color = vec4(0.13, 0.06, 0.21, 1.0);
+void fragment() {
+	vec3 c = textureLod(screen_tex, SCREEN_UV, blur).rgb;
+	float edge = smoothstep(0.25, 0.95, distance(SCREEN_UV, vec2(0.62, 0.5)));
+	float left = 1.0 - smoothstep(0.0, 0.45, SCREEN_UV.x);
+	COLOR = vec4(mix(c, tint.rgb, 0.28 + 0.4 * edge + 0.25 * left), 1.0);
+}
+"""
+## The largest cards in layout pixels (menu_style.gd fit_card): a smaller window gets smaller
+## ones, and the whole layer scales up with a bigger window.
+const SETTINGS_SIZE := Vector2(1280, 840)
+const CREDITS_SIZE := Vector2(1000, 840)
+## The storybook column's place on the left.
+const COLUMN_LEFT := 56.0
+const COLUMN_WIDTH := 430.0
 
 var game: Node
 var ui: Node                # briefcase inventory (hands, map, inspector)
@@ -22,11 +53,18 @@ var settings_menu: Node
 var player_body: Node
 var opened := false
 var canvas: CanvasLayer
+var _root: Control
 var _pages: Dictionary = {}  # name -> Control
+var _credits: Control
 var _page := ""
 var _settings: Control
 var _support_status: Label
 var _pony_notice: Label
+var _world_name: Label
+var _when: Label
+var _where: Label
+var _column: Control
+var _logo: TextureRect
 var _clock_paused := false
 var _old_lock := false
 var _mouse_mode: int = Input.MOUSE_MODE_VISIBLE
@@ -45,74 +83,156 @@ func setup(host: Node, inventory_ui: Node, saves_panel: Node, settings_panel: No
 	add_to_group("pause_menu")
 	if ui == null or not ui._desktop: return
 	canvas = CanvasLayer.new(); canvas.layer = 140; add_child(canvas); canvas.hide()
-	var shade := ColorRect.new(); shade.color = Color(0.02, 0.03, 0.06, 0.55)
-	shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); canvas.add_child(shade)
-	_build_main()
+	var root := Control.new(); _root = root
+	root.theme = STYLE.theme(); root.mouse_filter = Control.MOUSE_FILTER_IGNORE; canvas.add_child(root)
+	root.size = _screen()
+	var shade := ColorRect.new(); shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	var blur := ShaderMaterial.new(); blur.shader = Shader.new(); blur.shader.code = BACKDROP
+	shade.material = blur; root.add_child(shade)
+	_build_main(root)
 	var version := Label.new(); version.text = "Home: Equestria " + str((load(VERSION) as Script).call("text")) if ResourceLoader.exists(VERSION) else ""
-	version.add_theme_font_size_override("font_size", 14); version.add_theme_color_override("font_color", Color("acb4c0"))
-	version.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 12)
+	version.theme_type_variation = "Faint"; version.add_theme_font_size_override("font_size", 14)
+	version.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT, Control.PRESET_MODE_MINSIZE, 14)
 	version.grow_horizontal = Control.GROW_DIRECTION_BEGIN; version.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	canvas.add_child(version)
-	_build_settings()
-	_build_support()
-	var credits := preload("res://world/ui/credits_page.gd").new()
-	_card("credits", Vector2(900, 840)).add_child(credits)
-	credits.setup(Vector2(880, 820), 22)
-	credits.back_requested.connect(_show.bind("main"))
+	root.add_child(version)
+	_build_settings(root)
+	_build_support(root)
+	_credits = preload("res://world/ui/credits_page.gd").new()
+	var credits_size := STYLE.fit_card(_screen(), CREDITS_SIZE)
+	_card(root, "credits", credits_size).add_child(_credits)
+	_credits.setup(credits_size - Vector2(60, 56), 22)
+	_credits.back_requested.connect(_show.bind("main"))
+	var fx := FX.new(); root.add_child(fx); fx.attach(root)
+	# A window resized while the menu shows: it fits the new one at once.
+	get_viewport().size_changed.connect(func() -> void: if opened and canvas.visible: _fit())
 
 
-## A centred card of the given size on the pause layer.
-func _card(page_name: String, card_size: Vector2) -> PanelContainer:
+## A centred menu card of the given size on the pause layer; returns the box inside it.
+func _card(root: Control, page_name: String, card_size: Vector2) -> Control:
 	var centre := CenterContainer.new(); centre.name = page_name
-	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); canvas.add_child(centre); centre.hide()
-	var card := PanelContainer.new(); card.custom_minimum_size = card_size; centre.add_child(card)
+	centre.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); root.add_child(centre); centre.hide()
+	var holder := Control.new(); holder.custom_minimum_size = card_size; centre.add_child(holder)
+	var card := CARD.new(); card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); holder.add_child(card)
+	var inner := MarginContainer.new(); inner.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	for side: String in ["left", "right"]: inner.add_theme_constant_override("margin_" + side, 30)
+	for side: String in ["top", "bottom"]: inner.add_theme_constant_override("margin_" + side, 28)
+	holder.add_child(inner)
 	_pages[page_name] = centre
-	return card
+	return inner
 
 
-func _build_main() -> void:
-	var card := _card("main", Vector2(460, 0))
-	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 10); card.add_child(box)
-	var title := Label.new(); title.text = "Paused"; title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 34); title.add_theme_color_override("font_color", GOLD); box.add_child(title)
-	_pony_notice = Label.new(); _pony_notice.name = "PonyNotice"
-	_pony_notice.text = PLAYER_FORM.PONY_NOTICE
-	_pony_notice.custom_minimum_size.x = 420
+## The storybook column: the logo, where and when the player is, then what can be done.
+func _build_main(root: Control) -> void:
+	var page := Control.new(); page.name = "main"; page.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	page.mouse_filter = Control.MOUSE_FILTER_IGNORE; root.add_child(page); page.hide()
+	_pages["main"] = page
+	_column = Control.new(); page.add_child(_column)
+	_column.anchor_bottom = 1.0; _column.offset_left = COLUMN_LEFT; _column.offset_top = 36; _column.offset_bottom = -36
+	_column.offset_right = COLUMN_LEFT + COLUMN_WIDTH
+	var card := CARD.new(); card.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT); _column.add_child(card)
+	var box := VBoxContainer.new(); box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.offset_left = 40; box.offset_right = -40; box.offset_top = 30; box.offset_bottom = -30
+	box.add_theme_constant_override("separation", 6); _column.add_child(box)
+	_logo = TextureRect.new(); _logo.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_logo.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED; _logo.custom_minimum_size.y = 160
+	# Resized to the pixels it covers: 918 pixels drawn at 160 come out jagged.
+	STYLE.sharp_picture(_logo, LOGO)
+	box.add_child(_logo)
+	var paused := STYLE.label("PAUSED", "Faint", 14); paused.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(paused)
+	_world_name = STYLE.label("", "Heading", 30); _world_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_world_name.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS; box.add_child(_world_name)
+	_when = STYLE.label("", "Subheading", 19); _when.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; box.add_child(_when)
+	_where = STYLE.label("", "Muted", 16); _where.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_where.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; box.add_child(_where)
+	box.add_child(HSeparator.new())
+	for entry in [["Continue", close, "play", "Primary"], ["Save game", _open_saves, "save", ""], ["Load game", _open_saves, "folder", ""],
+			["Settings", _show.bind("settings"), "gear", ""], ["AI Settings", _open_provider, "chat", ""],
+			["Credits", _show.bind("credits"), "heart", ""], ["Support", _show.bind("support"), "lifebuoy", ""], ["", Callable(), "", ""],
+			["Quit to title", quit_to_title, "home", "Ghost"], ["Quit game", quit_game, "moon", "Ghost"]]:
+		if str(entry[0]).is_empty():
+			var gap := Control.new(); gap.custom_minimum_size.y = 4; gap.size_flags_vertical = Control.SIZE_EXPAND_FILL; box.add_child(gap)
+			continue
+		var b := Button.new(); b.name = str(entry[0]).replace(" ", "").replace("&", ""); b.text = entry[0]
+		b.theme_type_variation = str(entry[3]); b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.icon = ICON.texture(str(entry[2]), 22)
+		b.custom_minimum_size = Vector2(0, 52 if str(entry[3]) == "Primary" else 43)
+		b.add_theme_font_size_override("font_size", 24 if str(entry[3]) == "Primary" else 20)
+		b.pressed.connect(entry[1]); box.add_child(b)
+	_pony_notice = STYLE.label(PLAYER_FORM.PONY_NOTICE, "Muted", 15); _pony_notice.name = "PonyNotice"
 	_pony_notice.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_pony_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pony_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_pony_notice.add_theme_font_size_override("font_size", 18)
-	_pony_notice.add_theme_color_override("font_color", GOLD)
 	_pony_notice.hide(); box.add_child(_pony_notice)
-	for entry in [["Continue", close], ["Save game", _open_saves], ["Load game", _open_saves], ["Settings", _show.bind("settings")],
-			["AI Settings", _open_provider], ["Credits", _show.bind("credits")], ["Support", _show.bind("support")], ["Quit to title", quit_to_title], ["Quit game", quit_game]]:
-		var b := Button.new(); b.name = str(entry[0]).replace(" ", "").replace("&", ""); b.text = entry[0]
-		b.custom_minimum_size = Vector2(420, 50); b.add_theme_font_size_override("font_size", 22)
-		b.pressed.connect(entry[1]); box.add_child(b)
 
 
-func _build_settings() -> void:
-	var card := _card("settings", Vector2(900, 820))
+## Where and when the player is, for the column's heading.
+func _describe_here() -> void:
+	var world := str(game.get("context_world_id")) if is_instance_valid(game) else ""
+	var saves: Node = save_menu.saves if is_instance_valid(save_menu) else null
+	var folder := str(saves.directory).get_base_dir() if saves != null and str(saves.directory) != "" else ""
+	var look := SHELF.world_look(world, SHELF.read(folder) if folder != "" else {})
+	_world_name.text = str(look.name) if str(look.name) != "" else CATALOGUE.world_name(world)
+	_world_name.add_theme_color_override("font_color", (STYLE.SWATCHES[int(look.color) % STYLE.SWATCHES.size()] as Color).lerp(Color.WHITE, 0.2))
+	var hours := clampf(float(TimeOfDay.hours), 0.0, 23.99)
+	var season: String = SEASON_NAMES[int(TimeOfDay.day / maxi(1, int(Settings.season_days()))) % SEASON_NAMES.size()]
+	_when.text = "Day %d · %02d:%02d · %s" % [int(TimeOfDay.day) + 1, int(hours), int((hours - int(hours)) * 60.0), season]
+	_where.text = str(saves.place_now()) if saves != null and saves.has_method("place_now") else ""
+	_where.visible = not _where.text.is_empty()
+	# Small windows: a smaller logo keeps every button on screen.
+	var tall := _root.size.y
+	_logo.custom_minimum_size.y = clampf(tall * 0.14, 70.0, 160.0)
+	_logo.visible = tall >= 600.0
+
+
+func _build_settings(root: Control) -> void:
+	var card_size := STYLE.fit_card(_screen(), SETTINGS_SIZE)
+	var inner := _card(root, "settings", card_size)
 	_settings = preload("res://world/ui/settings_page.gd").new()
-	card.add_child(_settings)
-	_settings.setup(Vector2(880, 800), 20, "Back")
+	inner.add_child(_settings)
+	_settings.setup(card_size - Vector2(60, 56), 20, "Back")
 	_settings.back_requested.connect(_show.bind("main"))
 
 
-func _build_support() -> void:
-	var card := _card("support", Vector2(640, 0))
-	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 10); card.add_child(box)
-	var title := Label.new(); title.text = "Support"; title.add_theme_font_size_override("font_size", 30)
-	title.add_theme_color_override("font_color", GOLD); box.add_child(title)
-	var note := Label.new(); note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; note.custom_minimum_size.x = 600
-	note.text = "Something went wrong? Make a logs bundle and attach the zip to your report. It holds the game logs and your settings, never your API key."
+## The layer at layout pixels over the whole window, scaled up to fill it, and the cards as big
+## as the window allows (on every opening: the window may have changed size).
+func _fit() -> void:
+	var window := _screen()
+	var scale := STYLE.window_scale(window)
+	_root.scale = Vector2.ONE * scale; _root.size = (window / scale).ceil()
+	STYLE.sharpen(get_viewport(), scale)
+	# The logo's pixels follow its size on screen, which this scale changes.
+	STYLE.refit_picture(_logo)
+	for item: Array in [["settings", SETTINGS_SIZE, _settings], ["credits", CREDITS_SIZE, _credits]]:
+		var card_size := STYLE.fit_card(window, item[1])
+		var holder: Control = (_pages[item[0]] as Control).get_child(0)
+		if holder.custom_minimum_size == card_size: continue
+		holder.custom_minimum_size = card_size
+		var page: Control = item[2]
+		if page.has_method("relayout"): page.relayout(card_size - Vector2(60, 56))
+		else: page.custom_minimum_size = card_size - Vector2(60, 56); page.size = page.custom_minimum_size
+
+
+func _screen() -> Vector2:
+	return Vector2(1600, 900) if get_viewport() == null else get_viewport().get_visible_rect().size
+
+
+func _build_support(root: Control) -> void:
+	var inner := _card(root, "support", Vector2(700, 520))
+	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 12); inner.add_child(box)
+	var head := HBoxContainer.new(); head.add_theme_constant_override("separation", 10); box.add_child(head)
+	var mark := ICON.make("lifebuoy", 34, STYLE.PINK); mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER; head.add_child(mark)
+	head.add_child(STYLE.label("Support", "Heading", 36))
+	var note := STYLE.label("Something went wrong? Make a logs bundle and attach the zip to your report. It holds the game logs and your settings, never your API key.", "Muted", 18)
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; note.custom_minimum_size.x = 620
 	box.add_child(note)
-	for entry in [["Copy logs bundle", _make_bundle], ["Open support folder" if OS.has_feature("android") else "Open logs folder", _open_logs],
-			["Debug: Trixie show tomorrow", _book_trixie_show], ["Back", _show.bind("main")]]:
-		var b := Button.new(); b.text = entry[0]; b.custom_minimum_size.y = 46; b.add_theme_font_size_override("font_size", 21)
+	for entry in [["Copy logs bundle", _make_bundle, "archive", ""], ["Open support folder" if OS.has_feature("android") else "Open logs folder", _open_logs, "folder", ""],
+			["Debug: Trixie show tomorrow", _book_trixie_show, "sparkle", ""], ["Back", _show.bind("main"), "back", "Ghost"]]:
+		var b := Button.new(); b.text = entry[0]; b.custom_minimum_size.y = 48; b.add_theme_font_size_override("font_size", 20)
+		b.icon = ICON.texture(str(entry[2]), 22); b.alignment = HORIZONTAL_ALIGNMENT_LEFT; b.theme_type_variation = str(entry[3])
 		b.pressed.connect(entry[1]); box.add_child(b)
-	_support_status = Label.new(); _support_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_support_status.custom_minimum_size.x = 600; box.add_child(_support_status)
+	_support_status = STYLE.label("", "Muted", 17); _support_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_support_status.custom_minimum_size.x = 620; box.add_child(_support_status)
 
 
 ## Debug: book a Trixie stage show for the next game day at 17:00 (world/events/trixie_show/).
@@ -180,6 +300,7 @@ func open() -> void:
 		if not is_instance_valid(node) or _input_states.has(node): continue
 		_input_states[node] = node.is_processing_input(); node.set_process_input(false)
 	Settings.message = ""
+	_fit()
 	canvas.show()
 	_show("main")
 
@@ -188,6 +309,7 @@ func close() -> void:
 	if not opened: return
 	opened = false
 	canvas.hide(); _page = ""
+	STYLE.sharpen(get_viewport(), 1.0)
 	_settings.capturing = ""
 	for node in _input_states:
 		if is_instance_valid(node): node.set_process_input(_input_states[node])
@@ -217,12 +339,28 @@ func _show(page_name: String) -> void:
 	var changed: bool = _page != page_name
 	for key in _pages: (_pages[key] as Control).visible = key == page_name
 	_page = page_name
-	if page_name == "main" and is_instance_valid(_pony_notice):
-		_pony_notice.visible = PLAYER_FORM.is_pony(PLAYER_FORM.active(get_tree()))
+	if page_name == "main":
+		_describe_here()
+		if is_instance_valid(_pony_notice): _pony_notice.visible = PLAYER_FORM.is_pony(PLAYER_FORM.active(get_tree()))
 	if page_name == "settings": _settings.refresh()
-	var first := _first_button(_pages[page_name])
+	var first: Control = _settings.first_focus() if page_name == "settings" else _first_button(_pages[page_name])
 	if first != null: first.grab_focus()
-	if changed: _menu_sound("prop_ui_confirm")
+	if changed:
+		_menu_sound("prop_ui_confirm")
+		_appear(_pages[page_name], page_name == "main")
+
+
+## Pages drift in: the column from the left, cards up from below.
+func _appear(page: Control, from_left: bool) -> void:
+	if STYLE.still(): return
+	var target: Control = _column if from_left else page
+	page.modulate.a = 0.0
+	var tween := create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tween.tween_property(page, "modulate:a", 1.0, 0.22)
+	if from_left:
+		target.offset_left = COLUMN_LEFT - 40.0; target.offset_right = COLUMN_LEFT + COLUMN_WIDTH - 40.0
+		tween.parallel().tween_property(target, "offset_left", COLUMN_LEFT, 0.3)
+		tween.parallel().tween_property(target, "offset_right", COLUMN_LEFT + COLUMN_WIDTH, 0.3)
 
 
 func _menu_sound(event: String) -> void:
@@ -265,7 +403,7 @@ func _process(_delta: float) -> void:
 	# The saves panel restored its own mouse/lock state; the pause menu owns them again.
 	player_body.controls_locked = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	canvas.show(); _show("main")
+	_fit(); canvas.show(); _show("main")
 
 
 # ------------------------------------------------------------------ support
