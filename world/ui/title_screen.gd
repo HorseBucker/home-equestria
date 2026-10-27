@@ -11,6 +11,7 @@ const PACKS := preload("res://tools/build/packs.gd")
 ## Save discovery shared with the in-game saved games panel (headers and screenshots only).
 const CATALOGUE := preload("res://world/saves/save_catalogue.gd")
 const PREVIEW := preload("res://world/saves/save_preview.gd")
+const SHELF := preload("res://world/saves/save_shelf.gd")
 # Header labelling only; selected files are always validated by GameSaves.
 # Keep this lightweight menu constant aligned with GameSaves.FORMAT.
 const SAVE_HEADER_FORMAT := CATALOGUE.HEADER_FORMAT
@@ -48,21 +49,24 @@ var new_game_button: Button
 var load_button: Button
 var _saves: GDScript
 const SEASON_NAMES := ["Spring", "Summer", "Autumn", "Winter"]   # weather.gd SEASONS order
-## Load game: saves grouped by world, newest first, a page at a time (rows carry screenshots).
-const LOAD_LIST_TOP := 92.0
-const LOAD_LIST_HEIGHT := 600.0
-const LOAD_ROW_HEIGHT := 104.0
-const LOAD_HEADER_HEIGHT := 46.0
+## Load game: the saves browser (world/ui/save_browser.gd), worlds as folders, saves as cards.
 var _load_page: Control
-var _load_list: Control
-var _load_rows: Array[Button] = []
-var _load_entries: Array[Dictionary] = []
-var _load_pages: Array = []
-var _load_page_index := 0
-var _load_back: Button
-var _load_newer: Button
-var _load_older: Button
-var _load_status: Label
+var _browser: Control
+## The menus' look (dev 2026-10-27 redesign): the twilight card behind every page but home, and
+## the flourishes over the whole panel.
+const MENU_STYLE := preload("res://world/ui/menu_style.gd")
+const MENU_CARD := preload("res://world/ui/menu_card.gd")
+const MENU_ICON := preload("res://world/ui/menu_icon.gd")
+var _fx: Control
+## Desktop: the panel glides to the middle and nearer for the pages, back for home. The pages
+## widen to the window's shape and come near enough to fill most of its height, drawn finer on a
+## big window (dev 2026-10-27: "make some screens take more place to be more visible"); home and
+## the headset keep the panel's own 900 x 840.
+const HOME_SPOT := Vector3(-0.68, -0.18, -2.25)
+const PAGE_FILL := 0.9
+const PAGE_WIDEST := 1480
+var _forward := false
+var _glide: Tween
 ## What Continue resumes (save_catalogue.gd newest()), shown beside the button.
 var _continue_entry: Dictionary = {}
 var continue_preview: Control
@@ -104,6 +108,16 @@ var overlay_host: Node = null
 ## New game / Load game staged a different world: entering reloads the game scene.
 var _staged := false
 const COVER := preload("res://world/ui/loading_cover.gd")
+## The loading screen raised over the menu once a game is chosen, and what it says about the
+## world being entered ({title, line, icon, tint}; _trip_of()).
+var _cover: Node
+var _cover_raised := 0
+var _logo_fade: Tween
+var _destination := {}
+## The loaded world, waiting for the cover to show the hand-off (_hand_off()).
+var _packed: PackedScene
+var _hand_off_frames := 0
+var _cover_wait := 0.0
 const GAME_SCRIPT := "res://world/game.gd"
 ## Card timing, seconds: black, the logo fades in on black, a hold, then the black fades away and
 ## leaves the menu, whose own logo sits exactly where the faded-in one was (dev 2026-10-02:
@@ -127,7 +141,7 @@ var _card_active := false
 var _logo: Sprite3D
 var _card_sphere: MeshInstance3D
 var _card_time := 0.0
-var _menu_card: Panel
+var _menu_card: Control
 
 static func bypass_title(args: PackedStringArray) -> bool:
 	for flag in ["--skip-title", "--capture", "--probe", "--perf", "--perf-stereo", "--profile-runtime"]:
@@ -341,14 +355,76 @@ func _style(color: Color, border: Color, width := 3, radius := 38) -> StyleBoxFl
 	style.shadow_offset = Vector2(0, 3)
 	return style
 
-## No card on the home page (the title words and buttons stand on the world), a light card behind
-## the load and new-game lists, plum behind settings (their text is light).
-func _set_card(light: bool) -> void:
+## No card on the home page (the title words and buttons stand on the world); every other page
+## stands on the twilight card (world/ui/menu_card.gd), which the panel redraws a few times a
+## second so its stars twinkle. On desktop the panel comes forward for those pages.
+func _set_card(_light := true) -> void:
+	# Callers switch pages around this call: look once they are done.
+	_update_card.call_deferred()
+
+
+func _update_card() -> void:
 	if _menu_card == null: return
-	_menu_card.visible = not (light and _home_page != null and _home_page.visible)
-	var style := _style(Color(1.0, 0.97, 1.0, 0.86) if light else DEEP, WHITE, 4, 40)
-	style.shadow_color = Color(0.42, 0.22, 0.52, 0.28); style.shadow_size = 22; style.shadow_offset = Vector2.ZERO
-	_menu_card.add_theme_stylebox_override("panel", style)
+	var home := _home_page != null and _home_page.visible
+	_menu_card.visible = not home
+	panel.tick = 0.0 if home else 1.0 / 20.0
+	_lay_out()
+	_bring_forward(not home)
+
+
+func _wide_pages() -> bool:
+	return _desktop_pages() and _home_page != null and not _home_page.visible
+
+
+func _desktop_pages() -> bool:
+	return not xr_active and not (camera is XRCamera3D)
+
+
+## The desktop pages' layout for this window: its shape, as tall as the panel.
+func _wide_layout() -> Vector2i:
+	var window := Vector2(get_viewport().get_visible_rect().size)
+	return Vector2i(clampi(int(0.95 * window.x / maxf(1.0, window.y) * PANEL.PIXELS.y / PAGE_FILL), PANEL.PIXELS.x, PAGE_WIDEST), PANEL.PIXELS.y)
+
+
+## The panel's shape for what shows: the window's (desktop pages) or its own (home, headset).
+func _lay_out() -> void:
+	var layout := PANEL.PIXELS
+	var sharpness := 1.0
+	if _wide_pages():
+		layout = _wide_layout()
+		sharpness = clampf(ceilf(get_viewport().get_visible_rect().size.y * PAGE_FILL / PANEL.PIXELS.y * 4.0) / 4.0, 1.0, 2.0)
+	# The pages follow the layout every time: a page may have been sized for another window while
+	# home showed (a square window keeps the panel's own shape, so nothing reshapes).
+	if layout != panel.pixels or not is_equal_approx(sharpness, panel.resolution): panel.resize(layout, sharpness)
+	var page_size := Vector2(layout)
+	_menu_card.size = page_size
+	for page: Control in [_load_page, _settings_page, _opening_page]: page.size = page_size
+	_browser.relayout(page_size - Vector2(72, 64))
+	# While home shows (every page hidden) the settings rows keep their desktop width; an open page,
+	# even in a square window whose layout is the panel's own width, follows the layout.
+	if not (_desktop_pages() and _home_page.visible): _settings_ui.relayout(page_size - Vector2(80, 50))
+	_credits_page.custom_minimum_size = page_size - Vector2(52, 44); _credits_page.size = _credits_page.custom_minimum_size
+	_context_page.relayout(page_size)
+
+
+## The window changed size under an open page: reshape and stand it again.
+func _window_resized() -> void:
+	if panel == null or not _forward: return
+	if _glide != null and _glide.is_valid(): _glide.kill()
+	_lay_out(); _place_panel()
+
+
+## Desktop only: the headset keeps the panel where the player looks.
+func _bring_forward(forward: bool) -> void:
+	if forward == _forward or xr_active or camera is XRCamera3D: return
+	_forward = forward
+	var target := _panel_spot()
+	if _glide != null and _glide.is_valid(): _glide.kill()
+	if MENU_STYLE.still() or _card_active:
+		panel.global_transform = target; return
+	_glide = create_tween().set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	_glide.tween_property(panel, "global_transform", target, 0.42)
+	_glide.parallel().tween_method(func(_v: float) -> void: panel.refresh(), 0.0, 1.0, 0.42)
 
 func _button(text: String, y: float, primary: bool) -> Button:
 	var button := Button.new()
@@ -363,11 +439,11 @@ func _button(text: String, y: float, primary: bool) -> Button:
 	button.add_theme_color_override("font_focus_color", WHITE)
 	button.add_theme_color_override("font_pressed_color", WHITE)
 	button.add_theme_color_override("font_disabled_color", Color(PLUM, 0.4))
-	button.add_theme_stylebox_override("normal", _style(LILAC, WHITE, 4) if primary else _style(Color(1, 1, 1, 0.92), MIST))
-	button.add_theme_stylebox_override("hover", _style(PINK, WHITE, 4))
-	button.add_theme_stylebox_override("pressed", _style(LILAC.darkened(0.12), WHITE, 4))
-	button.add_theme_stylebox_override("focus", _style(PINK, WHITE, 4))
-	button.add_theme_stylebox_override("disabled", _style(Color(1, 1, 1, 0.55), MIST))
+	button.add_theme_stylebox_override("normal", MENU_STYLE.rounded(_style(LILAC, WHITE, 4) if primary else _style(Color(1, 1, 1, 0.92), MIST)))
+	button.add_theme_stylebox_override("hover", MENU_STYLE.rounded(_style(PINK, WHITE, 4)))
+	button.add_theme_stylebox_override("pressed", MENU_STYLE.rounded(_style(LILAC.darkened(0.12), WHITE, 4)))
+	button.add_theme_stylebox_override("focus", MENU_STYLE.rounded(_style(PINK, WHITE, 4)))
+	button.add_theme_stylebox_override("disabled", MENU_STYLE.rounded(_style(Color(1, 1, 1, 0.55), MIST)))
 	button.mouse_entered.connect(panel.refresh)
 	button.mouse_exited.connect(panel.refresh)
 	button.focus_entered.connect(panel.refresh)
@@ -379,11 +455,11 @@ func _build_panel() -> void:
 	panel = PANEL.new()
 	panel.name = "HomePanel"
 	add_child(panel)
-	_menu_card = Panel.new()
+	_menu_card = MENU_CARD.new()
 	_menu_card.size = PANEL.PIXELS
-	_menu_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_menu_card.inset = 12.0
 	panel.content.add_child(_menu_card)
-	_set_card(true)
+	_menu_card.hide()
 	_home_page = Control.new(); _home_page.name = "Home"; _home_page.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_home_page.size = PANEL.PIXELS
 	panel.content.add_child(_home_page)
@@ -439,10 +515,29 @@ func _build_panel() -> void:
 	_context_page = preload("res://world/ui/ai_context_page.gd").new()
 	panel.content.add_child(_context_page); _context_page.setup(panel)
 	_context_page.closed.connect(_close_context)
+	_fx = preload("res://world/ui/menu_fx.gd").new(); _fx.name = "Flourishes"
+	panel.content.add_child(_fx); _fx.attach(panel.content, panel.refresh)
+	_browser.fx = _fx
+	get_viewport().size_changed.connect(_window_resized)
 	_place_panel()
 	if not bool(Settings.get_value("setup/completed")) and _installation_problem().is_empty():
 		_provider_page.setup_mode = true
 		_open_provider()
+	panel.refresh()
+
+
+## Continue follows what Load game changed: the newest save may have been archived or deleted
+## (or renamed), so its button, picture and line are made again from the saves as they are now.
+func _refresh_continue() -> void:
+	_continue_entry = CATALOGUE.newest(_catalogue())
+	for node: Control in [continue_preview, continue_line]:
+		if is_instance_valid(node): node.queue_free()
+	continue_preview = null; continue_line = null
+	var has_checkpoint := not _continue_entry.is_empty()
+	enter_button.text = "Continue" if has_checkpoint else "Play"
+	enter_button.position.x = 170; enter_button.size.x = 560
+	if has_checkpoint:
+		_building = _home_page; _build_continue_preview(); _building = null
 	panel.refresh()
 
 
@@ -492,144 +587,44 @@ func _thumbnail(parent: Control, rect: Rect2, path: String) -> Control:
 	return frame
 
 
-## Load page: every checkpoint grouped by world (the world played last first), newest first
-## inside each, a page at a time; the first row is what Continue resumes. Picking one stages it
-## and enters.
+## Load page: the saves browser, opened on the world played last; picking a save stages it and
+## enters. Names, tags, stars, the archive and deleting work here too (world/saves/save_shelf.gd).
 func _build_load_page() -> void:
 	_load_page = Control.new(); _load_page.name = "LoadGame"; _load_page.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_load_page.size = PANEL.PIXELS
 	_load_page.visible = false
 	panel.content.add_child(_load_page)
-	_building = _load_page
-	_label("Load game", 30, 44, LILAC)
-	_load_list = Control.new(); _load_list.name = "Rows"; _load_list.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_load_list.position = Vector2(0, LOAD_LIST_TOP); _load_list.size = Vector2(PANEL.PIXELS.x, LOAD_LIST_HEIGHT)
-	_load_page.add_child(_load_list)
-	var y := LOAD_LIST_TOP + LOAD_LIST_HEIGHT + 8
-	_load_newer = _button("Newer", y, false)
-	_load_newer.position.x = 66; _load_newer.size = Vector2(240, 66)
-	_load_newer.pressed.connect(_turn_load_page.bind(-1))
-	_load_back = _button("Back", y, true)
-	_load_back.position.x = 330; _load_back.size = Vector2(240, 66)
-	_load_back.pressed.connect(_close_load)
-	_load_older = _button("Older", y, false)
-	_load_older.position.x = 594; _load_older.size = Vector2(240, 66)
-	_load_older.pressed.connect(_turn_load_page.bind(1))
-	_load_status = _label("", y + 74, 22, PLUM)
-	_building = null
+	_browser = preload("res://world/ui/save_browser.gd").new()
+	_browser.heading = "Load game"; _browser.panel = panel
+	_browser.position = Vector2(36, 32)
+	_load_page.add_child(_browser)
+	_browser.setup(Vector2(828, 776), 20, null, xr_active and not seated)
+	_browser.redraw = panel.refresh
+	_browser.closed.connect(_close_load)
+	_browser.load_requested.connect(_pick_entry)
 
 
 func _open_load() -> void:
 	if not ready_for_entry: return
-	var entries := _catalogue()
-	var groups := CATALOGUE.groups(entries)
-	# Pages of {header} / {entry} items; a world continued on a new page repeats its header.
-	_load_entries.clear(); _load_pages.clear()
-	var page: Array = []
-	var used := 0.0
-	for group: Dictionary in groups:
-		var header := {"group": group, "continued": false}
-		if used + LOAD_HEADER_HEIGHT + LOAD_ROW_HEIGHT > LOAD_LIST_HEIGHT and not page.is_empty():
-			_load_pages.append(page); page = []; used = 0.0
-		page.append(header); used += LOAD_HEADER_HEIGHT
-		for entry: Dictionary in group.entries:
-			if used + LOAD_ROW_HEIGHT > LOAD_LIST_HEIGHT:
-				_load_pages.append(page); page = [{"group": group, "continued": true}]; used = LOAD_HEADER_HEIGHT
-			page.append({"entry": entry}); used += LOAD_ROW_HEIGHT
-			_load_entries.append(entry)
-	if not page.is_empty(): _load_pages.append(page)
 	_home_page.visible = false
 	_load_page.visible = true
 	_set_card(true)
-	_show_load_page(0)
-	_focused = 0
-	var first: Control = _load_rows[0] if not _load_rows.is_empty() else _load_back
+	_browser.open()
+	var first: Control = _browser.first_focus()
+	_focused = maxi(0, _browser.focusables().find(first))
 	first.grab_focus()
 	panel.refresh()
-
-
-func _turn_load_page(step: int) -> void:
-	var target := clampi(_load_page_index + step, 0, maxi(0, _load_pages.size() - 1))
-	if target == _load_page_index: return
-	_show_load_page(target)
-	var focus: Control = (_load_rows[0] if step > 0 else _load_rows[-1]) if not _load_rows.is_empty() else _load_back
-	focus.grab_focus()
-	_focused = maxi(0, _focus_list().find(focus))
-	panel.refresh()
-
-
-func _show_load_page(index: int) -> void:
-	_load_page_index = index
-	for child in _load_list.get_children(): child.free()
-	_load_rows.clear()
-	var y := 0.0
-	var items: Array = _load_pages[index] if index < _load_pages.size() else []
-	_building = _load_list
-	for item: Dictionary in items:
-		if item.has("group"):
-			_load_header(item.group, bool(item.continued), y); y += LOAD_HEADER_HEIGHT
-		else:
-			_load_rows.append(_load_row(item.entry, y)); y += LOAD_ROW_HEIGHT
-	_building = null
-	_load_newer.visible = index > 0
-	_load_older.visible = index < _load_pages.size() - 1
-	var worlds := 0
-	for page: Array in _load_pages:
-		for item: Dictionary in page:
-			if item.has("group") and not bool(item.continued): worlds += 1
-	if _load_entries.is_empty(): _load_status.text = "No saved games yet"
-	else:
-		_load_status.text = "%d saved games in %d world%s" % [_load_entries.size(), worlds, "" if worlds == 1 else "s"]
-		if _load_pages.size() > 1: _load_status.text += " · page %d of %d" % [index + 1, _load_pages.size()]
-	panel.refresh()
-
-
-func _load_header(group: Dictionary, continued: bool, y: float) -> void:
-	var label := Label.new()
-	var details: Array[String] = [str(group.form)]
-	if not str(group.world_started).is_empty(): details.append("started " + str(group.world_started))
-	label.text = str(group.world_name) + (" (continued)" if continued else "") + "  —  " + " · ".join(details)
-	label.position = Vector2(70, y + 6); label.size = Vector2(760, 36)
-	label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.add_theme_font_override("font", FONT)
-	label.add_theme_font_size_override("font_size", 27)
-	label.add_theme_color_override("font_color", LILAC)
-	_load_list.add_child(label)
-
-
-## One save: screenshot, what kind of save and when in the game, where and as whom, when saved.
-func _load_row(entry: Dictionary, y: float) -> Button:
-	var button := _button("", y, false)
-	button.position.x = 66; button.size = Vector2(768, LOAD_ROW_HEIGHT - 8)
-	button.pressed.connect(_pick_entry.bind(entry))
-	_thumbnail(button, Rect2(8, 7, 146, 82), str(entry.get("preview", "")))
-	var lines: Array = [
-		[CATALOGUE.kind_text(entry) + " · " + CATALOGUE.game_time_text(entry), 25, PLUM, 6.0],
-		[" · ".join(([str(entry.place)] if not str(entry.place).is_empty() else []) + [str(entry.form)]), 21, PLUM, 38.0],
-		["Saved " + CATALOGUE.when_text(float(entry.saved_at)) + " · " + CATALOGUE.play_text(float(entry.play_seconds)), 19, Color(PLUM, 0.72), 64.0]]
-	for spec: Array in lines:
-		var label := Label.new(); label.text = str(spec[0])
-		label.position = Vector2(170, float(spec[3])); label.size = Vector2(586, 30)
-		label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		label.add_theme_font_override("font", FONT)
-		label.add_theme_font_size_override("font_size", int(spec[1]))
-		label.add_theme_color_override("font_color", spec[2])
-		button.add_child(label)
-	if bool(entry.archived): button.modulate.a = 0.85
-	return button
 
 
 func _pick_entry(entry: Dictionary) -> void:
 	if entering: return
 	var saves := _save_api()
 	if saves == null or not saves.stage(entry):
-		_load_status.text = "That save cannot be loaded (invalid or from another version)."
-		panel.refresh()
+		_browser.set_status("That save cannot be loaded (invalid or from another version).")
 		return
-	_load_status.text = "Loading %s…" % CATALOGUE.kind_text(entry).to_lower()
+	_browser.set_status("Loading “%s”…" % CATALOGUE.title_text(entry))
 	_staged = true
+	_destination = _trip_of(entry)
 	enter_game()
 
 
@@ -661,30 +656,70 @@ func _open_opening() -> void:
 
 
 const OPENING_KEY := "world/opening"
-const OPENINGS := [["play", "Everfree forest opening\n(Tutorial/controls, recommended!)"], ["skip", "Skip, wake in Golden Oak"]]
+## [setting value, title, what it is, painted scene (world/ui/menu_vignette.gd), ribbon].
+const OPENINGS := [["play", "The Everfree forest", "Wake among the trees and find your way: the controls, step by step.", "everfree", "Recommended"],
+	["skip", "Golden Oak Library", "Skip the opening and wake up in Twilight's library, ready to go.", "golden_oak", ""]]
 
-## Opening page: New game asks whether to play the forest opening or skip it. The answer is
-## Settings "world/opening" (read by world/life/arrival_story.gd), so it stays the default.
+## Opening page: New game asks whether to play the forest opening or skip it, as two storybook
+## cards. The answer is Settings "world/opening" (read by world/life/arrival_story.gd), so it stays
+## the default.
 func _build_opening_page() -> void:
 	_opening_page = Control.new(); _opening_page.name = "NewGameOpening"; _opening_page.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_opening_page.size = PANEL.PIXELS
 	_opening_page.visible = false
+	_opening_page.theme = MENU_STYLE.theme()
 	panel.content.add_child(_opening_page)
-	_building = _opening_page
-	_label("New game", 52, 44, LILAC)
-	_label("How does it start?", 112, 28, PLUM)
-	var y := 200.0
+	var box := VBoxContainer.new(); _opening_page.add_child(box)
+	box.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	box.offset_left = 48; box.offset_top = 44; box.offset_right = -48; box.offset_bottom = -44
+	box.add_theme_constant_override("separation", 14)
+	var title := MENU_STYLE.label("New game", "Heading", 46); title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var question := MENU_STYLE.label("How does your story begin?", "Muted", 24); question.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(question)
+	var cards := HBoxContainer.new(); cards.add_theme_constant_override("separation", 24)
+	cards.alignment = BoxContainer.ALIGNMENT_CENTER; cards.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(cards)
 	for option: Array in OPENINGS:
-		var button := _button(str(option[1]), y, false)
-		button.size.y = 120 if str(option[0]) == "play" else 84
-		if str(option[0]) == "play": button.add_theme_font_size_override("font_size", 30)
-		button.pressed.connect(_choose_opening.bind(str(option[0])))
-		_opening_buttons.append(button)
-		y += button.size.y + 16
-	_opening_back = _button("Back", y + 16, true)
-	_opening_back.size.y = 76
+		var card := Button.new(); card.theme_type_variation = "Card"
+		card.custom_minimum_size = Vector2(372, 410); card.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		card.pressed.connect(_choose_opening.bind(str(option[0])))
+		card.focus_entered.connect(panel.refresh); card.mouse_entered.connect(panel.refresh); card.mouse_exited.connect(panel.refresh)
+		cards.add_child(card)
+		var scene: Control = preload("res://world/ui/menu_vignette.gd").new()
+		scene.scene = str(option[3]); scene.position = Vector2(14, 14); scene.size = Vector2(344, 206); scene.clip_contents = true
+		card.add_child(scene)
+		if str(option[4]) != "":
+			var ribbon := PanelContainer.new(); ribbon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			ribbon.add_theme_stylebox_override("panel", MENU_STYLE.rounded(MENU_STYLE.box(MENU_STYLE.ROSE, Color.WHITE, 2, 99, 14, 3)))
+			var word := MENU_STYLE.label(str(option[4]), "", 17); word.add_theme_font_override("font", MENU_STYLE.BOLD)
+			word.add_theme_color_override("font_color", Color.WHITE); ribbon.add_child(word)
+			ribbon.position = Vector2(26, 26)
+			card.add_child(ribbon)
+		var words := VBoxContainer.new(); words.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		words.position = Vector2(26, 238); words.size = Vector2(320, 210); words.add_theme_constant_override("separation", 10)
+		card.add_child(words)
+		var name_label := MENU_STYLE.label(str(option[1]), "Subheading", 27); name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_label.add_theme_font_override("font", MENU_STYLE.HEADING); name_label.add_theme_color_override("font_color", MENU_STYLE.PINK)
+		words.add_child(name_label)
+		var about := MENU_STYLE.label(str(option[2]), "Muted", 20); about.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		about.custom_minimum_size.x = 320; about.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		words.add_child(about)
+		var go := HBoxContainer.new(); go.mouse_filter = Control.MOUSE_FILTER_IGNORE; go.add_theme_constant_override("separation", 8)
+		go.position = Vector2(26, 360); card.add_child(go)
+		var arrow := MENU_ICON.make("play", 18, MENU_STYLE.PINK); arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		go.add_child(arrow)
+		var start := MENU_STYLE.label("Begin here", "", 19); start.add_theme_font_override("font", MENU_STYLE.BOLD)
+		start.add_theme_color_override("font_color", MENU_STYLE.PINK); start.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		go.add_child(start)
+		_opening_buttons.append(card)
+	var back_row := HBoxContainer.new(); back_row.alignment = BoxContainer.ALIGNMENT_CENTER; box.add_child(back_row)
+	_opening_back = Button.new(); _opening_back.text = "Back"; _opening_back.theme_type_variation = "Ghost"
+	_opening_back.icon = MENU_ICON.texture("back", 22); _opening_back.custom_minimum_size = Vector2(220, 54)
+	_opening_back.add_theme_font_size_override("font_size", 22)
 	_opening_back.pressed.connect(_close_opening)
-	_building = null
+	_opening_back.focus_entered.connect(panel.refresh); _opening_back.mouse_entered.connect(panel.refresh); _opening_back.mouse_exited.connect(panel.refresh)
+	back_row.add_child(_opening_back)
 
 
 func _close_opening() -> void:
@@ -720,13 +755,17 @@ func _start_new_game(season: int) -> void:
 	var world: String = saves.stage_new_game(start_day)
 	_staged = true
 	status.text = "New game (%s): %s" % [SEASON_NAMES[season], world]
-	_opening_page.visible = false
-	_home_page.visible = true
+	# The opening page stays under the loading screen; a failed entry goes back home.
+	var opening: Array = OPENINGS[1] if str(Settings.get_value(OPENING_KEY)) == "skip" else OPENINGS[0]
+	var look := SHELF.world_look(world, {})
+	_destination = {"title": CATALOGUE.world_name(world), "line": "A new world · %s, day 1 · %s" % [SEASON_NAMES[season], opening[1]],
+		"icon": str(look.icon), "tint": MENU_STYLE.SWATCHES[int(look.color) % MENU_STYLE.SWATCHES.size()]}
 	enter_game()
 
 
 func _close_load() -> void:
 	_load_page.visible = false
+	_refresh_continue()
 	_home_page.visible = true
 	_set_card(true)
 	_focused = 2
@@ -748,7 +787,9 @@ func _build_settings_page() -> void:
 	_settings_ui = preload("res://world/ui/settings_page.gd").new()
 	_settings_ui.position = Vector2(40, 28)
 	_settings_page.add_child(_settings_ui)
-	_settings_ui.setup(Vector2(820, 790), 22, "Back", xr_active and not seated)
+	# Built as wide as its desktop page will be, so its rows lay out for that width.
+	var width := float(_wide_layout().x if _desktop_pages() else PANEL.PIXELS.x)
+	_settings_ui.setup(Vector2(width - 80.0, 790), 22, "Back", xr_active and not seated)
 	_settings_ui.redraw = panel.refresh
 	_settings_ui.back_requested.connect(_close_settings)
 	_context_button = Button.new(); _context_button.text = "AI context"
@@ -764,8 +805,9 @@ func _open_settings() -> void:
 	_settings_page.visible = true
 	Settings.message = ""
 	_settings_ui.refresh()
-	_focused = 0
-	(_settings_ui.focusables()[0] as Control).grab_focus()
+	var first: Control = _settings_ui.first_focus()
+	_focused = maxi(0, _settings_ui.focusables().find(first))
+	first.grab_focus()
 	panel.refresh()
 
 
@@ -784,7 +826,8 @@ func _settings_open() -> bool:
 func _build_credits_page() -> void:
 	_credits_page = preload("res://world/ui/credits_page.gd").new(); _credits_page.name = "Credits"
 	panel.content.add_child(_credits_page)
-	_credits_page.setup(PANEL.PIXELS)
+	_credits_page.position = Vector2(26, 22)
+	_credits_page.setup(Vector2(PANEL.PIXELS) - Vector2(52, 44))
 	_credits_page.redraw = panel.refresh
 	_credits_back = _credits_page.back_button
 	_credits_page.back_requested.connect(_close_credits)
@@ -846,21 +889,31 @@ func _focus_list() -> Array:
 	if _credits_open(): return _credits_page.focusables()
 	if _settings_open(): return _settings_ui.focusables()
 	if _opening_open(): return _opening_buttons + [_opening_back]
-	if _load_open():
-		var visible_rows: Array = _load_rows.duplicate()
-		for pager: Button in [_load_newer, _load_back, _load_older]:
-			if pager.visible: visible_rows.append(pager)
-		return visible_rows
+	if _load_open(): return _browser.focusables()
 	return [enter_button, new_game_button, load_button, settings_button, credits_button, quit_button]
 
 func _place_panel() -> void:
+	panel.global_transform = _panel_spot()
+
+
+## Where the panel stands: home's spot, or (desktop pages) nearer and in the middle.
+func _panel_spot() -> Transform3D:
 	if overlay_host != null:
 		# Level in front of the eyes, a little left and low so the view stays in sight.
 		var facing := Basis(Vector3.UP, camera.global_rotation.y)
-		panel.global_transform = Transform3D(facing, camera.global_position + facing * Vector3(-0.95, -0.2, -2.3))
-		return
-	panel.global_transform = camera.global_transform
-	panel.global_position = camera.global_transform * Vector3(-0.68, -0.18, -2.25)
+		var offset := _page_spot() if _forward else Vector3(-0.95, -0.2, -2.3)
+		return Transform3D(facing, camera.global_position + facing * offset)
+	return Transform3D(camera.global_transform.basis, camera.global_transform * (_page_spot() if _forward else HOME_SPOT))
+
+
+## A desktop page straight ahead, near enough to fill PAGE_FILL of the view's height (or most of
+## its width, in a narrow window).
+func _page_spot() -> Vector3:
+	var half_tall := tan(deg_to_rad(camera.fov) * 0.5)
+	var window := Vector2(get_viewport().get_visible_rect().size)
+	var metres := Vector2(panel.pixels) * PANEL.PIXEL_SIZE
+	var away := maxf(metres.y / (2.0 * PAGE_FILL * half_tall), metres.x / (2.0 * 0.95 * half_tall * window.x / maxf(1.0, window.y)))
+	return Vector3(0.0, -0.01, -away)
 
 func recenter() -> void:
 	if overlay_host != null:
@@ -883,7 +936,14 @@ func _poll_asset() -> void:
 	var progress: Array = []
 	var state := ResourceLoader.load_threaded_get_status(_request, progress)
 	if state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
-		status.text = "Entering Equestria… %d%%" % int(float(progress[0]) * 100) if not progress.is_empty() else "Entering Equestria…"
+		var fraction := float(progress[0]) if not progress.is_empty() else 0.0
+		if is_instance_valid(_cover):
+			# The loader reports in a few big steps (0%, then about 40% until it is done): a slow
+			# creep keeps the bar moving meanwhile. The title's part is the first half.
+			var creep := 1.0 - exp(-float(Time.get_ticks_msec() - _cover_raised) / 14000.0)
+			_cover.set_progress(0.03 + 0.42 * maxf(fraction, creep), true)
+			return
+		status.text = "Entering Equestria… %d%%" % int(fraction * 100) if not progress.is_empty() else "Entering Equestria…"
 		panel.refresh()
 		return
 	var path := _request
@@ -899,8 +959,7 @@ func _poll_asset() -> void:
 	if packed == null:
 		_load_failed(kind)
 		return
-	set_process(false)
-	_finish_entry.call_deferred(packed)
+	_hand_off(packed)
 
 var _download: Node
 
@@ -943,7 +1002,10 @@ func _load_failed(kind: String) -> void:
 	entering = false
 	ready_for_entry = true
 	enter_button.disabled = false
+	_lower_cover()
+	if _opening_open(): _close_opening()
 	status.text = "Could not enter. Please try again."
+	if _load_open(): _browser.set_status(status.text)
 	panel.refresh()
 	push_warning("[title] Could not load %s" % kind)
 
@@ -964,6 +1026,7 @@ func enter_game() -> void:
 				panel.refresh()
 				return
 			_staged = true
+			_destination = _trip_of(newest)
 	if _setup_start and ready_for_entry:
 		_setup_start = false
 		_start_new_game(0)
@@ -980,8 +1043,71 @@ func enter_game() -> void:
 		else:
 			overlay_host.continue_game()
 		return
+	_raise_cover()
 	# Nothing from the world scene is requested until this explicit action.
 	_request_asset(game_scene, "game")
+
+
+## The loading screen (world/ui/loading_cover.gd) fades in over the menu: the logo, the world
+## being entered and a bar, which the game's own cover carries on after the scene change.
+func _raise_cover() -> void:
+	if is_instance_valid(_cover): return
+	COVER.trip = {}
+	_cover = COVER.new(); _cover.name = "EntryCover"
+	add_child(_cover)
+	_cover.setup(camera, xr_active)
+	_cover.show_trip(str(_destination.get("title", "")), str(_destination.get("line", "")), str(_destination.get("icon", "")), _destination.get("tint", MENU_STYLE.FAINT))
+	_cover.show_text("Entering Equestria…")
+	_cover.set_progress(0.03)
+	_cover.fade_in(0.0 if MENU_STYLE.still() else 0.45)
+	_cover_raised = Time.get_ticks_msec()
+	# The menu's logo sprite draws over a headset's cover sphere: it fades with the menu.
+	if _logo != null:
+		_logo_fade = create_tween()
+		_logo_fade.tween_property(_logo, "modulate:a", 0.0, 0.45)
+
+
+func _lower_cover() -> void:
+	if is_instance_valid(_cover): _cover.finish()
+	_cover = null
+	if _logo_fade != null: _logo_fade.kill()
+	if _logo != null: _logo.modulate.a = 1.0
+
+
+## What the loading screen says about a save: its world, then where and when in it.
+func _trip_of(entry: Dictionary) -> Dictionary:
+	var bits: Array[String] = []
+	if not str(entry.get("place", "")).is_empty(): bits.append(str(entry.place))
+	bits.append(CATALOGUE.game_time_text(entry))
+	return {"title": str(entry.get("world_name", "")), "line": " · ".join(bits), "icon": str(entry.get("world_icon", "")),
+		"tint": MENU_STYLE.SWATCHES[int(entry.get("world_color", 0)) % MENU_STYLE.SWATCHES.size()]}
+
+
+## The world is loaded. Nothing is drawn from the scene change until the game's own cover is up
+## (half a minute on a slow machine), so the cover first shows that step, fully faded in, for a
+## couple of frames (_step_hand_off()). Frames are counted in _process: the shutdown waits
+## (world/shutdown_waits.gd) stay released after a game returns to the title.
+func _hand_off(packed: PackedScene) -> void:
+	if not is_instance_valid(_cover):
+		set_process(false)
+		_finish_entry.call_deferred(packed)
+		return
+	_packed = packed
+	_hand_off_frames = 0
+	_cover_wait = 0.0
+	_cover.set_progress(0.5, true)
+	_cover.show_text("Setting up the world…")
+	_cover.show_note("This part can take a little while.")
+
+
+func _step_hand_off(delta: float) -> void:
+	_hand_off_frames += 1 if is_instance_valid(_cover) and _cover.is_settled() else 0
+	_cover_wait += delta
+	if _hand_off_frames < 3 and _cover_wait < 2.0: return
+	var packed := _packed
+	_packed = null
+	set_process(false)
+	_finish_entry.call_deferred(packed)
 
 func _finish_entry(packed: PackedScene) -> void:
 	_restore_clock()
@@ -998,6 +1124,8 @@ func _process(delta: float) -> void:
 	if _card_active:
 		_card_step(delta); return
 	if panel == null: return
+	if _packed != null:
+		_step_hand_off(delta); return
 	_poll_asset()
 	if is_instance_valid(_setup_window): return
 	if not xr_active: return
@@ -1031,13 +1159,8 @@ func _process(delta: float) -> void:
 	panel.point_at(hit)
 
 func _focus_button(step: int) -> void:
-	if _load_open() and not _load_rows.is_empty():
-		# Past the last row of a page the next page opens instead of wrapping (and back up).
-		if step > 0 and _focused == _load_rows.size() - 1 and _load_page_index < _load_pages.size() - 1:
-			_turn_load_page(1); return
-		if step < 0 and _focused == 0 and _load_page_index > 0:
-			_turn_load_page(-1); return
 	var buttons: Array = _focus_list()
+	if buttons.is_empty(): return
 	_focused = wrapi(_focused + step, 0, buttons.size())
 	var button: Control = buttons[_focused]
 	if button is Button and button.disabled:
@@ -1053,7 +1176,9 @@ func _controller_pressed(action: StringName, controller: XRController3D) -> void
 	if action == &"grip_click" and _context_page != null and _context_page.visible: _close_context(); return
 	if action == &"grip_click" and _settings_open(): _close_settings(); return
 	if action == &"grip_click" and _credits_open(): _close_credits(); return
-	if action == &"grip_click" and _load_open(): _close_load(); return
+	if action == &"grip_click" and _load_open():
+		if not _browser.back(): _close_load()
+		return
 	if action == &"grip_click" and _opening_open(): _close_opening(); return
 	if action != &"trigger_click" or _owner != null: return
 	if not controller.get_has_tracking_data(): return
@@ -1089,10 +1214,9 @@ func _input(event: InputEvent) -> void:
 			if pointer.visible: pointer.global_position = panel.pixel_to_world(pixel)
 		if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 			panel.press(event.pressed)
-		elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and _load_open():
-			_turn_load_page(1 if event.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1)
-		elif event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and pixel.x >= 0:
-			# The settings list scrolls with the wheel.
+		elif event is InputEventMouseButton and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN, MOUSE_BUTTON_RIGHT] and pixel.x >= 0:
+			# Lists (settings, saves) scroll with the wheel; a right click opens a save's or a
+			# world's menu (world/ui/save_browser.gd).
 			var wheel := event.duplicate() as InputEventMouseButton
 			wheel.position = pixel; wheel.global_position = pixel
 			panel.viewport.push_input(wheel, true); panel.refresh()
@@ -1111,7 +1235,7 @@ func _input(event: InputEvent) -> void:
 		elif event.pressed and not event.echo and _credits_open() and event.keycode == KEY_ESCAPE:
 			_close_credits()
 		elif event.pressed and not event.echo and _load_open() and event.keycode == KEY_ESCAPE:
-			_close_load()
+			if not _browser.back(): _close_load()
 		elif event.pressed and not event.echo and _opening_open() and event.keycode == KEY_ESCAPE:
 			_close_opening()
 		else:

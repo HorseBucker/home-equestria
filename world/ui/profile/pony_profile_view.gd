@@ -74,7 +74,9 @@ func _add_meter(parent: VBoxContainer, key: String, caption: String, icon: Textu
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var track := _style(Color("e8deed"), Color.TRANSPARENT); track.set_border_width_all(0)
 	var fill := _style(color, Color.TRANSPARENT); fill.set_border_width_all(0)
-	bar.add_theme_stylebox_override("background", track); bar.add_theme_stylebox_override("fill", fill)
+	# Radius 28 on an 18-pixel bar: capped under half its size (world/ui/round_box.gd), or the ends fold.
+	var style := preload("res://world/ui/menu_style.gd")
+	bar.add_theme_stylebox_override("background", style.rounded(track)); bar.add_theme_stylebox_override("fill", style.rounded(fill))
 	column.add_child(bar)
 	meters[key] = {"row":row, "label":label, "bar":bar, "caption":caption}
 

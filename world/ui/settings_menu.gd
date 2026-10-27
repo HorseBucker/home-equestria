@@ -2,6 +2,14 @@ extends Node3D
 const DESKTOP_OWNER := preload("res://player/desktop_action_owner.gd")
 const SOUNDS := preload("res://world/audio/interaction_sounds.gd")
 const VIEW := preload("res://world/player_view.gd")
+## Menu look (dev 2026-10-27 redesign): the twilight card, the theme, icons and flourishes.
+const STYLE := preload("res://world/ui/menu_style.gd")
+const ICON := preload("res://world/ui/menu_icon.gd")
+const CARD := preload("res://world/ui/menu_card.gd")
+const FX := preload("res://world/ui/menu_fx.gd")
+## The largest desktop card in layout pixels (menu_style.gd fit_card); a smaller window gets a
+## smaller one, a bigger window scales it up.
+const DESKTOP_SIZE := Vector2(1280, 840)
 ## In-game settings World Panel: the shared settings page (world/ui/settings_page.gd,
 ## rows from Settings.TABS). Desktop: F7. VR: left controller menu button, right ray +
 ## trigger; in VR it also carries Continue / Saved games / Quit, since the desktop Escape
@@ -34,38 +42,71 @@ func setup(inventory_ui: Node, pause_menu: Node = null) -> void:
 	ui = inventory_ui; pause = pause_menu
 	if ui._desktop:
 		canvas = CanvasLayer.new(); canvas.layer = 150; add_child(canvas)
-		content = PanelContainer.new(); content.custom_minimum_size = Vector2(900, 820); canvas.add_child(content); canvas.hide()
+		var shade := ColorRect.new(); shade.color = Color(0.04, 0.01, 0.07, 0.45); shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		canvas.add_child(shade)
+		content = Control.new(); canvas.add_child(content); canvas.hide()
+		# A window resized while the panel shows: it fits the new one at once.
+		get_viewport().size_changed.connect(func() -> void: if opened: _place_desktop())
 	else:
 		panel = preload("res://world/ui/spatial_menu_panel.gd").new(); add_child(panel); panel.hide(); content = panel.content
 		pointer = preload("res://world/ui/controller_pointer.gd").new(); add_child(pointer)
 	_rebuild()
 
+var _card_size := Vector2(900, 840)
+var _card: Control
+
 func _rebuild() -> void:
 	for child in content.get_children(): child.free()
+	content.theme = STYLE.theme()
+	if ui._desktop: _card_size = _desktop_card()
+	content.size = _card_size
+	_card = CARD.new(); _card.size = _card_size; content.add_child(_card)
 	page = preload("res://world/ui/settings_page.gd").new()
+	page.position = Vector2(30, 28)
 	if ui._desktop:
-		page.setup(Vector2(880, 800), 20, "Close · F7")
+		page.setup(_card_size - Vector2(60, 56), 20, "Close · F7")
 	else:
-		var background := Panel.new(); background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		background.size = Vector2(900, 840); content.add_child(background)
-		page.position = Vector2(25, 20)
-		page.setup(Vector2(850, 800), 22, "Continue", true)
+		page.setup(_card_size - Vector2(60, 56), 21, "Continue", true)
 		page.redraw = panel.refresh
 	content.add_child(page)
 	page.back_requested.connect(close)
 	credits = preload("res://world/ui/credits_page.gd").new()
-	content.add_child(credits); credits.setup(Vector2(880, 800), 22)
+	credits.position = Vector2(30, 28)
+	content.add_child(credits); credits.setup(_card_size - Vector2(60, 56), 22)
 	if panel != null: credits.redraw = panel.refresh
 	credits.back_requested.connect(_show_page.bind("settings")); credits.hide()
-	var credits_button := Button.new(); credits_button.text = "Credits"
+	var credits_button := Button.new(); credits_button.text = "Credits"; credits_button.icon = ICON.texture("heart", 20)
 	credits_button.custom_minimum_size.y = 42; credits_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	credits_button.pressed.connect(_show_page.bind("credits")); page.footer.add_child(credits_button)
 	if not ui._desktop and pause != null:
-		for entry in [["Saved games", _open_saves], ["Support", _show_page.bind("support")], ["Quit to title", func(): close(); pause.quit_to_title()], ["Quit game", func(): pause.quit_game()]]:
-			var b := Button.new(); b.text = entry[0]; b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			b.add_theme_font_size_override("font_size", 20); b.custom_minimum_size.y = 42; b.clip_text = true; b.pressed.connect(entry[1])
+		for entry in [["Saved games", _open_saves, "folder"], ["Support", _show_page.bind("support"), "lifebuoy"],
+				["Quit to title", func(): close(); pause.quit_to_title(), "home"], ["Quit game", func(): pause.quit_game(), "moon"]]:
+			var b := Button.new(); b.text = entry[0]; b.size_flags_horizontal = Control.SIZE_EXPAND_FILL; b.icon = ICON.texture(str(entry[2]), 20)
+			b.add_theme_font_size_override("font_size", 18); b.custom_minimum_size.y = 42; b.clip_text = true; b.pressed.connect(entry[1])
 			page.footer.add_child(b)
 		_build_provider_page(); _build_support_page()
+	var fx := FX.new(); content.add_child(fx); fx.attach(content, panel.refresh if panel != null else Callable())
+
+
+## Desktop: the card as big as the window allows, scaled with it and centred. A new size resizes
+## the pages in place, so an edit not saved yet (Prompts, AI Settings) stays.
+func _place_desktop() -> void:
+	if _desktop_card() != _card_size:
+		_card_size = _desktop_card()
+		content.size = _card_size; _card.size = _card_size
+		page.relayout(_card_size - Vector2(60, 56))
+		credits.custom_minimum_size = _card_size - Vector2(60, 56); credits.size = credits.custom_minimum_size
+	var scale := STYLE.window_scale(_window())
+	content.scale = Vector2.ONE * scale; STYLE.sharpen(get_viewport(), scale)
+	content.position = ((_window() - content.size * scale) * .5).floor()
+
+
+func _window() -> Vector2:
+	return Vector2(get_viewport().get_visible_rect().size) if get_viewport() != null else STYLE.LAYOUT_WINDOW
+
+
+func _desktop_card() -> Vector2:
+	return STYLE.fit_card(_window(), DESKTOP_SIZE)
 
 
 ## AI & voice on the World Panel: the same provider page as the desktop pause menu, with the
@@ -77,18 +118,18 @@ func _build_provider_page() -> void:
 
 
 func _build_support_page() -> void:
-	support = VBoxContainer.new(); support.position = Vector2(25, 20); support.custom_minimum_size = Vector2(850, 800)
-	support.add_theme_constant_override("separation", 10); content.add_child(support); support.hide()
-	var title := Label.new(); title.text = "Support"; title.add_theme_font_size_override("font_size", 30); support.add_child(title)
-	var note := Label.new(); note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; note.custom_minimum_size.x = 800
-	note.add_theme_font_size_override("font_size", 21)
+	support = VBoxContainer.new(); support.position = Vector2(40, 36); support.custom_minimum_size = Vector2(820, 760)
+	support.add_theme_constant_override("separation", 12); content.add_child(support); support.hide()
+	var title := STYLE.label("Support", "Heading", 36); support.add_child(title)
+	var note := STYLE.label("", "Muted", 20); note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; note.custom_minimum_size.x = 800
 	note.text = "Something went wrong? Make a logs bundle and attach the zip to your report. It holds the game logs and your settings, never your API key. Bundles are saved in the game's support folder (on a headset: Android/data/.../files/support). On a headset, Open support folder opens that folder; on desktop, Open logs folder opens the original game logs."
 	support.add_child(note)
-	for entry in [["Copy logs bundle", func(): pause._make_bundle(); _mirror_support()], ["Open support folder" if OS.has_feature("android") else "Open logs folder", func(): pause._open_logs(); _mirror_support()], ["Back", _show_page.bind("settings")]]:
-		var b := Button.new(); b.text = entry[0]; b.custom_minimum_size.y = 46; b.add_theme_font_size_override("font_size", 21)
+	for entry in [["Copy logs bundle", func(): pause._make_bundle(); _mirror_support(), "archive"], ["Open support folder" if OS.has_feature("android") else "Open logs folder", func(): pause._open_logs(); _mirror_support(), "folder"], ["Back", _show_page.bind("settings"), "back"]]:
+		var b := Button.new(); b.text = entry[0]; b.custom_minimum_size.y = 48; b.add_theme_font_size_override("font_size", 21)
+		b.icon = ICON.texture(str(entry[2]), 22); b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.pressed.connect(entry[1]); support.add_child(b)
-	_support_status = Label.new(); _support_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_support_status.custom_minimum_size.x = 800; _support_status.add_theme_font_size_override("font_size", 20); support.add_child(_support_status)
+	_support_status = STYLE.label("", "Muted", 19); _support_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_support_status.custom_minimum_size.x = 800; support.add_child(_support_status)
 
 
 func _mirror_support() -> void:
@@ -115,13 +156,13 @@ func _tend_keyboard() -> void:
 	var prompts: Control = page.prompts if page != null else null
 	if not provider.is_visible_in_tree() and not (prompts != null and prompts.is_visible_in_tree()):
 		if keyboard.visible:
-			keyboard.hide(); page.custom_minimum_size.y = 800.0; page.size.y = 800.0; _refresh()
+			keyboard.hide(); page.custom_minimum_size.y = _card_size.y - 56.0; page.size.y = page.custom_minimum_size.y; _refresh()
 		return
 	var owner: Control = panel.viewport.gui_get_focus_owner()
 	var wanted: bool = owner is LineEdit or owner is TextEdit
 	if wanted == keyboard.visible: return
 	keyboard.visible = wanted
-	page.custom_minimum_size.y = 480.0 if wanted else 800.0
+	page.custom_minimum_size.y = 470.0 if wanted else _card_size.y - 56.0
 	page.size.y = page.custom_minimum_size.y
 	_refresh()
 
@@ -153,10 +194,10 @@ func toggle() -> void:
 	_show_page("settings", false)
 	if ui._desktop:
 		_mouse_mode = Input.mouse_mode; Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		content.position = (Vector2(get_viewport().get_visible_rect().size) - content.size) * .5; canvas.show()
+		_place_desktop(); canvas.show()
 	else:
 		panel.global_position = ui.camera.global_position - ui.camera.global_basis.z * 1.4
-		panel.look_at(ui.camera.global_position, Vector3.UP, true); panel.show(); panel.refresh()
+		panel.look_at(ui.camera.global_position, Vector3.UP, true); panel.show(); panel.tick = 1.0 / 20.0; panel.refresh()
 		_show_page("settings", false)
 	_refresh()
 	_menu_sound("prop_ui_confirm")
@@ -170,8 +211,8 @@ func close() -> void:
 	for node in _input_states:
 		if is_instance_valid(node): node.set_process_input(_input_states[node]); node.remove_meta("save_menu_open")
 	_input_states.clear()
-	if ui._desktop: canvas.hide(); Input.mouse_mode = _mouse_mode
-	else: panel.press(false); panel.hide(); pointer.hide()
+	if ui._desktop: canvas.hide(); Input.mouse_mode = _mouse_mode; STYLE.sharpen(get_viewport(), 1.0)
+	else: panel.press(false); panel.hide(); panel.tick = 0.0; pointer.hide()
 
 func _menu_sound(event: String) -> void:
 	var camera: Camera3D = VIEW.camera(self)

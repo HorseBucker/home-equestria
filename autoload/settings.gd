@@ -52,6 +52,8 @@ const DEFAULTS := {
 	"video/vsync": false,
 	"video/fps_cap": 0,
 	"video/window": "windowed",
+	# Windowed mode's size (dev 2026-10-27); the project's own window is 1600 x 900.
+	"video/window_size": "1600x900",
 	"video/pony_impostors": "preset",
 	"controls/mouse_sensitivity": 100,
 	"controls/invert_y": false,
@@ -79,6 +81,8 @@ const DEFAULTS := {
 	"access/subtitles": true,
 	"access/subtitle_scale": 100,
 	"access/speech_text": "auto",
+	"access/caption_card": false,
+	"access/caption_opacity": 65,
 	"access/ui_scale": 100,
 	"access/reduced_motion": false,
 	"reading/paper": "cream",
@@ -114,6 +118,10 @@ const SPECS := {
 	"video/vsync": {"type": "bool", "labels": ["Off", "On"], "note": "desktop"},
 	"video/fps_cap": {"type": "choice", "options": [[0, "Unlimited"], [30, "30"], [60, "60"], [72, "72"], [90, "90"], [120, "120"], [144, "144"], [165, "165"], [240, "240"]], "note": "desktop"},
 	"video/window": {"type": "choice", "options": [["windowed", "Windowed"], ["fullscreen", "Fullscreen"], ["exclusive", "Exclusive fullscreen (can be slower)"]]},
+	# The settings page lists only the sizes that fit the screen (window_sizes()).
+	"video/window_size": {"type": "choice", "options": [["1280x720", "1280 × 720"], ["1280x800", "1280 × 800"], ["1600x900", "1600 × 900"],
+		["1680x1050", "1680 × 1050"], ["1920x1080", "1920 × 1080"], ["1920x1200", "1920 × 1200"], ["2560x1440", "2560 × 1440"],
+		["2560x1600", "2560 × 1600"], ["3840x2160", "3840 × 2160"], ["maximized", "Maximized"]], "note": "windowed mode"},
 	# Player board #3 (2026-10-25): 25 % steps were too coarse for high-DPI mice. Any whole
 	# percent is valid and can be typed; the arrows move by `arrow_step`.
 	"controls/mouse_sensitivity": {"type": "int", "min": 1, "max": 400, "step": 1, "arrow_step": 5, "typed": true, "fmt": "%d%%"},
@@ -144,6 +152,10 @@ const SPECS := {
 	# Where pony speech shows (world/ai/overhead_dialogue.gd). A VR tester could not read the
 	# overhead words up close (2026-10-20): auto keeps them overhead on desktop, bottom in VR.
 	"access/speech_text": {"type": "choice", "options": [["auto", "Auto (bottom in VR)"], ["overhead", "Over the pony's head"], ["caption", "Bottom caption"]]},
+	# A card behind the desktop bottom caption (world/ui/speech_caption.gd). Off by default: the
+	# words' subtitle colours (world/ai/subtitle_colors.gd) read over the world without one.
+	"access/caption_card": {"type": "bool", "labels": ["Off", "On"]},
+	"access/caption_opacity": {"type": "int", "min": 10, "max": 100, "step": 5, "fmt": "%d%%"},
 	"access/ui_scale": {"type": "int", "min": 75, "max": 200, "step": 25, "fmt": "%d%%"},
 	"access/reduced_motion": {"type": "bool", "labels": ["Off", "On"]},
 	# Printed pages of the physical books (world/books/book_typesetter.gd), dev 2026-09-26.
@@ -166,7 +178,7 @@ const TABS := [
 	["Graphics", [["Quality preset", "video/quality"], ["Shadows", "video/shadows"], ["Draw distance", "video/draw_distance"],
 		["Grass density", "video/grass_density"], ["Trees & plants", "video/foliage_density"], ["Max nearby ponies", "ponies/max_nearby"], ["Pony pictures from", "video/pony_impostors"],
 ["Clouds", "video/clouds"], ["Rain & snow particles", "video/weather_particles"], ["Ocean", "video/ocean"], ["Glow in VR", "video/vr_desktop_effects"], ["Colour grade", "video/color_grade"],
-		["Render scale", "video/render_scale"], ["Upscaler", "video/upscaler"], ["Anti-aliasing", "video/antialiasing"], ["V-Sync", "video/vsync"], ["FPS cap", "video/fps_cap"], ["Window", "video/window"]]],
+		["Render scale", "video/render_scale"], ["Upscaler", "video/upscaler"], ["Anti-aliasing", "video/antialiasing"], ["V-Sync", "video/vsync"], ["FPS cap", "video/fps_cap"], ["Window", "video/window"], ["Window size", "video/window_size"]]],
 	["Controls", [["Mouse sensitivity", "controls/mouse_sensitivity"], ["Invert mouse Y", "controls/invert_y"], ["Field of view", "controls/fov"],
 		["Move forward", "bind:move_forward"], ["Move back", "bind:move_back"], ["Move left", "bind:move_left"], ["Move right", "bind:move_right"],
 		["Sprint", "bind:move_sprint"], ["Jump / fly up", "bind:move_jump"], ["Push to talk", "bind:voice_talk"],
@@ -177,7 +189,7 @@ const TABS := [
 		["Standing height (cm)", "player/height_cm"], ["Measure my height now", "action:measure_height"], ["Forget measured height", "action:forget_height"]]],
 	["Audio", [["Master volume", "audio/master"], ["Voice volume", "audio/voice"], ["Effects volume", "audio/sfx"], ["Ambience volume", "audio/ambience"], ["Flight wind volume", "audio/wind"], ["Music volume", "audio/music"], ["Pony voices", "voice/tts"], ["Ponese style", "voice/ponese_style"]]],
 	["World", [["Full day", "world/day_length_minutes"], ["Season length", "world/season_days"], ["Title screen view", "title/view"], ["Rain & snow frequency", "world/weather_frequency"], ["Opening", "world/opening"], ["Pony size", "ponies/size"]]],
-	["Accessibility", [["Subtitles", "access/subtitles"], ["Subtitle size", "access/subtitle_scale"], ["Pony speech text", "access/speech_text"], ["Menu text size", "access/ui_scale"], ["Reduced motion", "access/reduced_motion"]]],
+	["Accessibility", [["Subtitles", "access/subtitles"], ["Subtitle size", "access/subtitle_scale"], ["Caption background", "access/caption_card"], ["Background opacity", "access/caption_opacity"], ["Pony speech text", "access/speech_text"], ["Menu text size", "access/ui_scale"], ["Reduced motion", "access/reduced_motion"]]],
 	["Reading", [["Paper", "reading/paper"], ["Font", "reading/font"], ["Text size", "reading/size"]]],
 	["Mods", []],
 ]
@@ -226,7 +238,16 @@ var _default_bindings: Dictionary = {}   # action -> physical keycode from proje
 var message := ""
 
 
+## The packs mount inside _init, after the engine read this script from the base pack, so a
+## patch pack's copy of it would never run: Quality, created next, hands the node the mounted
+## copy when it carries REVISION (autoload/quality.gd _adopt_patched_settings). That copy's
+## _init must not mount the packs or boot the mods again (PACKS_MOUNTED).
+const REVISION := 4
+const PACKS_MOUNTED := &"home_equestria_packs_mounted"
+
+
 func _init() -> void:
+	if Engine.has_meta(PACKS_MOUNTED): return
 	# Exported builds: data packs beside the executable, before anything reads res:// from
 	# them (tools/build/packs.gd; a no-op in source runs).
 	if ResourceLoader.exists(PACKS): (load(PACKS) as Script).call("load_extra_packs")
@@ -282,6 +303,18 @@ func _ready() -> void:
 		if stored == null or ((stored is int or stored is float) and int(stored) == old_mirror):
 			_values["video/render_scale"] = 0; _store("video/render_scale", 0)
 		_store("video/render_scale_auto", true)
+	# Caption backdrop (soft, solid or none), then a 0-100% opacity, became Caption background, off
+	# by default now that the words carry their own subtitle colours, and its Background opacity
+	# (10-100%). A saved opacity says whether there was a card; else a solid backdrop carries over.
+	if not first_launch and not config.has_section_key("access", "caption_card"):
+		if config.has_section_key("access", "caption_opacity"):
+			var stored := int(config.get_value("access", "caption_opacity"))
+			_values["access/caption_card"] = stored > 0; _store("access/caption_card", stored > 0)
+			if stored <= 0: _values["access/caption_opacity"] = DEFAULTS["access/caption_opacity"]; _store("access/caption_opacity", DEFAULTS["access/caption_opacity"])
+		elif config.has_section_key("access", "caption_backdrop"):
+			var solid := str(config.get_value("access", "caption_backdrop")) == "solid"
+			_values["access/caption_card"] = solid; _store("access/caption_card", solid)
+			if solid: _values["access/caption_opacity"] = 90; _store("access/caption_opacity", 90)
 	# Retire the rejected placement switch; item/save formats are unchanged.
 	_values["inventory/hud_placement"] = "gesture"
 	_store("inventory/hud_placement", "gesture")
@@ -291,7 +324,7 @@ func _ready() -> void:
 	_load_bindings()
 	_ensure_buses()
 	_apply_audio()
-	_apply_display()
+	_apply_display(true)
 	_apply_text_scale()
 	# Quality is the next autoload: its node does not exist yet during this _ready.
 	_apply_quality.call_deferred()
@@ -327,7 +360,7 @@ static func validate(key: String, value: Variant) -> Variant:
 func set_value(key: String, value: Variant) -> void:
 	if not DEFAULTS.has(key): return
 	var clean: Variant = validate(key, value)
-	if clean == null or _values.get(key) == clean: return
+	if clean == null or same_value(_values.get(key), clean): return
 	_values[key] = clean
 	if key == "vr/start_mode":
 		if write_launch and ResourceLoader.exists(LAUNCH): (load(LAUNCH) as Script).call("write", str(clean))
@@ -396,10 +429,11 @@ func cycle(key: String, step: int) -> String:
 					if absf(presets[i] - current) < absf(presets[index] - current): index = i
 			set_value(key, presets[clampi(index + step, 0, presets.size() - 1)])
 		"choice":
-			var options: Array = spec.options
+			# Window size steps only through the sizes this screen holds.
+			var options: Array = window_sizes() if key == "video/window_size" else spec.options
 			var index := 0
 			for i in options.size():
-				if options[i][0] == get_value(key): index = i
+				if same_value(options[i][0], get_value(key)): index = i
 			set_value(key, options[clampi(index + step, 0, options.size() - 1)][0])
 	return display(key)
 
@@ -417,8 +451,14 @@ func display(key: String) -> String:
 		"float": return str(spec.get("fmt", "%.2f")) % float(value)
 		"choice":
 			for option in spec.options:
-				if option[0] == value: return str(option[1])
+				if same_value(option[0], value): return str(option[1])
 	return str(value)
+
+
+## Options can mix kinds ("preset" beside 80): == between a String and an int is an error in a
+## debug build, so the kinds are compared first.
+static func same_value(a: Variant, b: Variant) -> bool:
+	return typeof(a) == typeof(b) and a == b
 
 
 ## Label with its note: "Trees & plants (new areas)".
@@ -453,7 +493,8 @@ static func route(player: Node, bus: String) -> void:
 func _apply(key: String) -> void:
 	if key.begins_with("audio/"): _apply_audio()
 	elif key in ["video/quality", "video/shadows", "video/draw_distance", "video/render_scale", "video/antialiasing", "video/upscaler"]: _apply_quality()
-	elif key in ["video/vsync", "video/fps_cap", "video/window"]: _apply_display()
+	elif key in ["video/vsync", "video/fps_cap", "video/window"]: _apply_display(key == "video/window")
+	elif key == "video/window_size": _apply_window_size()
 	elif key == "access/ui_scale": _apply_text_scale()
 	elif key == "video/grass_density": apply_grass()
 	elif key in ["access/subtitles", "access/subtitle_scale"]: apply_subtitles()
@@ -512,8 +553,10 @@ func _xr_running() -> bool:
 	return quality != null and bool(quality.xr_mode)
 
 
-## V-Sync, FPS cap and window mode are desktop concerns: the headset paces XR frames.
-func _apply_display() -> void:
+## V-Sync, FPS cap and window mode are desktop concerns: the headset paces XR frames. `sizing`
+## also sets the windowed size (at launch and when the Window row changes, not on every apply,
+## so a window the player resized by hand stays as it is).
+func _apply_display(sizing := false) -> void:
 	if DisplayServer.get_name() == "headless": return
 	if _xr_running():
 		Engine.max_fps = 0
@@ -528,11 +571,53 @@ func _apply_display() -> void:
 	if not _display_applied and mode == DisplayServer.WINDOW_MODE_WINDOWED and ("--fullscreen" in OS.get_cmdline_args() or "-f" in OS.get_cmdline_args()):
 		_display_applied = true
 		return
+	# Likewise a launch with its own `--resolution`, or `--maximized`/`-m`, keeps its window.
+	if not _display_applied:
+		for flag: String in ["--resolution", "--maximized", "-m"]:
+			if flag in OS.get_cmdline_args(): sizing = false
 	_display_applied = true
 	# A maximized/minimized window counts as windowed: leave it alone.
 	var windowed := current in [DisplayServer.WINDOW_MODE_WINDOWED, DisplayServer.WINDOW_MODE_MAXIMIZED, DisplayServer.WINDOW_MODE_MINIMIZED]
 	if not (mode == DisplayServer.WINDOW_MODE_WINDOWED and windowed) and current != mode:
 		DisplayServer.window_set_mode(mode)
+	if sizing and mode == DisplayServer.WINDOW_MODE_WINDOWED: _apply_window_size()
+
+
+## The window sizes that fit this screen's usable area (Window size lists only these), and
+## "maximized".
+func window_sizes() -> Array:
+	var usable := DisplayServer.screen_get_usable_rect(DisplayServer.window_get_current_screen()).size
+	var out: Array = []
+	for option: Array in SPECS["video/window_size"].options:
+		var size := _window_size(str(option[0]))
+		if size == Vector2i.ZERO or (size.x <= usable.x and size.y <= usable.y) or option[0] == get_value("video/window_size"): out.append(option)
+	return out
+
+
+static func _window_size(choice: String) -> Vector2i:
+	return Vector2i.ZERO if not "x" in choice else Vector2i(int(choice.get_slice("x", 0)), int(choice.get_slice("x", 1)))
+
+
+## Windowed mode at the chosen size, in the middle of its screen (a size bigger than the screen
+## shrinks to fit it), or maximized. Through the root Window, not DisplayServer.window_set_size:
+## on X11 that records the new size before the window changes, so the resize event then looks
+## like no change and the game kept drawing 1600 x 900 in a corner of a bigger window (dev
+## 2026-10-27, "IS this normal").
+func _apply_window_size() -> void:
+	if DisplayServer.get_name() == "headless" or _xr_running() or str(get_value("video/window")) != "windowed": return
+	var window: Window = get_tree().root if is_inside_tree() else null
+	if window == null: return
+	var choice := str(get_value("video/window_size"))
+	if choice == "maximized":
+		window.mode = Window.MODE_MAXIMIZED; return
+	if window.mode != Window.MODE_WINDOWED: window.mode = Window.MODE_WINDOWED
+	var usable := DisplayServer.screen_get_usable_rect(window.current_screen)
+	var size := _window_size(choice)
+	if size.x > usable.size.x or size.y > usable.size.y:
+		var fit := minf(float(usable.size.x) / size.x, float(usable.size.y - 40) / size.y)
+		size = Vector2i((Vector2(size) * fit).floor())
+	window.size = size
+	window.position = usable.position + (usable.size - size) / 2
 
 
 ## The FPS cap the game should run at (the title screen caps menus at 60 on its own).

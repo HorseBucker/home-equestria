@@ -1,5 +1,6 @@
 extends Node
-## Three manual checkpoints plus an independent rolling autosave, all single-file snapshots.
+## Three manual slots, any number of named manual saves (save_new) and an independent rolling
+## autosave, all single-file snapshots.
 ## Format versions, migrations, backups and the autosave on quit: docs/ALPHA_SAVES.md.
 signal changed
 const CONTEXT=preload("res://world/ai/world_context.gd")
@@ -23,6 +24,8 @@ const REGISTRY = preload("res://world/painting/painting_registry.gd")
 ## What menus show about each checkpoint (sidecar headers) and its screenshot.
 const CATALOGUE := preload("res://world/saves/save_catalogue.gd")
 const PREVIEW := preload("res://world/saves/save_preview.gd")
+## Names, tags and stars travel with a checkpoint when it is archived or deleted (world/saves/save_shelf.gd).
+const SHELF := preload("res://world/saves/save_shelf.gd")
 const COTTAGE_RESUME := preload("res://world/buildings/fluttershy/cottage_checkpoint_resume.gd")
 const FORMAT:=5
 static var MIGRATIONS:Dictionary={1:_from_1,2:_from_2,3:_from_3,4:_from_4}
@@ -259,7 +262,7 @@ func read(path:String)->Dictionary:
 	return opened.doc
 
 func _owned(path:String)->bool:
-	return path==directory.path_join("autosave.json") or path in [slot_path(0),slot_path(1),slot_path(2)] or (path.get_base_dir()==directory.path_join("archive") and path.get_file().ends_with(".json"))
+	return path==directory.path_join("autosave.json") or path in [slot_path(0),slot_path(1),slot_path(2)] or (path.get_base_dir()==directory.path_join("archive") and path.get_file().ends_with(".json")) or (path.get_base_dir()==directory and path.get_file().begins_with("save_") and path.get_file().ends_with(".json"))
 
 ## Flat rigs (seated VR, and the AnonPony rig whose camera is the pony's eye a head length ahead)
 ## are saved by their own place and yaw; the human desktop and room-scale rigs by the camera.
@@ -390,6 +393,12 @@ func _place_text(at:Vector3)->String:
 	if region_name.is_empty():return ""
 	return region_name if bool(region.get("inside",false)) else "Near "+region_name
 
+## Where the player stands now, as a save would name it ("Golden Oak Library, Ponyville").
+func place_now()->String:
+	if not is_instance_valid(host) or not host.get("player") is Node3D:return ""
+	var camera:Node3D=host._find_camera(host.player)
+	return _place_text(camera.global_position) if camera!=null else ""
+
 ## Menus that cover the view call this as they open: saves made while any is open (including the
 ## quit save) get the frame the player last saw instead of the menu. release_view when closing.
 func remember_view(holder:Object)->void:
@@ -446,6 +455,15 @@ func commit_harvest(receipt:String,amount:int,proposed:Dictionary)->bool:
 	return paid
 
 func save_slot(index:int)->bool:return save_to(slot_path(index),"Slot %d"%(index+1),"manual")
+
+## A new manual save beside the others (the saves browser's "New save", dev 2026-10-27: no more
+## three-slot limit). `title` names it in the browser; "" leaves the default name.
+func save_new(title:="")->bool:
+	if directory=="":return false
+	var path:=SHELF.new_save_path(directory)
+	if not save_to(path,"“%s”"%SHELF.clean_name(title) if not SHELF.clean_name(title).is_empty() else "Game","manual"):return false
+	if not SHELF.clean_name(title).is_empty():SHELF.set_save(path,{"name":title})
+	return true
 ## The arrival's final welcome payment and receipt share one authoritative checkpoint,
 ## using the same synchronous wallet seam as orchard payments. Completed food grants
 ## already have per-item story receipts, so a rejected payment never respawns them.
@@ -544,49 +562,30 @@ func _stage_story(path:String)->Dictionary:
 
 func archive(path:String)->bool:
 	if busy or not _owned(path):return false
-	var target:=directory.path_join("archive").path_join("%s_%s_%s.json"%[path.get_file().get_basename(),str(Time.get_unix_time_from_system()).replace(".","_"),str(Time.get_ticks_usec())])
-	var moved:=_archive_checkpoint(path,target)
+	var moved:=_archive_checkpoint(path,SHELF.archive_target(path))
 	if moved:message="Moved to archive."
 	changed.emit();return moved
 
-## The catalogue intentionally discovers backup-only checkpoints. A backup left at the old
-## path would resurrect an archived save as Continue, so move the complete file set together.
-func _checkpoint_files(path:String)->Array[String]:
-	var files:Array[String]=[path,path+".previous"]
-	files.append_array(CATALOGUE.sidecars(path))
-	return files
+## An archived checkpoint goes back among this world's saves, as a manual save.
+func unarchive(path:String)->bool:
+	if busy or not _owned(path) or path.get_base_dir()!=directory.path_join("archive"):return false
+	var problem:=SHELF.move_checkpoint(path,SHELF.restore_target(path))
+	message="Back from the archive." if problem=="" else "Could not take it out of the archive: %s."%problem
+	changed.emit();return problem==""
 
+## The catalogue intentionally discovers backup-only checkpoints. A backup left at the old
+## path would resurrect an archived save as Continue, so the complete file set moves together.
 func _archive_checkpoint(path:String,target:String)->bool:
-	if not FileAccess.file_exists(path) and not FileAccess.file_exists(path+".previous"):
-		message="Could not archive save: no checkpoint file was found.";return false
-	var sources:=_checkpoint_files(path)
-	var targets:=_checkpoint_files(target)
-	var moved:Array[int]=[]
-	for i in sources.size():
-		if not FileAccess.file_exists(sources[i]):continue
-		var result:=DirAccess.rename_absolute(ProjectSettings.globalize_path(sources[i]),ProjectSettings.globalize_path(targets[i]))
-		if result!=OK:
-			# A denied companion move must not report success or silently split a save.
-			var restored:=true
-			moved.reverse()
-			for prior in moved:
-				if DirAccess.rename_absolute(ProjectSettings.globalize_path(targets[prior]),ProjectSettings.globalize_path(sources[prior]))!=OK:restored=false
-			message="Could not archive save." if restored else "Could not finish archiving. Some files remain in the archive; no files were deleted."
-			return false
-		moved.append(i)
-	return true
+	var problem:=SHELF.move_checkpoint(path,target)
+	if problem!="":message="Could not archive save: %s."%problem
+	return problem==""
 
 func delete(path:String)->bool:
 	if busy or not _owned(path):return false
 	if not FileAccess.file_exists(path) and not FileAccess.file_exists(path+".previous"):return false
-	# Delete companions first, so an ordinary denied deletion leaves its primary loadable.
-	var files:=_checkpoint_files(path)
-	files.reverse()
-	for file in files:
-		if FileAccess.file_exists(file) and DirAccess.remove_absolute(ProjectSettings.globalize_path(file))!=OK:
-			message="Could not delete every save file.";changed.emit();return false
-	message="Save deleted."
-	changed.emit();return true
+	var problem:=SHELF.delete_checkpoint(path)
+	message="Save deleted." if problem=="" else "Could not delete every save file."
+	changed.emit();return problem==""
 
 func archives()->Array[String]:
 	var result:Array[String]=[]

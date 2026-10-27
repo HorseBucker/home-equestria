@@ -29,26 +29,26 @@ var _font_size := 23
 func setup(page_size: Vector2, text_size: int = 23) -> void:
 	_font_size = text_size
 	size = page_size; custom_minimum_size = page_size
-	theme = preload("res://world/ui/readable_text_theme.gd").make()
-	var background := StyleBoxFlat.new(); background.bg_color = Color("281f34")
-	background.set_corner_radius_all(14)
+	theme = preload("res://world/ui/menu_style.gd").theme()
+	# The host's menu card (world/ui/menu_card.gd) is the background.
+	var background := StyleBoxEmpty.new()
 	background.content_margin_left = 20; background.content_margin_right = 20
 	background.content_margin_top = 16; background.content_margin_bottom = 16
 	add_theme_stylebox_override("panel", background)
 	var layout := VBoxContainer.new(); layout.add_theme_constant_override("separation", 12); add_child(layout)
-	var heading := Label.new(); heading.text = "Credits & licences"
-	heading.add_theme_font_size_override("font_size", text_size + 11); layout.add_child(heading)
+	var heading := Label.new(); heading.text = "Credits & licences"; heading.theme_type_variation = "Heading"
+	heading.add_theme_font_size_override("font_size", text_size + 13); layout.add_child(heading)
 	var tabs := HBoxContainer.new(); tabs.add_theme_constant_override("separation", 6); layout.add_child(tabs)
 	for section: Array in SECTIONS:
 		var button := _button(tabs, str(section[0]), _show_section.bind(str(section[1])))
-		button.toggle_mode = true; _tabs.append(button)
+		button.toggle_mode = true; button.theme_type_variation = "Chip"; _tabs.append(button)
 	var navigation := HBoxContainer.new(); navigation.add_theme_constant_override("separation", 8); layout.add_child(navigation)
 	_previous = _button(navigation, "Previous", _step.bind(-1))
 	_counter = Label.new(); _counter.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_counter.size_flags_horizontal = Control.SIZE_EXPAND_FILL; _counter.add_theme_font_size_override("font_size", text_size - 2)
 	navigation.add_child(_counter)
 	_next = _button(navigation, "Next", _step.bind(1))
-	_title = Label.new(); _title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_title = Label.new(); _title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; _title.theme_type_variation = "Subheading"
 	_title.add_theme_font_size_override("font_size", text_size + 3); layout.add_child(_title)
 	_scroll = ScrollContainer.new(); _scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED; _scroll.follow_focus = true

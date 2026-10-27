@@ -22,6 +22,7 @@ func _load_everything(cover: Node) -> bool:
 	var clock_paused: bool = TimeOfDay.paused
 	TimeOfDay.paused = true
 	cover.show_text("Loading the world…")
+	cover.set_progress(0.6)
 	await ZoneManager.wait_until_idle()
 	if SHUTDOWN.active or not host.is_inside_tree() or host.is_queued_for_deletion():
 		TimeOfDay.paused = clock_paused
@@ -32,6 +33,7 @@ func _load_everything(cover: Node) -> bool:
 		while Time.get_ticks_msec() < deadline:
 			var left: int = host.population.startup_candidates().size()
 			cover.show_text("Waking up the ponies…\n%d out, %d to go" % [host.population.live.size(), left])
+			cover.set_progress(0.62 + 0.24 * host.population.live.size() / maxf(1.0, host.population.live.size() + left))
 			if left == 0: break
 			var stepped := true
 			for i in 10:

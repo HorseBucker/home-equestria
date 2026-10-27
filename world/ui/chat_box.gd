@@ -19,6 +19,8 @@ func setup(conversation: Node, body: Node, items: Node = null) -> void:
 	style.content_margin_left = 12; style.content_margin_right = 12; style.content_margin_top = 6; style.content_margin_bottom = 6
 	panel.add_theme_stylebox_override("panel", style)
 	add_child(panel)
+	# Pony speech captions sit above the field while it is open (world/ui/speech_caption.gd).
+	panel.add_to_group("caption_clearance")
 	field = LineEdit.new(); field.placeholder_text = "Say something…  (Enter to say, Esc to cancel)"
 	field.max_length = 400; field.add_theme_font_size_override("font_size", 20)
 	field.text_submitted.connect(_submit)

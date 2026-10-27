@@ -6,8 +6,9 @@ extends Node3D
 ## so the words keep their size on screen instead of shrinking away.
 ## A small 2D text viewport redraws only when content changes. Its physical quad uses a fog-free
 ## material; Label3D cannot disable its own fog.
-## Looking away routes the same words to the existing HUD presentation. The "Pony speech text"
-## setting (access/speech_text) can keep them on that HUD caption always; auto does so in VR.
+## Looking away routes the same words to the bottom caption (world/ui/speech_caption.gd on
+## desktop, a head-locked Label3D in VR). The "Pony speech text" setting (access/speech_text) can
+## keep them on that caption always; auto does so in VR.
 const PIXEL_SIZE := 0.0026
 const FONT_SIZE := 48
 const OUTLINE := 14
@@ -18,6 +19,7 @@ const NEAR_DISTANCE := 2.5
 const MAX_GROWTH := 6.0
 ## Text colours darker than this (relative luminance) are lifted toward white over the outline.
 const MIN_LUMINANCE := 0.35
+const CAPTION := preload("res://world/ui/speech_caption.gd")
 
 var text := "":
 	set(value):
@@ -44,12 +46,19 @@ var _settings: Node
 var _layout_pending := false
 var _layout_ready := false
 var looking_at_speaker := false
-var fallback_label: Label
+## Desktop: the bottom caption (world/ui/speech_caption.gd). VR: the head-locked Label3D.
+var fallback_label: CAPTION
 var fallback_label3d: Label3D
 var _fallback_speaker := ""
 var _owned_fallback: Node
+## For the desktop caption: all of her line said so far (the caption rolls its lines up instead of
+## paging) and the whole line (its width). Empty: the page in `text`.
+var caption_text := ""
+var caption_full := ""
+## Her colours for the bottom caption, the same as these words: fill, outline, shadow.
+var caption_palette := {}
 
-func set_fallback_labels(desktop: Label, xr: Label3D, speaker: String) -> void:
+func set_fallback_labels(desktop: CAPTION, xr: Label3D, speaker: String) -> void:
 	fallback_label = desktop
 	fallback_label3d = xr
 	_fallback_speaker = speaker
@@ -74,31 +83,22 @@ func _ensure_fallback(viewer: Node3D) -> void:
 		layer.layer = 90
 		add_child(layer)
 		_owned_fallback = layer
-		fallback_label = Label.new()
+		fallback_label = CAPTION.new()
 		layer.add_child(fallback_label)
-		fallback_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-		fallback_label.offset_left = -300
-		fallback_label.offset_right = 300
-		fallback_label.offset_top = -140
-		fallback_label.offset_bottom = -20
-		fallback_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		fallback_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		fallback_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		fallback_label.add_theme_color_override("font_color", Color.WHITE)
-		fallback_label.add_theme_color_override("font_outline_color", Color.BLACK)
-		fallback_label.add_theme_constant_override("outline_size", 10)
 
 func _update_fallback(show_words: bool) -> void:
-	var words := ((_fallback_speaker + ": ") if not _fallback_speaker.is_empty() else "") + text if show_words else ""
 	if is_instance_valid(fallback_label):
-		if fallback_label.text != words: fallback_label.text = words
-		var size := roundi(34 * subtitle_scale)
-		if fallback_label.get_theme_font_size("font_size") != size:
-			fallback_label.add_theme_font_size_override("font_size", size)
+		if show_words:
+			fallback_label.show_line(_fallback_speaker, caption_palette, text if caption_text.is_empty() else caption_text,
+				text if caption_full.is_empty() else caption_full)
+		else:
+			fallback_label.hide_line()
+	var words := ((_fallback_speaker + ": ") if not _fallback_speaker.is_empty() else "") + text if show_words else ""
 	if is_instance_valid(fallback_label3d):
 		if fallback_label3d.text != words: fallback_label3d.text = words
 		fallback_label3d.visible = show_words
-		fallback_label3d.modulate = Color.WHITE
+		# Her colour while it carries her words, over its black outline as above her head.
+		fallback_label3d.modulate = caption_palette.get("fill", Color.WHITE) if show_words else Color.WHITE
 		fallback_label3d.font_size = roundi(40 * subtitle_scale)
 
 ## Whether the words may go overhead at all; otherwise they stay on the HUD caption.
@@ -114,24 +114,11 @@ static func _cradled(actor: Node3D) -> bool:
 	var carry: Variant = actor.get("carry")
 	return carry is RefCounted and carry.get("cradle_goal") == true
 
-## Bridal carried, her caption is all of her words: above the hotbar, wider, and as tall as its
-## wrapped lines, growing upward. A Label only draws the lines that fit its height, so a long reply
-## lost its newest lines (the carry controls sit in the corner instead, player/cradle_controls.gd).
-const CRADLED_CAPTION_BOTTOM := -110.0
-const CRADLED_CAPTION_HALF_WIDTH := 450.0
-func _lift_caption(lift: bool) -> void:
-	if not is_instance_valid(fallback_label): return
-	if not lift:
-		if fallback_label.offset_bottom == -20.0: return
-		fallback_label.offset_left = -300.0; fallback_label.offset_right = 300.0
-		fallback_label.offset_top = -140.0; fallback_label.offset_bottom = -20.0
-		fallback_label.vertical_alignment = VERTICAL_ALIGNMENT_TOP
-		return
-	var lines := maxi(1, fallback_label.get_line_count())
-	var height := maxf(120.0, lines * fallback_label.get_line_height() + 8.0)
-	fallback_label.offset_left = -CRADLED_CAPTION_HALF_WIDTH; fallback_label.offset_right = CRADLED_CAPTION_HALF_WIDTH
-	fallback_label.offset_bottom = CRADLED_CAPTION_BOTTOM; fallback_label.offset_top = CRADLED_CAPTION_BOTTOM - height
-	fallback_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+## Bridal carried, the caption is where all of her words go (the carry controls sit in the corner
+## instead, player/cradle_controls.gd): it keeps more of her lines before rolling them away.
+const CRADLED_CAPTION_LINES := 5
+func _cradle_caption(cradled: bool) -> void:
+	if is_instance_valid(fallback_label): fallback_label.max_lines = CRADLED_CAPTION_LINES if cradled else CAPTION.MAX_LINES
 
 func _speaker_in_view(viewer: Node3D, anchor: Vector3) -> bool:
 	if not is_instance_valid(viewer) or not viewer.is_inside_tree(): return false
@@ -187,7 +174,8 @@ func _init() -> void:
 	var font_path := str(ProjectSettings.get_setting("dev/theme/custom_font", ""))
 	if not font_path.is_empty():
 		var font := load(font_path) as Font
-		if font != null: label.add_theme_font_override("font", font)
+		# From its outlines, so the thick outline is drawn in full (CAPTION.outlined()).
+		if font != null: label.add_theme_font_override("font", CAPTION.outlined(font))
 	label.size = Vector2(WRAP_WIDTH, 1.0)
 	label.position = Vector2(OUTLINE, OUTLINE)
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -242,6 +230,8 @@ func show_for(actor: Node3D, viewer: Node3D = null) -> void:
 			if _fallback_speaker.is_empty(): _fallback_speaker = str(identity.get("display_name"))
 	var palette := palette_for(coat)
 	speaker_color = _readable(palette.text)
+	# The caption at the bottom writes her words as they look here.
+	caption_palette = {"fill": speaker_color, "outline": Color.BLACK, "shadow": Color.BLACK}
 	plate_color = palette.plate
 	border_color = palette.border
 	label.add_theme_color_override("font_color", speaker_color)
@@ -335,7 +325,7 @@ func _update_pose() -> void:
 	global_transform = Transform3D(facing.scaled(Vector3.ONE * growth), anchor)
 	_ensure_fallback(viewer)
 	looking_at_speaker = _overhead_allowed(viewer) and not _cradled(actor) and actor.is_visible_in_tree() and _speaker_in_view(viewer, anchor)
-	_lift_caption(_cradled(actor))
+	_cradle_caption(_cradled(actor))
 	var enabled := subtitle_enabled and not text.is_empty()
 	visible = enabled and _layout_ready and looking_at_speaker
 	_update_fallback(enabled and not looking_at_speaker)

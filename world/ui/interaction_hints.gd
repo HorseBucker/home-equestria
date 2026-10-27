@@ -73,6 +73,7 @@ func setup(host: Node, ui: Node) -> void:
 		_flight2d.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_flight2d.add_theme_font_size_override("font_size", 24); _flight2d.add_theme_constant_override("outline_size", 8)
 		_flight2d.mouse_filter = Control.MOUSE_FILTER_IGNORE; _flight2d.hide()
+		_flight2d.add_to_group("caption_clearance")
 	var anchor := CenterContainer.new()
 	anchor.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	anchor.offset_top = -190; anchor.offset_bottom = -120; anchor.offset_left = -400; anchor.offset_right = 400
@@ -81,6 +82,8 @@ func setup(host: Node, ui: Node) -> void:
 	_prompt2d = HBoxContainer.new(); _prompt2d.add_theme_constant_override("separation", 10)
 	_prompt2d.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	anchor.add_child(_prompt2d)
+	# Pony speech captions sit above the prompt row while it shows (world/ui/speech_caption.gd).
+	_prompt2d.add_to_group("caption_clearance")
 	_hide_prompt()
 	process_physics_priority = 20
 

@@ -232,8 +232,10 @@ func _ready() -> void:
 	if xr_active:world_map.saves_requested.connect(save_menu.toggle)
 	else:
 		var save_button:=Button.new();save_button.text="Saved games · F6"
+		# A floating chip in the menus' look (world/ui/menu_style.gd "Float"), right under the map.
+		save_button.theme_type_variation="Float";save_button.icon=preload("res://world/ui/menu_icon.gd").texture("save",16)
 		world_map.panel.add_child(save_button);save_button.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
-		save_button.position=Vector2(world_map.panel.size.x-170,world_map.panel.size.y+4)
+		save_button.position=Vector2(world_map.panel.size.x-save_button.get_combined_minimum_size().x,world_map.panel.size.y+8)
 		save_button.pressed.connect(save_menu.toggle)
 	var runtime_profile: Node
 	if "--profile-runtime" in preload("res://world/dev_tools.gd").user_args():
@@ -288,6 +290,7 @@ func _ready() -> void:
 		trixie_show.name = "TrixieShow"; add_child(trixie_show); trixie_show.setup(self)
 	if not await _load_everything(cover): return
 	cover.show_text("Almost there…")
+	cover.set_progress(0.9)
 	var timberwolves := preload("res://world/creatures/everfree_timberwolves.gd").new()
 	timberwolves.name = "Timberwolves"; add_child(timberwolves)
 	timberwolves.camera_source = _player_eye_camera
