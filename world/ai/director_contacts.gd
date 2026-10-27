@@ -11,6 +11,7 @@ const CONTACT_PAUSE := 1.2
 const CONTACT_BATCH_MAX := 6.0
 const CONTACT_COOLDOWN := 8.0
 const CONTACT_STALE := 20.0
+const CRADLE_REST := preload("res://world/characters/locomotion/cradle_rest.gd")
 
 var host: Node
 var _remembered_contacts:Dictionary={}
@@ -94,6 +95,7 @@ func _on_physical_reaction(kind:String,id:String,deferred:bool=false,summary:=""
 	var event:=summary
 	if kind == "carried": event = "Anon has been holding you off the ground in his hands for over five seconds. You may simply enjoy being held in silence. If words add something, one or two can be enough. Do not invent where he intends to take you."
 	if kind == "carried_away": event = "Anon picked you up and is moving away from where he lifted you, carrying you in his hands. You may enjoy the ride silently; speak only if something needs saying. You do not yet know his destination or intent."
+	if kind.begins_with("carried") and CRADLE_REST.cradled(host.characters[id].node): event = CRADLE_REST.CARRIED_EVENT if kind == "carried" else CRADLE_REST.CARRIED_AWAY_EVENT
 	if kind == "thrown": event = "Anon just threw you from his hands. React briefly in your own voice to being tossed; surprise, protest or amusement should fit your character and relationship. Do not invent injuries or claim you have landed somewhere unless your current situation confirms it."
 	# Cuddling is her choice (dev 2026-09-28): the bed or couch only tells her he is lying there.
 	if kind.begins_with("anon_resting"): event = "Anon is lying down on the %s a few steps from you, resting. If you would like to cuddle with him, say so and use [cuddle]. It is just as fine to leave him be, or only say something." % kind.get_slice(":", 1)

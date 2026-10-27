@@ -1,6 +1,7 @@
 extends RefCounted
 ## Bounded semantic perception from game state, never from guessed mesh names.
 const LAYOUT := preload("res://world/world_layout.gd")
+const CRADLE_REST := preload("res://world/characters/locomotion/cradle_rest.gd")
 const VIEW_RANGE := 24.0
 const HEARING_RANGE := 12.0
 const MAX_PEERS := 12
@@ -141,6 +142,7 @@ func sample(id: String, observer: Node3D, characters: Dictionary, player: Node3D
 		"player_distance": INF, "player_visible": false, "player_audible": false,
 		"cover": "Indoor/outdoor status is unknown.", "events": [], "landmarks": [],
 		"asleep": observer.get("sleeping") == true,
+		"cradle": CRADLE_REST.situation(observer),
 		"riding": observer.has_meta("balloon_passenger"),
 		"aloft": observer.has_meta("balloon_passenger") and is_instance_valid(observer.get_meta("balloon_passenger")) and not bool(observer.get_meta("balloon_passenger").get("landed"))}
 	var previous: Dictionary = _observations.get(id, {})
@@ -346,13 +348,17 @@ func describe(sample: Dictionary, player_name: String, now: float) -> PackedStri
 	if sample.get("riding", false):
 		lines.append("- You are riding in Anon's hot-air balloon, in its basket with him. " + ("It is up in the air, drifting over Equestria; you step off once it lands with the gate open." if sample.get("aloft", false) else "It is resting on the ground with the gate open."))
 	if sample.get("asleep", false):
-		lines.append("- It is night and you were fast asleep, lying in bed with your eyes shut. A voice has half-woken you: you are drowsy, yawning, and would rather go back to sleep. If you decide to get up after all, use wake_up(); otherwise you stay in bed.")
+		if sample.get("cradle", "") == "asleep": lines.append(CRADLE_REST.ASLEEP_LINE)
+		else: lines.append("- It is night and you were fast asleep, lying in bed with your eyes shut. A voice has half-woken you: you are drowsy, yawning, and would rather go back to sleep. If you decide to get up after all, use wake_up(); otherwise you stay in bed.")
 	if str(sample.get("footing", "")) != "":
 		lines.append("- Where you stand: %s. This is certain: never deny it, and do not invent a ladder, stairs or any way down that is not listed here." % sample.footing)
-	var body := "being held in the player's arms right now" if sample.held else ("moving" if sample.moving else "at rest")
+	# Bridal carried (cradle_rest.gd), she knows how she is being held.
+	var cradled: bool = sample.get("cradle", "") in ["cradled", "drowsy"]
+	var body := (CRADLE_REST.BODY_WORDS if cradled else "being held in the player's arms right now") if sample.held else ("moving" if sample.moving else "at rest")
 	if str(sample.get("ground", "")) != "": body += ", " + str(sample.ground)
 	if str(sample.get("facing", "")) != "": body += ", facing " + str(sample.facing)
 	lines.append("- Your body: %s." % body)
+	if sample.get("cradle", "") == "drowsy": lines.append(CRADLE_REST.DROWSY_LINE)
 	if str(sample.get("sky", "")) != "": lines.append("- Light: %s." % sample.sky)
 	if sample.player_visible or sample.player_audible:
 		var motion := "standing still"
