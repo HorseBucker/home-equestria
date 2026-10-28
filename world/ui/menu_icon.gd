@@ -5,7 +5,7 @@ extends Control
 const KINDS := ["sparkle", "star", "star_filled", "heart", "gear", "chat", "quill", "note", "sun", "keyboard", "map",
 	"headset", "music", "globe", "access", "book", "folder", "tag", "trash", "archive", "play", "save", "pencil",
 	"plus", "close", "back", "forward", "check", "lifebuoy", "home", "moon", "search", "clock", "info", "refresh",
-	"cloud", "apple", "flower", "gem", "butterfly", "cupcake", "horseshoe", "tree", "palette", "dots", "pony", "image", "sort"]
+	"cloud", "apple", "flower", "gem", "butterfly", "cupcake", "horseshoe", "tree", "palette", "dots", "pony", "image", "sort", "potion"]
 ## Pictures a world folder can wear (the saves browser's folder picker).
 const FOLDER_KINDS := ["heart", "star_filled", "apple", "cloud", "moon", "sun", "flower", "gem", "butterfly", "cupcake", "horseshoe", "tree"]
 
@@ -201,6 +201,14 @@ static func paint(item: RID, rect: Rect2, kind: String, color: Color, stroke := 
 		"tree":
 			pen.dot(Vector2(12, 8), 5.5); pen.dot(Vector2(7.5, 11.5), 4.2); pen.dot(Vector2(16.5, 11.5), 4.2)
 			pen.fill(PackedVector2Array([Vector2(10.6, 13), Vector2(13.4, 13), Vector2(14, 21.5), Vector2(10, 21.5)]))
+		"potion":
+			# Zecora's flask: a round belly, a neck with a lip, bubbles rising.
+			pen.dot(Vector2(12, 15.5), 6.2)
+			pen.fill(pen.round_rect(Rect2(9.8, 5.5, 4.4, 6), 0.8))
+			pen.seg(Vector2(8.6, 5.6), Vector2(15.4, 5.6), pen.stroke * 0.9)
+			pen.dot(Vector2(10.2, 15.2), 1.2, Color(pen.color.darkened(0.45), pen.color.a))
+			pen.dot(Vector2(13.6, 17.2), 0.9, Color(pen.color.darkened(0.45), pen.color.a))
+			pen.dot(Vector2(16.8, 3.2), 1.0); pen.dot(Vector2(18.8, 6.0), 0.7)
 		"palette":
 			# A painter's palette: a round board with a bite out of its edge and a thumb hole.
 			var board := PackedVector2Array()

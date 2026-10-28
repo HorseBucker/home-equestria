@@ -8,7 +8,7 @@ extends Node
 ##
 ## Look (dev 2026-10-27 menu redesign, world/ui/menu_style.gd): the world blurs softly behind a
 ## storybook column on the left (the logo, where and when the player is, the actions); settings,
-## support and credits open on menu cards in the middle.
+## the journal (world/ui/journal_page.gd), support and credits open on menu cards in the middle.
 
 const TITLE_SCENE := "res://world/ui/title_screen.tscn"
 const LOG_BUNDLE := "res://world/debug/log_bundle.gd"
@@ -56,6 +56,7 @@ var canvas: CanvasLayer
 var _root: Control
 var _pages: Dictionary = {}  # name -> Control
 var _credits: Control
+var _journal: Control
 var _page := ""
 var _settings: Control
 var _support_status: Label
@@ -102,6 +103,11 @@ func setup(host: Node, inventory_ui: Node, saves_panel: Node, settings_panel: No
 	_card(root, "credits", credits_size).add_child(_credits)
 	_credits.setup(credits_size - Vector2(60, 56), 22)
 	_credits.back_requested.connect(_show.bind("main"))
+	_journal = preload("res://world/ui/journal_page.gd").new()
+	var journal_size := STYLE.fit_card(_screen(), SETTINGS_SIZE)
+	_card(root, "journal", journal_size).add_child(_journal)
+	_journal.setup(null); _journal.relayout(journal_size - Vector2(60, 56))
+	_journal.closed.connect(_show.bind("main"))
 	var fx := FX.new(); root.add_child(fx); fx.attach(root)
 	# A window resized while the menu shows: it fits the new one at once.
 	get_viewport().size_changed.connect(func() -> void: if opened and canvas.visible: _fit())
@@ -147,7 +153,7 @@ func _build_main(root: Control) -> void:
 	_where.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; box.add_child(_where)
 	box.add_child(HSeparator.new())
 	for entry in [["Continue", close, "play", "Primary"], ["Save game", _open_saves, "save", ""], ["Load game", _open_saves, "folder", ""],
-			["Settings", _show.bind("settings"), "gear", ""], ["AI Settings", _open_provider, "chat", ""],
+			["Journal", _show.bind("journal"), "book", ""], ["Settings", _show.bind("settings"), "gear", ""], ["AI Settings", _open_provider, "chat", ""],
 			["Credits", _show.bind("credits"), "heart", ""], ["Support", _show.bind("support"), "lifebuoy", ""], ["", Callable(), "", ""],
 			["Quit to title", quit_to_title, "home", "Ghost"], ["Quit game", quit_game, "moon", "Ghost"]]:
 		if str(entry[0]).is_empty():
@@ -156,7 +162,7 @@ func _build_main(root: Control) -> void:
 		var b := Button.new(); b.name = str(entry[0]).replace(" ", "").replace("&", ""); b.text = entry[0]
 		b.theme_type_variation = str(entry[3]); b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.icon = ICON.texture(str(entry[2]), 22)
-		b.custom_minimum_size = Vector2(0, 52 if str(entry[3]) == "Primary" else 43)
+		b.custom_minimum_size = Vector2(0, 50 if str(entry[3]) == "Primary" else 41)
 		b.add_theme_font_size_override("font_size", 24 if str(entry[3]) == "Primary" else 20)
 		b.pressed.connect(entry[1]); box.add_child(b)
 	_pony_notice = STYLE.label(PLAYER_FORM.PONY_NOTICE, "Muted", 15); _pony_notice.name = "PonyNotice"
@@ -181,7 +187,7 @@ func _describe_here() -> void:
 	_where.visible = not _where.text.is_empty()
 	# Small windows: a smaller logo keeps every button on screen.
 	var tall := _root.size.y
-	_logo.custom_minimum_size.y = clampf(tall * 0.14, 70.0, 160.0)
+	_logo.custom_minimum_size.y = clampf(tall * 0.125, 70.0, 150.0)
 	_logo.visible = tall >= 600.0
 
 
@@ -203,7 +209,7 @@ func _fit() -> void:
 	STYLE.sharpen(get_viewport(), scale)
 	# The logo's pixels follow its size on screen, which this scale changes.
 	STYLE.refit_picture(_logo)
-	for item: Array in [["settings", SETTINGS_SIZE, _settings], ["credits", CREDITS_SIZE, _credits]]:
+	for item: Array in [["settings", SETTINGS_SIZE, _settings], ["credits", CREDITS_SIZE, _credits], ["journal", SETTINGS_SIZE, _journal]]:
 		var card_size := STYLE.fit_card(window, item[1])
 		var holder: Control = (_pages[item[0]] as Control).get_child(0)
 		if holder.custom_minimum_size == card_size: continue
@@ -272,6 +278,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		open()
 	elif _page == "main": close()
 	elif _page == "settings" and not _settings.capturing.is_empty(): return
+	elif _page == "journal": _journal.back()
 	else: _show("main")
 	get_viewport().set_input_as_handled()
 
@@ -343,8 +350,10 @@ func _show(page_name: String) -> void:
 		_describe_here()
 		if is_instance_valid(_pony_notice): _pony_notice.visible = PLAYER_FORM.is_pony(PLAYER_FORM.active(get_tree()))
 	if page_name == "settings": _settings.refresh()
+	# The journal opens on the world being played; it chooses its own focus.
+	if page_name == "journal" and changed: _journal.open(str(game.get("context_world_id")) if is_instance_valid(game) else "")
 	var first: Control = _settings.first_focus() if page_name == "settings" else _first_button(_pages[page_name])
-	if first != null: first.grab_focus()
+	if first != null and page_name != "journal": first.grab_focus()
 	if changed:
 		_menu_sound("prop_ui_confirm")
 		_appear(_pages[page_name], page_name == "main")
