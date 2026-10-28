@@ -8,6 +8,11 @@ const TOWN_BUILDINGS := {"town_hall": "Ponyville Town Hall", "sugarcube_corner":
 ## leaves out of ai_observable, so they are listed here by node name (tools/rnl_scenery/plan.py).
 const BRIDGES := {"bridge_01": "South bridge", "bridge_02": "Market road bridge", "bridge_03": "East bridge", "bridge_04": "Cottage bridge"}
 const MARKET_STALL := "Town/Market/kiosk_01_02"
+## World-map regions whose homestead stands in the loaded town: asked for by name, a pony walks to
+## the homestead, not to the region's map spawn (Sweet Apple Acres' is ~1 km east of the barn the
+## Apples live by, so AJ, Apple Bloom and Twilight walked the opposite way; player report
+## 2026-10-28). "alt" adds the words ponies use for it ("the farm", "the orchard").
+const REGION_HOMESTEADS := {"sweet_apple_acres": {"landmark": "landmark:appleacres_barned_01", "alt": "farm orchard apple farm"}}
 static var _cache: Array = []
 static var _stamp := -INF
 
@@ -82,7 +87,13 @@ static func entries(tree: SceneTree) -> Array:
 		if int(r.get("phase", 0)) >= 7: continue
 		var spawn := WorldLayout.spawn(str(r.id))
 		var at := Vector3(spawn.x, WorldLayout.center(str(r.id)).y, spawn.y)
-		out.append({"id": "region:" + str(r.id), "label": str(r.get("name", r.id)), "kind": "region:" + str(r.get("kind", "")), "position": at})
+		var entry := {"id": "region:" + str(r.id), "label": str(r.get("name", r.id)), "kind": "region:" + str(r.get("kind", "")), "position": at}
+		var homestead: Dictionary = REGION_HOMESTEADS.get(str(r.id), {})
+		if not homestead.is_empty():
+			entry.alt = str(homestead.alt)
+			for e: Dictionary in out:
+				if e.id == homestead.landmark: entry.position = e.position; break
+		out.append(entry)
 	_cache = out.filter(func(e): return _live_entry(e, tree))
 	return _cache
 

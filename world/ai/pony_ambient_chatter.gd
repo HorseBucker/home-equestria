@@ -21,7 +21,16 @@ func eligible(node: Node3D, player: Node3D, radius: float) -> bool:
 	if node.has_method("is_speaking") and node.is_speaking(): return false
 	if node.has_method("action_interruption_reason") and node.action_interruption_reason() != "": return false
 	if on_errand(node): return false
+	if hushed(node): return false
 	return node.global_position.distance_squared_to(player.global_position) <= radius*radius
+
+## Inside a hush zone (a node in group "hush_zones" whose hushes(position) is true): Trixie's
+## stage show keeps the ponies around the stage quiet while she performs (dev 2026-10-28).
+static func hushed(node: Node3D) -> bool:
+	if not is_instance_valid(node) or not node.is_inside_tree(): return false
+	for zone: Node in node.get_tree().get_nodes_in_group("hush_zones"):
+		if zone.has_method("hushes") and bool(zone.hushes(node.global_position)): return true
+	return false
 
 ## Walking somewhere on a plan step or command a conversation cannot pause: she would talk over
 ## her shoulder and walk off. Standing at her task (a visit, tending) she may still chat.

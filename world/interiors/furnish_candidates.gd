@@ -9,6 +9,10 @@ const RUG := 16
 const GAP := 0.03
 const TALL_M := 1.35
 const BED_SIZE := Vector3(2.05, 1.1, 2.1)
+## Furniture Anon placed (world/housing/home_furnishing.gd ITEM_LAYER on top of layer 1). The
+## built-in layout ignores it: whether those items had loaded before the house furnished changed
+## the player's home layout from load to load (bug board #34, 2026-10-28).
+const PLAYER_FURNISHING_LAYER := 1 << 17
 
 
 static func _wall_candidates(context: RefCounted, area: Dictionary, id: String, size: Vector3, spec: Dictionary, step: Dictionary) -> Array:
@@ -265,7 +269,10 @@ static func _physics_clear(context: RefCounted, c: Vector2, yaw: float, size: Ve
 	query.shape = shape
 	query.collision_mask = 1
 	query.transform = Transform3D((context._yaw_basis(yaw) as Basis), (context._world(c, room, 0.12 + shape.size.y * 0.5) as Vector3))
-	var hits := (context.space as PhysicsDirectSpaceState3D).intersect_shape(query, 1)
+	var hits := (context.space as PhysicsDirectSpaceState3D).intersect_shape(query, 8)
+	hits = hits.filter(func(hit: Dictionary) -> bool:
+		var body := hit.collider as CollisionObject3D
+		return body == null or (body.collision_layer & PLAYER_FURNISHING_LAYER) == 0)
 	if not hits.is_empty() and (context.debug_hits as PackedStringArray).size() < 4:
 		var debug_hits: PackedStringArray = context.debug_hits
 		debug_hits.append(str(hits[0].collider.get_parent().name) + "/" + str(hits[0].collider.name))

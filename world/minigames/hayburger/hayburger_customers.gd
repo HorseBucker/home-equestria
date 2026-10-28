@@ -46,8 +46,6 @@ var _last_recruit: Dictionary = {}
 var _cursor := 0
 var _rng := RandomNumberGenerator.new()
 var _last_reason := ""
-## Where each booked shift-group pony stood before she was brought to the door (id -> Transform3D).
-var _origins: Dictionary = {}
 
 func setup(game: Node, restaurant: Node3D) -> void:
 	release_all()
@@ -158,7 +156,6 @@ func on_order_served(order: Dictionary, _reward: int = 0) -> void:
 
 func release_all() -> void:
 	_working = false
-	_origins.clear()
 	_orders.clear()
 	for id: String in _visitors.keys(): _release(id, "Restaurant released")
 
@@ -361,7 +358,6 @@ func book_group(count: int) -> Array[String]:
 		# left the failed ones standing in the street, and Ponyville emptied).
 		if _claim(str(entry[1]), actor, false):
 			booked.append(str(entry[1]))
-			_origins[str(entry[1])] = origin
 		else:
 			_send_back(str(entry[1]), actor, origin)
 	_recruit_at = _clock + RECRUIT_SECONDS
@@ -520,7 +516,8 @@ func _eat(visit: Dictionary) -> void:
 	_clear_priority(visit)
 	visit.meal = true
 	visit.phase = "eating"
-	visit.until = _clock + _rng.randf_range(6.0, 10.0)
+	# Long enough to chat with the customer you just served (player bug board #29).
+	visit.until = _clock + _rng.randf_range(20.0, 40.0)
 	visit.deadline = float(visit.until) + 5.0
 	visit.nav.stay()
 	var actor: Node3D = visit.actor
@@ -563,17 +560,6 @@ func _release(id: String, reason: String) -> void:
 	if is_instance_valid(visit.actor) and visit.actor.get_meta("hayburger_customer", "") == visit.owner:
 		visit.actor.remove_meta("hayburger_customer")
 	_withdraw(visit)
-
-## The shift is over and the screen is dark: every booked group pony is released and put back
-## where she was booked from, so nopony is left to find her own way home from the door.
-func return_group() -> void:
-	for id: String in _origins.keys():
-		_release(id, "Shift over")
-		var population := _population()
-		var live: Dictionary = population.get("live") if is_instance_valid(population) else {}
-		var actor: Node3D = live[id].get("actor") as Node3D if live.has(id) else null
-		if is_instance_valid(actor) and not _interrupted(actor): _send_back(id, actor, _origins[id])
-	_origins.clear()
 
 func _send_back(id: String, actor: Node3D, origin: Transform3D) -> void:
 	var nav: Node = actor.get_node_or_null("Navigator")

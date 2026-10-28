@@ -163,6 +163,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and _interact():
 			get_viewport().set_input_as_handled()
 		return
+	# Right click on a shut door knocks (player bug board #31); on a pony it slaps
+	# (desktop_interactions.gd), which this ray never reaches first.
+	if event is InputEventMouseButton and (event as InputEventMouseButton).pressed and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_RIGHT:
+		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED and not is_instance_valid(held) and _ray.is_colliding() \
+				and _ray.get_collider() != null and _ray.get_collider().has_method("knock_from_desktop"):
+			if _ray.get_collider().knock_from_desktop(): preload("res://player/door_knock.gd").answer(_ray.get_collider())
+			get_viewport().set_input_as_handled()
+		return
 	if not (event is InputEventKey) or not event.pressed or event.echo:
 		return
 	# Turn a carried pony round (Settings: "Turn carried pony", B by default); held, it switches

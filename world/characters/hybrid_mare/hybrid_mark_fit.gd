@@ -4,6 +4,10 @@ extends RefCounted
 const WIDTH := .094977
 const HEIGHT := .141091
 const LIMIT := Vector2(.088,.126)
+## Sheets whose artwork faces the other way: its X runs back to front on both flanks. Fluttershy's
+## three butterflies climbed toward her head instead of her tail (player bug board #30, 2026-10-28,
+## a screenshot against the show).
+const MIRRORED := ["fluttershy"]
 static var cache := {}
 static var dash_right_cache := {}
 static var sheet_cache := {}
@@ -37,6 +41,7 @@ static func apply(mi: MeshInstance3D, texture: Texture2D, id: String) -> void:
 	var scale := minf(LIMIT.x/artwork.x,LIMIT.y/artwork.y)
 	var size := artwork*scale
 	var left := String(mi.name).ends_with("_L") or String(mi.name).ends_with(".L")
+	var across := (-1.0 if left else 1.0) * (-1.0 if id in MIRRORED else 1.0)
 	var mesh := ArrayMesh.new()
 	for surface in mi.mesh.get_surface_count():
 		var arrays := mi.mesh.surface_get_arrays(surface)
@@ -45,7 +50,7 @@ static func apply(mi: MeshInstance3D, texture: Texture2D, id: String) -> void:
 		for i in fitted.size():
 			var local := (original[i]-Vector2(.463125,.505762))*Vector2(WIDTH,HEIGHT)
 			# Both sides remain upright; the native U direction reverses across flanks.
-			fitted[i] = center+Vector2(local.y/size.y*extent.x,local.x/size.x*extent.y*(-1.0 if left else 1.0))
+			fitted[i] = center+Vector2(local.y/size.y*extent.x,local.x/size.x*extent.y*across)
 		arrays[Mesh.ARRAY_TEX_UV]=fitted
 		var flags: int = mi.mesh.surface_get_format(surface)&Mesh.ARRAY_FLAG_USE_8_BONE_WEIGHTS
 		mesh.add_surface_from_arrays(mi.mesh.surface_get_primitive_type(surface),arrays,[],{},flags)

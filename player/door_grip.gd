@@ -26,7 +26,7 @@ func grab_take(side: String, offer: Dictionary, sample: Dictionary) -> bool:
 	if not is_instance_valid(hand) or not offer.target.begin_offered_grip(hand,point): return false
 	holding[side]=offer.target; hand.set_meta("door_grip",self); hand.set_meta("inventory_busy",true)
 	_hover(side,null); inventory._haptic(side); return true
-func _physics_process(_delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	if not is_instance_valid(inventory):return
 	for side: String in ["left","right"]:
 		var sample: Dictionary=inventory.hand_sample(side)
@@ -39,6 +39,8 @@ func _physics_process(_delta: float) -> void:
 		var active:bool=sample.get("active",false) and is_instance_valid(hand) and sample.has("aim") and aim.is_finite() and pose.is_finite() and point.is_finite()
 		var down:bool=active and float(sample.get("grip",0))>(GRIP_RELEASE if pressed[side] else GRIP_PRESS)
 		var locked:bool=inventory.player_body.controls_locked if is_instance_valid(inventory.player_body) and "controls_locked" in inventory.player_body else false
+		# A fist against a shut leaf knocks (hinged_door.hand_rap); an open hand pushes instead.
+		if active and not locked and down and not holding.has(side) and not inventory.hand_busy(side): _rap(side,point,delta)
 		if not active or locked:
 			armed[side]=false
 		elif not down:
@@ -107,6 +109,10 @@ func _palm(side: String, point: Vector3) -> void:
 		if door.palm_push(side, point): pushed = door; break
 	if pushed != null and _pushing.get(side) != pushed: inventory._haptic(side)
 	_pushing[side] = pushed
+func _rap(side: String, point: Vector3, delta: float) -> void:
+	for door: Node in get_tree().get_nodes_in_group("house_doors"):
+		if door is Node3D and door.has_method("hand_rap") and door.global_position.distance_to(point) <= 3.0 and door.hand_rap(side, point, delta):
+			preload("res://player/door_knock.gd").answer(door)
 func _hover(side: String, door: Node) -> void:
 	var previous:Variant=hovered.get(side)
 	var old:Node=previous if is_instance_valid(previous) else null

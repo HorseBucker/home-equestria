@@ -20,6 +20,11 @@ const NUDGE_AFTER := 7.0
 const GIVE_UP_AFTER := 12.0
 const NUDGE := "[Observed situation, not player speech] You walked up to Anon and said something a few seconds ago, but he has not answered or reacted at all. Check whether he is listening, in character: a short 'Hello?', his name, a wave, or a playful poke at him ignoring you. One short sentence; no action tags needed."
 const GIVE_UP := "Anon has not answered you at all, even after you tried again. Say a short, slightly puzzled or teasing goodbye in character and head off."
+## Knocking (player bug board #31, conversation_director.answer_knock): a pony who is home walks
+## out to the player at her door and greets him, no dice and regardless of the approach settings.
+const KNOCK := "[Observed situation, not player speech] Anon knocked on your front door and you came out to answer it. He is standing at your door now. Greet him in character and ask what brings him by. One or two short sentences; no action tags needed."
+var knocked := false
+var knock_goal := Vector3.INF
 var nudged := false
 var said_at := 0.0   # director clock when her last line finished
 var previous: Dictionary = {}
@@ -47,6 +52,7 @@ func eligible(d: Node, who: String, here: String, radius: float) -> bool:
 	var pony: Node3D = d.characters[who].node
 	if clock < float(cooldowns.get(who, 0.0)) or not nearby(d, pony, radius, here): return false
 	if pony.has_method("is_speaking") and pony.is_speaking(): return false
+	if preload("res://world/ai/pony_ambient_chatter.gd").hushed(pony): return false
 	if d._now() - float(d.characters[who].get("chat_last", -1e9)) < 120.0: return false
 	var company: Dictionary = pony.get_meta("social_group", {})
 	if company.get("members", []).size() > 1 or str(company.get("id", "")).begins_with("rail:"): return false
@@ -57,6 +63,8 @@ func tick(d: Node, delta: float) -> void:
 	clock += delta; _tick -= delta
 	if _tick > 0: return
 	_tick = .5
+	if knocked and active():
+		advance(d); return
 	if not bool(d.config.get_value("player_approaches/enabled", true)) or not preload("res://world/ai/ai_config.gd").background_allowed(d.config):
 		end(d); return
 	if active():
@@ -94,10 +102,67 @@ func tick(d: Node, delta: float) -> void:
 	if pony.has_method("request_posture"): pony.request_posture("stand")
 	if not nav.command_destination(goal, "trot"): cancel()
 
+## Navigator owners a knock may take her from: wandering, the living world, outings, chat stops,
+## lounging on her couch. A story, an errand, bedtime or anything else the player or a system started keeps her.
+const KNOCK_FREE_OWNERS := ["life:", "social:", "chat:", "leisure:couch:"]
+
+static func can_answer_knock(pony: Node3D) -> bool:
+	if not is_instance_valid(pony) or not pony.is_inside_tree() or pony.get("sleeping") == true: return false
+	if pony.has_method("is_held") and pony.is_held(): return false
+	var navigator: Node = pony.get_node_or_null("Navigator")
+	if navigator == null: return false
+	var owner := str(navigator.command_owner)
+	if owner.is_empty(): return true
+	for prefix: String in KNOCK_FREE_OWNERS:
+		if owner.begins_with(prefix): return true
+	return false
+
+## The free pony inside `home` nearest its door, or null when nopony is home to answer.
+static func knock_answerer(door: Node3D, home: Node3D, candidates: Array) -> Node3D:
+	var best: Node3D = null
+	var best_distance := INF
+	for pony: Variant in candidates:
+		if not (pony is Node3D) or not can_answer_knock(pony) or not home.contains((pony as Node3D).global_position, true): continue
+		var distance := (pony as Node3D).global_position.distance_to(door.global_position)
+		if distance < best_distance: best = pony; best_distance = distance
+	return best
+
+## Where she stands: just outside her door, up to a step toward the player but never closer than
+## about 1.4 m to him.
+static func knock_spot(home: Node3D, navigator: Node, player: Vector3) -> Vector3:
+	var outside: Vector3 = home.outside()
+	var toward := player - outside
+	toward.y = 0.0
+	# A player on the doorstep: she steps out beside him instead of into him.
+	if toward.length() < 1.4:
+		var side := toward.cross(Vector3.UP).normalized() if toward.length() > 0.05 else Vector3.RIGHT
+		return navigator.command_support(outside + side * sqrt(1.96 - toward.length_squared()))
+	return navigator.command_support(outside + toward.limit_length(clampf(toward.length() - 1.4, 0.0, 1.0)))
+
+## She walks out of her house to the player standing at its door.
+func answer_knock(d: Node, who: String, home: Node3D) -> bool:
+	var pony: Node3D = d.characters[who].node
+	var navigator: Node = pony.get_node("Navigator")
+	if active(): cancel()
+	var goal: Vector3 = knock_spot(home, navigator, d.player_head.global_position)
+	if not goal.is_finite(): return false
+	id = who; actor = pony; nav = navigator; region = player_region(d.player_head); player_start = d.player_head.global_position
+	previous = {"owner":nav.command_owner,"wander":nav.wander_enabled,"limit":nav.command_speed_limit,"pace":nav.command_pace_target}
+	deadline = clock + 75.0; talking = false; knocked = true; knock_goal = goal
+	nav.command_owner = OWNER; nav.wander_enabled = false
+	nav.command_speed_limit = INF; nav.command_pace_target = -1.0
+	if pony.has_method("request_posture"): pony.request_posture("stand")
+	if not nav.command_destination(goal, "walk"): cancel(); return false
+	print("[knock] %s comes to the door" % who)
+	return true
+
 func advance(d: Node) -> void:
-	if not d.characters.has(id) or not is_instance_valid(d.player_head) or not nearby(d, actor, 28.0, region):
+	# Answering a knock she starts indoors, maybe in another navigation region than the porch.
+	var near: bool = knocked and is_instance_valid(actor) and actor.is_inside_tree() and is_instance_valid(d.player_head) \
+		and actor.global_position.distance_to(d.player_head.global_position) < 40.0
+	if not d.characters.has(id) or not is_instance_valid(d.player_head) or not (near or nearby(d, actor, 28.0, region)):
 		end(d); return
-	if player_region(d.player_head) != region or d.player_head.global_position.distance_to(player_start) > 5.0:
+	if (not knocked and player_region(d.player_head) != region) or d.player_head.global_position.distance_to(player_start) > (8.0 if knocked else 5.0):
 		end(d); return
 	if lingering:
 		# The player answered (or is answering): hand her to the conversation; engaged() keeps her.
@@ -122,13 +187,17 @@ func advance(d: Node) -> void:
 		return
 	if not is_instance_valid(nav) or nav.command_owner != OWNER or clock > deadline or d.state != "idle" or d.speech.state == "hearing":
 		cancel(); return
+	# Answering a knock she may first get up from lying down, which interrupts the walk: resume it.
+	if knocked and nav.state in [nav.State.INTERRUPTED, nav.State.IDLE] and actor.global_position.distance_to(knock_goal) > 1.0:
+		if nav.state == nav.State.IDLE and nav.get("_has_target") != true: nav.command_destination(knock_goal, "walk")
+		return
 	# State alone is not arrival: wait for actual proximity and unobstructed hearing.
 	if nav.state in [nav.State.UNREACHABLE, nav.State.BLOCKED, nav.State.INTERRUPTED]: cancel(); return
 	var offset: Vector3 = actor.global_position - d.player_head.global_position
 	if Vector2(offset.x, offset.z).length() > 2.8: return
 	if not d.awareness.can_hear(actor, d.player_head, 4.0): cancel(); return
 	nav.stay(); talking = true
-	if not d.begin_player_greeting(id): cancel()
+	if not d.begin_player_greeting(id, KNOCK if knocked else ""): cancel()
 
 func finished(d: Node = null) -> void:
 	if not active(): return
@@ -143,4 +212,4 @@ func cancel() -> void:
 	if is_instance_valid(nav) and nav.command_owner == OWNER:
 		nav.stay(); nav.command_owner = previous.owner; nav.wander_enabled = previous.wander
 		nav.command_speed_limit = previous.limit; nav.command_pace_target = previous.pace
-	id = ""; actor = null; nav = null; talking = false; lingering = false; nudged = false; previous.clear()
+	id = ""; actor = null; nav = null; talking = false; lingering = false; nudged = false; knocked = false; previous.clear()

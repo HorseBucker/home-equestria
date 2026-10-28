@@ -136,6 +136,7 @@ func _fill_list(t: int, list: VBoxContainer) -> void:
 		list.add_child(_lighting_controls)
 		_lighting_controls.setup(font_size, _redraw)
 	if str(tab[0]) == "Mods": _build_mods(list)
+	if str(tab[0]) == "Updates": _build_updates.call_deferred(list)
 	if str(tab[0]) == "VR comfort":
 		_note(list, "A comfort vignette is not available yet.")
 	if str(tab[0]) == "Controls":
@@ -466,6 +467,16 @@ func _build_mods(list: VBoxContainer) -> void:
 			refresh()
 		toggle.pressed.connect(func() -> void: Mods.switch(file, file in loader.disabled_files()); show.call())
 		toggle.text = "Off" if file in disabled else "On"
+
+
+## Which version this is, an update button while a newer one is out, and a check on demand
+## (world/update/updater.gd, the same updater the title and the pause menu show).
+func _build_updates(list: VBoxContainer) -> void:
+	if not is_instance_valid(list) or not list.is_inside_tree(): return
+	var updater: Node = preload("res://world/update/updater.gd").shared(self)
+	updater.attach(list, Callable(), font_size)
+	_button(list, "Check for updates now", func() -> void: updater.check()).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	updater.changed.connect(_redraw)
 
 
 func _mod_text(pack: Dictionary, mods: Array) -> String:

@@ -271,8 +271,14 @@ var _after_speech_actions: Dictionary = {} # Speaker -> guarded transport, only 
 var _intent_epoch := 0
 
 ## AI-only semantic intent queue. Acceptance is not delivery; failures remain pending.
-func queue_generated_intent(id: String, intent: String, key: String, valid: Callable, finished := Callable(), once := false) -> bool:
-	return _intents.queue_generated_intent(id, intent, key, valid, finished, once)
+func queue_generated_intent(id: String, intent: String, key: String, valid: Callable, finished := Callable(), once := false, firm := false) -> bool:
+	return _intents.queue_generated_intent(id, intent, key, valid, finished, once, firm)
+
+## A firm generated line is being thought or spoken: the player's words wait for its end
+## instead of cutting it off (director_speech_input.gd, handle_text).
+func floor_held() -> bool:
+	return state != "idle" and not _authored_active.is_empty() and _authored_lines.has(_authored_active) \
+		and bool(_authored_lines[_authored_active].get("firm", false))
 
 ## Compatibility for old callers: their text is context for generation, never spoken directly.
 func queue_authored_line(id: String, text: String, key: String, valid: Callable, finished := Callable()) -> bool:
@@ -305,6 +311,9 @@ func participant_busy(id: String) -> bool:
 ## still in earshot. Released for a while after her goodbye.
 const CHAT_HOLD_SECONDS := 60.0
 var _released: Dictionary = {}      # id -> when she said goodbye (free until spoken to again)
+## The player's words that came in during a firm line (floor_held), answered once it ends.
+var _held_text := ""
+var _held_utterance: Array = []
 var _farewell: Dictionary = {}      # id -> time her goodbye must finish by
 func engaged(id: String) -> bool:
 	return _holds.engaged(id)
@@ -356,6 +365,7 @@ func _on_world_reopened(_world_id: String) -> void:
 	_farewell.clear(); _farewell_reason = ""
 	_sit_agreed.clear(); _group_request = ""
 	_player_text = ""; _physical_context = ""; _partner = {}
+	_held_text = ""; _held_utterance = []
 	for id: String in characters:
 		awareness.forget(id)
 		for key: String in ["history", "spoken", "heard"]: characters[id][key] = []
@@ -495,6 +505,9 @@ func _remember_outcome(event:Dictionary,id:String)->void:
 func handle_text(text: String) -> void:
 	text = text.strip_edges()
 	if text == "": return
+	if floor_held():
+		_held_text = text
+		return
 	player_approaches.cancel()
 	if state != "idle": interrupt()
 	_ambient_continuation.clear()
@@ -683,6 +696,18 @@ func told_paid(id: String, note: String) -> void:
 
 ## Called only after the deterministic approach reaches the player.
 ## `context` replaces the default "walked over to Anon" situation (princess visits).
+## A knock on a house's front door (player/door_knock.gd, player bug board #31): the free pony at
+## home nearest the door comes out to greet the player.
+func answer_knock(door: Node3D, home: Node3D) -> bool:
+	if not is_instance_valid(player_head): return false
+	var nodes: Array = []
+	for who: String in characters: nodes.append(characters[who].node)
+	var pony: Node3D = preload("res://world/ai/pony_player_approaches.gd").knock_answerer(door, home, nodes)
+	for who: String in characters:
+		if pony != null and characters[who].node == pony: return player_approaches.answer_knock(self, who, home)
+	print("[knock] nopony answers at %s" % home.label())
+	return false
+
 func begin_player_greeting(id: String, context := "") -> bool:
 	if _authored_holds(id) or (context.is_empty() and _encounter_claimed(id)) or quiet_moment(id): return false
 	if state != "idle" or group.active() or speech.state == "hearing" or not characters.has(id): return false
@@ -1260,6 +1285,14 @@ func _process_step(delta: float) -> void:
 			_pending_contacts.erase(id)
 			_on_physical_reaction(contact.kind, id, true)
 			break
+	# Words held back during a firm line go first, before the next queued line starts.
+	if state == "idle" and not floor_held():
+		if not _held_utterance.is_empty():
+			var said: Array = _held_utterance; _held_utterance = []
+			_speech_input._on_utterance(said[0], said[1], said[2])
+		elif not _held_text.is_empty():
+			var typed := _held_text; _held_text = ""
+			handle_text(typed)
 	_tick_authored()
 	_flush_contacts()
 	if state == "idle":

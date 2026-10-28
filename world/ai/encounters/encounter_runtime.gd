@@ -56,7 +56,8 @@ func _changed() -> void:
 
 ## `definition`: {"title", "place", "participants": [ids], "knows": {id: [facts]},
 ## "commitment": {id: text}, "allowed": text, "release_after": {id: beat id},
-## "movers": {id: [owner prefixes allowed to move her during the encounter]},
+## "movers": {id: [owner prefixes allowed to move her during the encounter]}, "hold": true
+## (model actions may not move her; otherwise only the forest intro holds),
 ## "beats": [{"id", "label", "speaker", "intent", "await_turn_s"}]}. A beat without
 ## intent is driven by its story controller. Legacy text fields identify required speech
 ## but their canned prose is never submitted or spoken. Failed generation stays pending.
@@ -174,8 +175,8 @@ func _navigator(pid: String) -> Node:
 const LEAVING := ["resume_routine", "go_home", "go_to", "fly_to", "lead", "follow", "cancel",
 	"loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "air_show", "sit_on_seat", "stay", "approach",
 	"stand", "sit", "lie_down", "wake_up", "hover", "land", "cuddle", "buck_player"]
-## Only the forest intro holds them, until the teleport to Ponyville; in every other scene the
-## model may move a participant (dev 2026-10-15) and the story re-leads her when she is idle.
+## Only the forest intro (until the teleport to Ponyville) and "hold" encounters hold them; in
+## every other scene the model may move a participant (dev 2026-10-15) and the story re-leads her.
 func blocks_action(speaker: String, type: String) -> bool:
 	if type not in LEAVING: return false
 	for key: String in _for(speaker):
@@ -183,7 +184,10 @@ func blocks_action(speaker: String, type: String) -> bool:
 	return false
 
 const INTRO := "arrival_rescue"
+## Also any encounter begun with "hold": true (Trixie's stage show: Anon's words must not walk her
+## off the stage mid-show, dev 2026-10-28).
 func _holds(key: String) -> bool:
+	if bool((_store().get(key, {}) as Dictionary).get("hold", false)): return true
 	if key != INTRO: return false
 	var story: Node = get_tree().get_first_node_in_group("arrival_story") if is_inside_tree() else null
 	return story == null or not story.has_method("holds_actions") or bool(story.holds_actions())

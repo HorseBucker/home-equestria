@@ -61,6 +61,7 @@ func situation_block(id: String) -> String:
 		lines.append("- " + _company_line(node.get_meta("social_group")))
 	if outcomes != "": lines.append("Your action outcomes (not dialogue):\n" + outcomes)
 	if node.has_meta("hayburger_order_context"): lines.append(str(node.get_meta("hayburger_order_context")))
+	if node.has_meta("show_watching"): lines.append(str(node.get_meta("show_watching")))
 	if node.has_meta("relationship_runtime"):
 		lines.append(node.get_meta("relationship_runtime").prompt_for(id))
 	if entry.has("chat_since") and host._now() - float(entry.get("chat_last", -1e9)) < 120.0 and host._now() - float(entry.chat_since) > 150.0 \
@@ -193,7 +194,7 @@ func solo_head() -> String:
 	return "%s%s\n\n%s\n%s\n%s\n\n%s\n%s\n\n%s" % [host._system_base.strip_edges(), LLM.HEAD_END, SOLO_FORMAT, FACE_TAGS.PROMPT, IMPRESSIONS.PROMPT, SOLO_ACTIONS, RELATIONSHIP_RULES, _anon_pony_line().trim_prefix("- ")]
 
 
-const SOLO_FORMAT := "REPLY FORMAT: only what you say out loud, plain text, never JSON. Square-bracket tags may go anywhere in the line and are never spoken. Example: [face:happy] Sure, let's go! [follow: player]"
+const SOLO_FORMAT := "REPLY FORMAT: only what you say out loud, plain text, never JSON. Square-bracket tags may go anywhere in the line and are never spoken. Example: [face:happy] Oh, hello there! [look_at: player]"
 ## The tags nearly every pony has. They are explained once in the fixed head; the live part names the
 ## ones she cannot use right now and explains her extra ones (flight, letters, kisses, story actions).
 const SOLO_CORE := ["look_at", "approach", "follow", "go_to", "lead", "step", "stay", "cancel", "resume_routine", "go_home",
@@ -202,9 +203,9 @@ const SOLO_CORE := ["look_at", "approach", "follow", "go_to", "lead", "step", "s
 const SOLO_ACTIONS := """ACTION TAGS: at most one movement or posture tag plus one [look_at] per reply, only tags available now, with the TARGETS, PONY_IDs and LOCATIONS (or a mapped place's exact name) listed at the end, exactly as written. Never coordinates, code or JSON.
 - [look_at: TARGET] look a moment ([look_at: player, 5] for seconds)
 - [approach: TARGET] walk up close and stop, e.g. to come closer to whoever you talk with
-- [follow: TARGET] go along with someone ([follow: player, left, 2] for side and metres); [follow: player] is an open-ended walk with no destination. It stands you up itself (never add [stand]) and ends on [cancel], a new movement, or when they stay far out of reach
+- [follow: TARGET] go along with someone ([follow: player, left, 2] for side and metres); [follow: player] is an open-ended walk with no destination, never your own trip. It stands you up itself (never add [stand]) and ends on [cancel], a new movement, or when they stay far out of reach
 - [go_to: LOCATION] walk to any named destination, including an accepted earlier invitation ([go_to: LOCATION, trot] for pace); far places are fine (you travel in stages); ends on arrival
-- [lead: TARGET, LOCATION] take someone to a place, waiting for them
+- [lead: TARGET, LOCATION] take someone to a place, waiting for them; when Anon agrees to come along where you are going, [lead: player, LOCATION]
 - [step: DIRECTION] a few steps: forward, back, left, right, away (from the player) or aside (out of someone's way, e.g. a doorway); [step: back, 2] for 1-6 metres
 - [stay: SECONDS] hold position 0.5-600 seconds ([stay] = 30); never instead of a story route
 - [cancel] stop; [resume_routine] back to your day; [go_home] go home to rest a while (say goodbye first)
@@ -506,7 +507,7 @@ for example
 %s: [face:happy] Oh, hello there! [look_at: player]
 Add [to: participant_id] on a line spoken to a friend instead of to Anon. Only [silence] means comfortable silence.
 Pick the first speaker by whom the player addresses by name, the topic and each pony's observations, never merely the first listed or closest. If one pony is addressed, usually only she answers; others may chime in naturally, no roll call. Usually one to four brief lines (at most four, at most 600 characters each); one line is fine. Speaker IDs only from the participants above; a speaker may address a friend, then the player, on separate lines. Speech only, no narration.
-A line's tags belong to its speaker and must be among her own tags above; ordinary speech needs none. At most one movement tag plus one [look_at] per line. For a named outing every participant who agreed to join, proposer and invited companions alike, gets [go_to: LOCATION]; never leave someone behind because another pony answered the player. After the spoken acceptance, an agreeing invited companion may have an action-only line, companion_id: [go_to: SAME_LOCATION], which does not count toward the four. Never move uninvolved or declining ponies. [follow: player] only for an open-ended walk without a named destination; it stands her up itself (never add [stand]). To come closer to whoever she talks with, [approach: TARGET]; [follow] only to go along with someone. Never coordinates, code or JSON. A movement request is not proof of arrival.
+A line's tags belong to its speaker and must be among her own tags above; ordinary speech needs none. At most one movement tag plus one [look_at] per line. For a named outing every participant who agreed to join, proposer and invited companions alike, gets [go_to: LOCATION]; never leave someone behind because another pony answered the player. After the spoken acceptance, an agreeing invited companion may have an action-only line, companion_id: [go_to: SAME_LOCATION], which does not count toward the four. Never move uninvolved or declining ponies. [follow: player] only for an open-ended walk without a named destination; when Anon agrees to come along where she is going, [lead: player, LOCATION]; it stands her up itself (never add [stand]). To come closer to whoever she talks with, [approach: TARGET]; [follow] only to go along with someone. Never coordinates, code or JSON. A movement request is not proof of arrival.
 """ % [host.group.members[0]])
 	return "\n\n".join(parts)
 

@@ -146,7 +146,7 @@ const SPECS := {
 	"voice/tts": {"type": "bool", "labels": ["Ponese only", "Character voices (TTS)"]},
 	# Ponese A/B (world/ai/chatter_voice.gd): syllable grains, or each letter's name said fast.
 	"voice/ponese_style": {"type": "choice", "options": [["syllables", "Syllables"], ["letters", "Letter by letter"]]},
-	"world/day_length_minutes": {"type": "float", "min": 15.0, "max": 360.0, "presets": [15.0, 30.0, 60.0, 90.0, 180.0, 360.0], "fmt": "%.0f minutes"},
+	"world/day_length_minutes": {"type": "float", "min": 15.0, "max": 720.0, "presets": [15.0, 30.0, 60.0, 90.0, 180.0, 360.0, 720.0], "fmt": "%.0f real minutes"},
 	"world/season_days": {"type": "int", "min": 5, "max": 60, "step": 5, "fmt": "%d days"},
 	"world/weather_frequency": {"type": "int", "min": 0, "max": 300, "step": 25, "fmt": "%d%%", "zero": "Never wet"},
 	"world/opening": {"type": "choice", "options": [["play", "Play the forest opening"], ["skip", "Skip, start in Golden Oak"]], "note": "new games"},
@@ -192,7 +192,7 @@ const TABS := [
 	["VR comfort", [["Start in VR", "vr/start_mode"], ["Play style", "vr/seated"], ["Turning", "vr/turn_mode"], ["Snap angle", "vr/snap_angle"], ["Smooth turn speed", "vr/turn_speed"], ["Movement stick", "vr/move_hand"],
 		["Standing height (cm)", "player/height_cm"], ["Measure my height now", "action:measure_height"], ["Forget measured height", "action:forget_height"]]],
 	["Audio", [["Master volume", "audio/master"], ["Voice volume", "audio/voice"], ["Effects volume", "audio/sfx"], ["Ambience volume", "audio/ambience"], ["Flight wind volume", "audio/wind"], ["Music volume", "audio/music"], ["Pony voices", "voice/tts"], ["Ponese style", "voice/ponese_style"]]],
-	["World", [["Full day", "world/day_length_minutes"], ["Season length", "world/season_days"], ["Title screen view", "title/view"], ["Rain & snow frequency", "world/weather_frequency"], ["Opening", "world/opening"], ["Pony size", "ponies/size"]]],
+	["World", [["Day length (time speed)", "world/day_length_minutes"], ["Season length", "world/season_days"], ["Title screen view", "title/view"], ["Rain & snow frequency", "world/weather_frequency"], ["Opening", "world/opening"], ["Pony size", "ponies/size"]]],
 	["Accessibility", [["Subtitles", "access/subtitles"], ["Subtitle size", "access/subtitle_scale"], ["Caption background", "access/caption_card"], ["Background opacity", "access/caption_opacity"], ["Pony speech text", "access/speech_text"], ["Menu text size", "access/ui_scale"], ["Reduced motion", "access/reduced_motion"]]],
 	["Reading", [["Paper", "reading/paper"], ["Font", "reading/font"], ["Text size", "reading/size"]]],
 	["Mods", []],
@@ -247,7 +247,7 @@ var message := ""
 ## patch pack's copy of it would never run: Quality, created next, hands the node the mounted
 ## copy when it carries REVISION (autoload/quality.gd _adopt_patched_settings). That copy's
 ## _init must not mount the packs or boot the mods again (PACKS_MOUNTED).
-const REVISION := 4
+const REVISION := 5
 const PACKS_MOUNTED := &"home_equestria_packs_mounted"
 
 

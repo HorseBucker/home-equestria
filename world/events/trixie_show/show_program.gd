@@ -1,6 +1,7 @@
 extends Node
-## What Trixie performs at one show: curtain-up, 2-4 acts drawn from ACT_POOL (unseen acts
-## favoured, never guaranteed) and one finale. Each act moves simple props only (cards, doves,
+## What Trixie performs at one show: an opening speech, curtain-up, 4-5 acts drawn from ACT_POOL
+## (unseen acts favoured, never guaranteed) with a bow and an announcement between them, and one
+## finale; about five minutes (dev 2026-10-28: "it was over way too fast!"). Each act moves simple props only (cards, doves,
 ## hat, rings, box, cannon) with tweens and per-frame maths; Trixie lights her horn, turns and
 ## is teleported in puffs, never animated. About one show in five, one part goes wrong (Trixie
 ## canon). Built by show_runtime.gd, freed after the show.
@@ -16,6 +17,7 @@ const RINGS := preload("res://world/events/trixie_show/props/magician_rings.glb"
 const BOX := preload("res://world/events/trixie_show/props/magician_box.glb")
 const TABLE := preload("res://world/events/trixie_show/props/side_table.glb")
 const DOVE := preload("res://world/events/trixie_show/props/dove.glb")
+const OVERHEAD := preload("res://world/ai/overhead_dialogue.gd")
 
 const ACT_POOL := ["cards", "pick_card", "doves", "rings", "vanish", "cannon"]
 const FINALES := {"fireworks": 3.0, "confetti": 2.0, "dove_release": 1.0}
@@ -25,6 +27,24 @@ const CARD_SCALE := 1.8
 const DOVE_COUNT := 7
 ## Stage doves read from the back of the crowd; life size they were specks.
 const DOVE_SCALE := 1.8
+## The doves circle over the crowd this long before they land.
+const DOVE_CIRCLE := 22.0
+## How each trick is named in her lines, and what a watcher sees of it (her prompt, audience.gd).
+const ACT_TEASE := {"cards": "the dancing deck of cards", "pick_card": "a card trick with a volunteer from the audience",
+	"doves": "the doves from the magic hat", "rings": "the linking rings", "vanish": "the vanishing box",
+	"cannon": "the human cannonball"}
+const ACT_MOMENT := {"cards": "Trixie makes a whole deck of cards dance in the air in rings, stars and a heart",
+	"pick_card": "Trixie floats a card to a pony in the crowd and makes it reappear from her hat",
+	"doves": "Trixie pulls a flock of doves out of her magician's hat",
+	"rings": "Trixie spins and links metal rings in the air around herself",
+	"vanish": "Trixie vanishes from her magic box and reappears behind the crowd",
+	"cannon": "Trixie fires a human cannonball out of her stage cannon"}
+## What the crowd calls out (words over their heads, no AI call): a few ponies at each moment.
+const SHOUTS := {
+	"gasp": ["Ooooh!", "Whoa!", "No way!", "Wow!", "How?!", "Ooh, look!"],
+	"smile": ["Bravo!", "Yay, Trixie!", "Encore!", "Amazing!", "Woo-hoo!", "That was awesome!", "Again!"],
+	"giggle": ["Pfft!", "Hee hee!", "Oops!", "Ha!", "Nice one, Trixie!"],
+}
 const PALETTE := [Color(0.35, 0.55, 1.0), Color(0.7, 0.4, 1.0), Color(1.0, 0.5, 0.85), Color(1.0, 0.85, 0.35), Color(0.5, 0.95, 1.0)]
 
 var runtime: Node
@@ -51,7 +71,7 @@ var _reaction_touches: Dictionary = {}
 func prepare(rt: Node, seed_value: int, seen: Array) -> void:
 	runtime = rt
 	rng.seed = seed_value
-	var count := rng.randi_range(2, 4)
+	var count := rng.randi_range(4, 5)
 	var pool: Array = ACT_POOL.duplicate()
 	while acts.size() < count and not pool.is_empty():
 		var total := 0.0
@@ -81,13 +101,18 @@ func begin() -> void:
 	_run()
 
 func _run() -> void:
+	if not await _opening_speech(): return
 	await _curtain_up()
-	for act: String in acts:
+	for i in acts.size():
 		if not _alive: return
+		var act := acts[i]
+		_moment(str(ACT_MOMENT.get(act, "a magic trick")))
 		var done: bool = await call("_act_" + act)
 		if not _alive: return
 		if done: performed.append(act)
-		if not await _wait(2.0): return
+		var next: String = str(ACT_TEASE.get(acts[i + 1], "another trick")) if i + 1 < acts.size() else "the grand finale"
+		if not await _interlude(act if done else "", next): return
+	_moment("Trixie's grand finale")
 	await call("_finale_" + ("fizzle" if mishap == "finale" else finale))
 	if not _alive: return
 	performed.append("finale:" + ("fizzle" if mishap == "finale" else finale))
@@ -97,6 +122,79 @@ func _wait(seconds: float) -> bool:
 	if not _alive: return false
 	var ok: bool = await SHUTDOWN.seconds(self, seconds)
 	return ok and _alive
+
+## Says her line for this moment and waits until it was spoken (at most `cap` seconds, at least
+## `minimum`, so a show nopony hears still keeps its pace). False once the show is gone.
+func _speak(key: String, detail := "", cap := 25.0, minimum := 0.0) -> bool:
+	var said := [false]
+	var queued: bool = runtime.line(key, detail, func() -> void: said[0] = true)
+	var waited := 0.0
+	while waited < minimum or (queued and not said[0] and waited < cap):
+		if not await _wait(0.25): return false
+		waited += 0.25
+	return true
+
+func _moment(text: String) -> void:
+	if runtime.audience != null: runtime.audience.set_moment(text)
+
+## Before the first trick (dev 2026-10-28: "make trixie give a speech on stage before her show
+## starts"): she has floated up, the spotlights find her and she addresses the town.
+func _opening_speech() -> bool:
+	if not await _wait(2.2): return false
+	var mark := _mark()
+	var front: Vector3 = runtime.stage_front()
+	for s: float in [-1.0, 1.0]:
+		var from := front + _facing() * 9.0 + _side() * 6.0 * s + Vector3.UP * 7.0
+		_lights.append(FX.spotlight(_stage_set, from, mark + Vector3.UP * 1.0))
+	_moment("Trixie stands in the spotlights giving her opening speech before the show")
+	_shout("smile")
+	if not await _wait(2.0): return false
+	if not await _speak("speech_open", "", 30.0, 7.0): return false
+	if not await _wait(1.0): return false
+	if not await _speak("speech_promise", str(ACT_TEASE.get(acts[0], "her first trick")) if not acts.is_empty() else "her first trick", 30.0, 7.0): return false
+	return await _wait(1.5)
+
+## Between two tricks: applause, a bow and her announcement of the next one.
+func _interlude(last: String, next: String) -> bool:
+	_shout("smile")
+	if not await _wait(3.0): return false
+	_moment("Trixie takes a bow between tricks; next she promises %s" % next)
+	if not await _speak("interlude", "%s|%s" % [str(ACT_TEASE.get(last, "that trick")), next], 25.0, 9.0): return false
+	return await _wait(3.0)
+
+## A few watchers call out (words over their heads, staggered).
+func _shout(kind: String) -> void:
+	if runtime.audience == null or not SHOUTS.has(kind): return
+	var watchers: Array[Node3D] = runtime.audience.watchers()
+	var lines: Array = SHOUTS[kind]
+	for i in mini(watchers.size(), rng.randi_range(2, 4)):
+		var pick := rng.randi_range(i, watchers.size() - 1)
+		var pony := watchers[pick]; watchers[pick] = watchers[i]; watchers[i] = pony
+		get_tree().create_timer(rng.randf_range(0.1, 1.4)).timeout.connect(_pop_shout.bind(weakref(pony), str(lines[rng.randi() % lines.size()])))
+
+func _pop_shout(ref: WeakRef, text: String) -> void:
+	var pony := ref.get_ref() as Node3D
+	if not _alive or not is_instance_valid(_stage_set) or not is_instance_valid(pony) or not pony.is_inside_tree(): return
+	var coat := Color.WHITE
+	var identity: Variant = pony.get("identity")
+	if identity is Resource and identity.get("coat_fill") is Color: coat = identity.get("coat_fill")
+	var label := Label3D.new()
+	label.text = text
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.font_size = 56
+	label.outline_size = 14
+	label.pixel_size = 0.0035
+	label.modulate = OVERHEAD._readable(coat)
+	label.outline_modulate = Color.BLACK
+	label.transparency = 1.0
+	_stage_set.add_child(label)
+	var head: Vector3 = pony.speech_indicator_point() if pony.has_method("speech_indicator_point") else pony.global_position + Vector3.UP * 1.5
+	label.global_position = head
+	var tween := label.create_tween()
+	tween.tween_property(label, "transparency", 0.0, 0.15)
+	tween.parallel().tween_property(label, "global_position", head + Vector3.UP * 0.35, 2.8)
+	tween.tween_property(label, "transparency", 1.0, 0.5)
+	tween.tween_callback(label.queue_free)
 
 # ------------------------------------------------------------------ helpers
 func _trixie() -> Node3D: return runtime.trixie()
@@ -123,6 +221,7 @@ func _line(key: String, detail := "") -> void:
 ## Audience faces: "smile" (a happy touch for a while), "gasp" (a surprised look), "giggle".
 func _react(kind: String, seconds := 4.0) -> void:
 	if runtime.audience == null: return
+	_shout(kind)
 	if kind == "smile" and not runtime.audience.watchers().is_empty():
 		SOUNDS.play_at(_stage_set, "show_applause", runtime.stage_front() + _facing() * 8.0)
 	for pony: Node3D in runtime.audience.watchers():
@@ -213,18 +312,13 @@ func _float_out(node: Node3D, delay := 0.0) -> void:
 # ------------------------------------------------------------------ curtain up
 func _curtain_up() -> void:
 	var mark := _mark()
-	var front: Vector3 = runtime.stage_front()
-	for s: float in [-1.0, 1.0]:
-		var from := front + _facing() * 9.0 + _side() * 6.0 * s + Vector3.UP * 7.0
-		_lights.append(FX.spotlight(_stage_set, from, mark + Vector3.UP * 1.0))
 	for s: float in [-1.0, 1.0]:
 		FX.sparks(_stage_set, _edge(2.6 * s), 2.5)
 	_poof(mark + Vector3.UP * 0.8, 1.6)
 	SOUNDS.play_at(_stage_set, "show_boom", mark)
 	_horn(3.0)
 	_react("gasp", 2.0)
-	_line("intro")
-	await _wait(6.0)
+	await _wait(4.0)
 
 # ------------------------------------------------------------------ cards
 var _cards_gen := 0
@@ -356,9 +450,11 @@ func _cards_clear() -> void:
 func _act_cards() -> bool:
 	_cards_build()
 	_line("cards")
-	_horn(14.0)
+	_horn(40.0)
 	_poof(_card_state.deck, 0.6)
-	if not await _wait(1.5): return false
+	if not await _wait(3.0): return false
+	_card_state.formation = "shuffle"
+	if not await _wait(5.0): return false
 	for f: String in ["ring", "star", "letter", "heart"]:
 		_card_state.formation = f
 		if f == "ring": _react("gasp", 2.0)
@@ -368,13 +464,13 @@ func _act_cards() -> bool:
 			_cards_scatter(false)
 			_react("giggle", 5.0)
 			_line("mishap", "her cards collapsed and rained down on her own head")
-			if not await _wait(5.0): return false
+			if not await _wait(6.0): return false
 			_cards_clear()
 			return true
-		if not await _wait(3.2): return false
+		if not await _wait(7.0): return false
 	_react("smile", 6.0)
 	_cards_scatter(true)
-	if not await _wait(6.0): return false
+	if not await _wait(8.0): return false
 	_cards_clear()
 	return true
 
@@ -385,9 +481,9 @@ func _act_pick_card() -> bool:
 	var volunteer: Node3D = watchers[rng.randi() % watchers.size()]
 	_cards_build()
 	_line("pick_card", preload("res://world/population/pony_population_config.gd").pony_name(str(volunteer.identity.id)))
-	_horn(12.0)
+	_horn(30.0)
 	_card_state.formation = "deck"
-	if not await _wait(1.5): return false
+	if not await _wait(3.0): return false
 	# One card floats to the volunteer and hovers before her eyes.
 	var card := CARD.instantiate() as Node3D
 	_stage_set.add_child(card)
@@ -400,7 +496,7 @@ func _act_pick_card() -> bool:
 	var t := card.create_tween()
 	t.tween_property(card, "global_position", at, 2.0).set_trans(Tween.TRANS_SINE)
 	card.look_at_from_position(card.global_position, volunteer.global_position + Vector3.UP, Vector3.UP)
-	if not await _wait(4.5): return false
+	if not await _wait(8.0): return false
 	# Back into the deck, a mid-air shuffle, and the same card comes out of the hat.
 	t = card.create_tween()
 	t.tween_property(card, "global_position", _card_state.deck, 1.6).set_trans(Tween.TRANS_SINE)
@@ -408,7 +504,7 @@ func _act_pick_card() -> bool:
 	card.visible = false
 	if nav != null: nav.face_point = runtime.stage_front() - _facing() * 2.0
 	_card_state.formation = "shuffle"
-	if not await _wait(3.0): return false
+	if not await _wait(6.0): return false
 	_card_state.formation = "deck"
 	_hat.visible = true
 	_poof(_hat.global_position + Vector3.UP * 0.4, 0.7)
@@ -417,7 +513,7 @@ func _act_pick_card() -> bool:
 	t = card.create_tween()
 	t.tween_property(card, "global_position", _hat.global_position + Vector3.UP * 1.6, 1.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_react("gasp", 2.5)
-	if not await _wait(3.0): return false
+	if not await _wait(5.0): return false
 	_react("smile", 5.0)
 	if is_instance_valid(aura): aura.release()
 	_poof(card.global_position, 0.5)
@@ -428,12 +524,12 @@ func _act_pick_card() -> bool:
 # ------------------------------------------------------------------ doves
 func _act_doves() -> bool:
 	_line("doves")
-	_horn(6.0)
+	_horn(10.0)
 	_hat.visible = true
 	var aura: Node3D = AURA.create(_hat, _colour(), 1.0, -1.0, true)
 	var tip := _hat.create_tween()
 	tip.tween_property(_hat, "rotation:z", 0.5, 0.6).set_trans(Tween.TRANS_BACK)
-	if not await _wait(1.6): return false
+	if not await _wait(3.5): return false
 	var mouth := _hat.global_position + Vector3.UP * 0.45
 	if mishap == "doves":
 		FX.puff(_stage_set, mouth, Color(0.3, 0.3, 0.32), 1.2)
@@ -446,7 +542,7 @@ func _act_doves() -> bool:
 		_react("gasp", 2.5)
 	if is_instance_valid(aura): aura.release()
 	_hat.create_tween().tween_property(_hat, "rotation:z", 0.0, 0.8)
-	if not await _wait(9.0): return false
+	if not await _wait(DOVE_CIRCLE + 2.0): return false
 	_react("smile", 5.0)
 	return true
 
@@ -495,7 +591,7 @@ func _doves_step(delta: float) -> void:
 			target = dove.global_position + (Vector3.UP * 0.6 + (_side() * cos(off) - _facing()) * 1.0).normalized() * 9.0
 		elif t < 1.0:
 			target = centre + (dove.global_position - centre) * 0.5 + Vector3.UP
-		elif t < 9.0 or (_dove_state.perches as Array).is_empty():
+		elif t < DOVE_CIRCLE or (_dove_state.perches as Array).is_empty():
 			var a := off + t * 0.9
 			target = centre + Vector3(cos(a), 0.25 * sin(t * 2.0 + off), sin(a)) * radius
 		else:
@@ -525,7 +621,7 @@ func _doves_leave() -> void:
 func _act_rings() -> bool:
 	if _rings.is_empty(): return false
 	_line("rings")
-	_horn(14.0)
+	_horn(30.0)
 	var trixie := _trixie()
 	var auras: Array = []
 	for r: Node3D in _rings: auras.append(AURA.create(r, _colour(), 0.8, -1.0, true))
@@ -538,7 +634,7 @@ func _act_rings() -> bool:
 		tween.tween_property(_rings[i], "rotation", Vector3(PI * 0.5, a, 0.0), 1.5)
 	if not await _wait(1.6): return false
 	var spin := 0.0
-	while spin < 5.0:
+	while spin < 14.0:
 		spin += 0.05
 		for i in _rings.size():
 			var a := float(i) / _rings.size() * TAU + spin * 1.6
@@ -559,7 +655,7 @@ func _act_rings() -> bool:
 			chain.tween_property(_rings[i], "global_position", _mark() + Vector3.UP * 2.0 + _facing() * 0.8 + _side() * (i - 1.5) * 0.24, 1.2)
 			chain.tween_property(_rings[i], "global_basis", Basis.looking_at(-_facing(), Vector3.UP) * Basis(Vector3.UP, PI * 0.5 * (i % 2)), 1.2)
 		_react("gasp", 2.0)
-		if not await _wait(3.5): return false
+		if not await _wait(6.0): return false
 		_react("smile", 5.0)
 	var home := create_tween().set_parallel(true)
 	for i in _rings.size():
@@ -575,19 +671,19 @@ func _act_vanish() -> bool:
 	var trixie := _trixie()
 	if trixie == null: return false
 	_line("vanish")
-	_horn(4.0)
+	_horn(8.0)
 	var start := _box.global_transform
 	var middle := _mark() - _facing() * 0.7
 	var t := _box.create_tween()
 	t.tween_property(_box, "global_position", middle, 1.4).set_trans(Tween.TRANS_SINE)
-	if not await _wait(1.6): return false
+	if not await _wait(3.5): return false
 	# Into the box: she vanishes in a puff, the box spins.
 	_poof(trixie.global_position + Vector3.UP * 0.8, 1.2)
 	trixie.visible = false
 	t = _box.create_tween()
-	t.tween_property(_box, "rotation:y", _box.rotation.y + TAU * 2.0, 2.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
+	t.tween_property(_box, "rotation:y", _box.rotation.y + TAU * 4.0, 6.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN_OUT)
 	_react("gasp", 3.0)
-	if not await _wait(2.6): return false
+	if not await _wait(7.0): return false
 	_poof(_box.global_position + Vector3.UP * 1.3, 1.6)
 	if mishap == "vanish":
 		# She was never gone: the puff clears and she is still standing there, sooty.
@@ -604,7 +700,7 @@ func _act_vanish() -> bool:
 		if is_instance_valid(trixie.get_node_or_null("Navigator")): trixie.get_node("Navigator").face_point = _mark()
 		_react("smile", 6.0)
 		_line("vanish_reveal")
-		if not await _wait(5.0): return false
+		if not await _wait(9.0): return false
 		# Back over the heads of the crowd to the stage in her own magic.
 		runtime.levitate(trixie, _mark(), 2.6)
 		if not await _wait(2.8): return false
@@ -628,28 +724,31 @@ func _finale_fireworks() -> void:
 	_horn(10.0)
 	var behind := _mark() - _facing() * 5.0
 	var listener: Node3D = runtime._camera()
-	for i in rng.randi_range(8, 12):
+	for i in rng.randi_range(16, 24):
 		var from := behind + _side() * rng.randf_range(-4.0, 4.0)
 		var apex := from + Vector3.UP * rng.randf_range(12.0, 20.0) + _facing() * rng.randf_range(3.0, 8.0) + _side() * rng.randf_range(-6.0, 6.0)
 		FX.firework(_stage_set, from, apex, PALETTE[rng.randi() % PALETTE.size()], listener)
 		if i == 1: _react("gasp", 3.0)
-		if not await _wait(rng.randf_range(0.5, 1.3)): return
+		if i == 10: _react("gasp", 3.0)
+		if not await _wait(rng.randf_range(0.6, 1.6)): return
 	SOUNDS.play_at(_stage_set, "show_crackle", _mark() + Vector3.UP * 20.0)
 	_react("smile", 8.0)
 	_doves_leave()
-	await _wait(4.0)
+	await _wait(7.0)
 
 func _finale_confetti() -> void:
 	_line("finale")
-	_horn(4.0)
+	_horn(12.0)
 	var front: Vector3 = runtime.stage_front()
-	for s: float in [-1.0, 1.0]:
-		FX.confetti(_stage_set, _edge(2.4 * s), Vector3.UP + _facing() * 0.6 - _side() * 0.3 * s)
-		FX.sparks(_stage_set, _edge(3.2 * s), 2.0, PALETTE[rng.randi() % PALETTE.size()])
-	SOUNDS.play_at(_stage_set, "show_boom", front)
-	_react("smile", 8.0)
+	for wave in 3:
+		for s: float in [-1.0, 1.0]:
+			FX.confetti(_stage_set, _edge(2.4 * s), Vector3.UP + _facing() * 0.6 - _side() * 0.3 * s)
+			FX.sparks(_stage_set, _edge(3.2 * s), 2.0, PALETTE[rng.randi() % PALETTE.size()])
+		SOUNDS.play_at(_stage_set, "show_boom", front)
+		_react("gasp" if wave < 2 else "smile", 3.0 if wave < 2 else 8.0)
+		if wave < 2 and not await _wait(3.5): return
 	_doves_leave()
-	await _wait(6.0)
+	await _wait(8.0)
 
 func _finale_dove_release() -> void:
 	_line("finale")
@@ -658,10 +757,10 @@ func _finale_dove_release() -> void:
 	FX.feathers(_stage_set, _hat.global_position + Vector3.UP * 0.45)
 	_spawn_doves(DOVE_COUNT, _hat.global_position + Vector3.UP * 0.45)
 	_react("gasp", 2.5)
-	if not await _wait(4.0): return
+	if not await _wait(9.0): return
 	_doves_leave()
 	_react("smile", 6.0)
-	await _wait(5.0)
+	await _wait(7.0)
 
 func _finale_fizzle() -> void:
 	_line("mishap", "her grand finale firework fizzled with a tiny pop")

@@ -31,7 +31,7 @@ const SHOW_LIMIT := 8
 ## Tag replies (dev 2026-10-02: "harden the ai action calling system into tags so even a dumb ai
 ## model can understand its options and output the correct structure like ponyponyparadise"):
 ## the reply is the spoken line; square-bracket tags in it are never spoken:
-##   [face:happy] Sure, let's go! [follow: player]
+##   [face:happy] Oh, hello there! [look_at: player]
 ## Action tags are [type] or [type: arg, arg] with arguments in SIGNATURES order; missing ones take
 ## their default, numbers are clamped into range, spellings are forgiven (ALIASES), and a tag that
 ## still cannot be used is dropped (listed in "dropped") while the line is spoken. Feelings:
@@ -227,7 +227,7 @@ static func _tag_action(type: String, value: String, turn: int, index: int) -> D
 static func tag_rules(capabilities: Array, targets: Array, places: String, include_bindings := true) -> String:
 	var lines: Array = ["REPLY FORMAT (plain text, never JSON):",
 		"Write only what you say out loud. Put tags in square brackets anywhere in the line; tags are never spoken.",
-		"Example: [face:happy] Sure, let's go! [follow: player]"]
+		"Example: [face:happy] Oh, hello there! [look_at: player]"]
 	var commands: Array = []
 	for type: String in TYPES:
 		if type in capabilities and TAG_HELP.has(type): commands.append("- " + str(TAG_HELP[type]))

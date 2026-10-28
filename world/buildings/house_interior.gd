@@ -240,8 +240,6 @@ static func _interpolate_vertex(arrays:Array,ids:Array,w:Vector3) -> int:
 
 const BED_SIZE:=Vector3(2.05,1.1,2.1)
 var _bed_tries:=0
-## Spots already taken by other houses of the same design: each house prefers a new one.
-static var _design_spots:Dictionary={}
 
 ## Every house picks its own spot (seeded by the house, not its design): headboard to a
 ## wall, and usually one long side against the next wall too. A candidate must stay on the

@@ -26,10 +26,16 @@ static func _place_bed(context: Node3D) -> void:
 static func _create_bed(context: Node3D, index: int) -> Node3D:
 	var candidates:=(context._bed_candidates() as Array)
 	var rng:=RandomNumberGenerator.new();rng.seed=hash((context.place_id() as String) if index == 0 else (context.place_id() as String) + ":" + str(index))
-	var design:=context.get_parent().scene_file_path
-	var taken:Dictionary=(context._design_spots as Dictionary).get(design,{})
-	for c:Dictionary in candidates:
-		if taken.has(c.slot):c.weight*=.05
+	# Only this house's own id picks the spot. A penalty for spots other houses of the same
+	# design had taken made the bed, and so the whole furnished room, depend on which house
+	# loaded first: a save could load with a different layout (bug board #34, 2026-10-28).
+	# Neighbours of one design still differ: each house favours the slot its id points at.
+	if index == 0 and not candidates.is_empty():
+		var slots: Array = candidates.map(func(c: Dictionary) -> String: return str(c.slot))
+		slots.sort()
+		var favoured: String = slots[posmod(hash((context.place_id() as String) + ":bed"), slots.size())]
+		for c: Dictionary in candidates:
+			if str(c.slot) == favoured: c.weight *= 20.0
 	# Keep shared bedrooms grouped at corners before taking the middle of a wall,
 	# where a kitchen counter needs a continuous stretch. Preserve seeded variety
 	# within each group; middle-wall positions remain available as a fallback.
@@ -91,7 +97,6 @@ static func _create_bed(context: Node3D, index: int) -> Node3D:
 		# The same mattress height the rest helpers already assume; it also makes every house bed
 		# a place to lie down and cuddle in VR (seating.gd _bed_seat, dev 2026-09-28).
 		added.set_meta("mattress_top",.6)
-		taken[chosen.slot]=true;(context._design_spots as Dictionary)[design]=taken
 		added.set_meta("side_local",side)
 		for other: Node3D in access_updates:
 			other.set_meta("side_local", access_updates[other])

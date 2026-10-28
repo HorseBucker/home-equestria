@@ -482,6 +482,11 @@ func _hybrid_physics(delta: float) -> void:
 	if _far and not _held and not conversing and not (pinkie_bounce != null and pinkie_bounce.active()):
 		# Out of sight of the player: blinks only, no attention or expression work.
 		eye_motion.target_weight = 0.0
+		# Except a sleeper's shut eyes: one who fell asleep out here slept with them open, and a
+		# settled sleep freezes her face as it is until Anon walks up (player report 2026-10-28).
+		if sleeping:
+			expressions.touch("sleep", 0.0, 1.0)
+			expressions.advance(delta, true)
 		return
 	var resting: bool = velocity.length() < 0.12 and not head.is_speaking()
 	# Held: the carry pose owns her head and eyes; otherwise she watches the player when

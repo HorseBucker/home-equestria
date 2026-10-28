@@ -498,7 +498,8 @@ func _couch_space(c: Vector2, yaw: float, room: int, check_shell: bool = true) -
 	var query:PhysicsShapeQueryParameters3D=PhysicsShapeQueryParameters3D.new()
 	query.shape=shape;query.collision_mask=1
 	query.transform=Transform3D(_yaw_basis(yaw),_world(bed_center+front*.015,room,.04+shape.size.y*.5))
-	return space.intersect_shape(query,1).is_empty() \
+	return space.intersect_shape(query,8).all(func(hit: Dictionary) -> bool:
+			return hit.collider is CollisionObject3D and (hit.collider.collision_layer & FURNISH_CANDIDATES.PLAYER_FURNISHING_LAYER) != 0) \
 		and _physics_clear(c + front * 2.35, yaw, Vector3(1.70, 1.85, 1.0), room)
 
 ## The rectangular floor estimate can stop ~15 cm short of a slanted real wall.

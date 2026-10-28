@@ -22,6 +22,7 @@ const BED := preload("res://world/props/ponyville/pony_bed.scn")
 const KITCHEN := preload("res://world/props/household/compact-kitchen.scn")
 const FURNISHER := preload("res://world/interiors/interior_furnisher.gd")
 const HOUSE := preload("res://world/buildings/house_interior.gd")
+const LAMP := preload("res://world/props/lamps/kit_lamp.gd")
 var data: Dictionary
 var home: Node3D
 var frame: Node3D
@@ -225,6 +226,9 @@ func _build_door() -> void:
 	var hinge := Vector3(-width * .5, data.floor_y, 0)
 	var door := DOOR.new(); door.name = "FrontDoor"; door.position = hinge
 	door.handle = Vector3(width - .22, 1.10, .02)
+	# Past 76 degrees the leaf passes into the foyer's side wall, which has no collision to stop it
+	# (player bug board #33, 2026-10-28; tools/board_fixes/door_swing_views.gd renders).
+	door.max_open = deg_to_rad(76.0)
 	door.navigation_box = AABB(Vector3(0, 0, -.09), Vector3(width, float(data.door_top) - float(data.floor_y), .18))
 	var artwork := MeshInstance3D.new(); artwork.name = "OriginalDoorArtwork"
 	# Bake only the leaf's change of frame into its vertices. A rotated source AABB
@@ -334,6 +338,15 @@ func _build_decor() -> void:
 		interior.add_child(model)
 		model.add_to_group("house_furniture"); model.set_meta("house", home); model.set_meta("furniture", str(row[0]))
 		var box := _model_box(model)
+		# The set's standing lamp was only a model: windows glowed at night over a dark room (player
+		# bug board #33, 2026-10-28). The kit lamp runtime lights it at night and lets Anon switch it.
+		if str(row[0]) == "standing_lamp":
+			var lamp := LAMP.attach(model, "cone_lamp")
+			var bulb := lamp.get_node_or_null("LampLight") as Node3D
+			if bulb is OmniLight3D:
+				# The one lamp lights the sitting room and the kitchen end, not just its corner.
+				bulb.position = Vector3(box.get_center().x, box.end.y - .25, box.get_center().z)
+				(bulb as OmniLight3D).omni_range = 6.5
 		if bool(row[5]):
 			var solid := BoxShape3D.new(); solid.size = box.size
 			var body := StaticBody3D.new(); body.name = "FurnitureSolid"; body.collision_mask = 0

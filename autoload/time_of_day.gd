@@ -113,7 +113,7 @@ static func valid_state(value: Variant) -> bool:
 	for key in ["day","hours","day_length_minutes","active_seconds","sunset_clock_rate"]:
 		if not (value.get(key) is int or value.get(key) is float) or not is_finite(float(value[key])): return false
 	return value.day >= 0 and value.day == floor(value.day) and value.hours >= 0 and value.hours < 24 \
-		and value.day_length_minutes >= 15 and value.day_length_minutes <= 360 \
+		and value.day_length_minutes >= 15 and value.day_length_minutes <= 720 \
 		and value.active_seconds >= 0 and value.sunset_clock_rate >= .1 and value.sunset_clock_rate <= 1
 
 

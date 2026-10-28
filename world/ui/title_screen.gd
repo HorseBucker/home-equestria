@@ -41,6 +41,8 @@ var xr_active := false
 var seated := false
 var phase: Dictionary
 var status: Label
+var _version_box: VBoxContainer   # version line + update button, bottom of the home page
+var _hint: Label
 var enter_button: Button
 var quit_button: Button
 var settings_button: Button
@@ -55,6 +57,7 @@ var _browser: Control
 ## The menus' look (dev 2026-10-27 redesign): the twilight card behind every page but home, and
 ## the flourishes over the whole panel.
 const MENU_STYLE := preload("res://world/ui/menu_style.gd")
+const UPDATER := preload("res://world/update/updater.gd")
 const MENU_CARD := preload("res://world/ui/menu_card.gd")
 const MENU_ICON := preload("res://world/ui/menu_icon.gd")
 var _fx: Control
@@ -340,6 +343,24 @@ func _label(text: String, y: float, font_size: int, color: Color) -> Label:
 	return label
 
 
+## The status line (loading, problems), the VR pointing hint and the version box share the bottom
+## of the home page: a status line hides the other two, an update button hides the hint.
+func _bottom_lines() -> void:
+	if not is_instance_valid(_version_box) or not is_instance_valid(status): return
+	var quiet := status.text.is_empty()
+	var button: Control = _version_box.get_node_or_null("Update")
+	var hint := quiet and not (button != null and button.visible)
+	if _version_box.visible == quiet and (not is_instance_valid(_hint) or _hint.visible == hint): return
+	_version_box.visible = quiet
+	if is_instance_valid(_hint): _hint.visible = hint
+	if panel != null: panel.refresh()
+
+
+func _update_changed() -> void:
+	_bottom_lines()
+	if panel != null: panel.refresh()
+
+
 ## Controls are built into whichever page is being assembled (home by default).
 var _building: Control
 func _page() -> Control:
@@ -508,8 +529,38 @@ func _build_panel() -> void:
 	status = _label("", 770, 26, WHITE)
 	status.add_theme_color_override("font_outline_color", PLUM); status.add_theme_constant_override("outline_size", 8)
 	if xr_active and not seated:
-		var hint := _label("Point and pull the trigger", 806, 22, WHITE)
-		hint.add_theme_color_override("font_outline_color", PLUM); hint.add_theme_constant_override("outline_size", 8)
+		_hint = _label("Point and pull the trigger", 770, 22, WHITE)
+		_hint.add_theme_color_override("font_outline_color", PLUM); _hint.add_theme_constant_override("outline_size", 8)
+	# Which version this is, and an update button while a newer one is out (dev 2026-10-28: "add
+	# it to the home page when you boot up the game so you can update from the home page").
+	_version_box = VBoxContainer.new(); _version_box.name = "Version"
+	_version_box.add_theme_constant_override("separation", 2)
+	_home_page.add_child(_version_box)
+	# Pinned to the bottom edge and growing upward as the update button comes and goes.
+	_version_box.anchor_top = 1.0; _version_box.anchor_bottom = 1.0
+	_version_box.offset_left = 170; _version_box.offset_right = 730
+	_version_box.offset_top = -6; _version_box.offset_bottom = -6
+	_version_box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	var updater: Node = UPDATER.shared(self)
+	updater.attach(_version_box, _quit, 20)
+	for node: Node in _version_box.get_children():
+		if node is Label:
+			node.add_theme_font_override("font", FONT)
+			node.add_theme_color_override("font_color", WHITE)
+			node.add_theme_color_override("font_outline_color", PLUM); node.add_theme_constant_override("outline_size", 6)
+		elif node is Button:
+			var button := node as Button
+			button.add_theme_font_override("font", FONT); button.alignment = HORIZONTAL_ALIGNMENT_CENTER
+			for state_name in ["font_color", "font_hover_color", "font_focus_color", "font_pressed_color"]:
+				button.add_theme_color_override(state_name, WHITE)
+			button.add_theme_stylebox_override("normal", MENU_STYLE.rounded(_style(LILAC, WHITE, 4)))
+			button.add_theme_stylebox_override("hover", MENU_STYLE.rounded(_style(PINK, WHITE, 4)))
+			button.add_theme_stylebox_override("pressed", MENU_STYLE.rounded(_style(LILAC.darkened(0.12), WHITE, 4)))
+			button.add_theme_stylebox_override("focus", MENU_STYLE.rounded(_style(PINK, WHITE, 4)))
+			button.add_theme_stylebox_override("disabled", MENU_STYLE.rounded(_style(Color(1, 1, 1, 0.55), MIST)))
+			button.mouse_entered.connect(panel.refresh); button.mouse_exited.connect(panel.refresh)
+	updater.changed.connect(_update_changed)
+	_bottom_lines()
 	_building = null
 	_set_card(true)
 	_build_settings_page()
@@ -1147,6 +1198,7 @@ func _finish_entry(packed: PackedScene) -> void:
 		_load_failed("game")
 
 func _process(delta: float) -> void:
+	_bottom_lines()
 	if _card_active:
 		_card_step(delta); return
 	if panel == null: return

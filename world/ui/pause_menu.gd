@@ -171,10 +171,9 @@ func _build_main(root: Control) -> void:
 	_pony_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pony_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pony_notice.hide(); box.add_child(_pony_notice)
-	# Signed in-place updates (dev 2026-10-28): a quiet check, then one line here when a newer
-	# version is out (world/update/updater.gd).
-	var updater := UPDATER.new(); updater.name = "Updater"; updater.quit_game = quit_game
-	add_child(updater); updater.attach(box)
+	# Signed in-place updates (dev 2026-10-28): which version this is, and an update button when a
+	# newer one is out (world/update/updater.gd, shared with the title and Settings > Updates).
+	UPDATER.shared(self).attach(box, quit_game)
 
 
 ## Where and when the player is, for the column's heading.

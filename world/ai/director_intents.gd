@@ -15,11 +15,13 @@ func _init(owner_node: Node) -> void:
 ## AI-only semantic intent queue. Acceptance is not delivery; failures remain pending.
 ## `once`: a notice, not a story beat. Once the player heard any sentence of it, an interruption
 ## ends it instead of re-requesting it (three "could not get there" lines in 50 s, 2026-10-22).
-func queue_generated_intent(id: String, intent: String, key: String, valid: Callable, finished := Callable(), once := false) -> bool:
+## `firm`: once it is spoken the player cannot cut it off; his words wait for the end of the line
+## (conversation_director.floor_held; Trixie's stage patter, dev 2026-10-28).
+func queue_generated_intent(id: String, intent: String, key: String, valid: Callable, finished := Callable(), once := false, firm := false) -> bool:
 	if key.is_empty() or intent.strip_edges().is_empty() or not valid.is_valid(): return false
 	if host._authored_lines.has(key): return str(host._authored_lines[key].id) == id and str(host._authored_lines[key].intent) == intent.strip_edges()
 	if not bool(valid.call()): return false
-	host._authored_lines[key] = {"id":id,"intent":intent.strip_edges(),"valid":valid,"finished":finished,"started":false,"attempts":0,"retry_at":0.0,"delivered":false,"epoch":host._intent_epoch,"heard":[],"once":once}
+	host._authored_lines[key] = {"id":id,"intent":intent.strip_edges(),"valid":valid,"finished":finished,"started":false,"attempts":0,"retry_at":0.0,"delivered":false,"epoch":host._intent_epoch,"heard":[],"once":once,"firm":firm}
 	return true
 
 

@@ -69,7 +69,7 @@ func tick(dt: float, open: bool) -> void:
 func _active_count() -> int:
 	var n := 0
 	for m: Dictionary in members.values():
-		if m.phase in ["walking", "watching"]: n += 1
+		if m.phase in ["walking", "settling", "watching"]: n += 1
 	return n
 
 func _recruit_one() -> void:
@@ -237,8 +237,7 @@ func _step(id: String, dt: float) -> void:
 			if Vector2(here.x - m.spot.x, here.z - m.spot.z).length() < 1.2 or nav.state == nav.State.ARRIVED:
 				nav.stay()
 				nav.face_point = stage_front - facing * 2.0
-				_sit(id, actor)
-				m.phase = "watching"; m.t = 0.0
+				m.phase = "settling"; m.t = 0.0
 			elif nav.state in [nav.State.UNREACHABLE, nav.State.BLOCKED] or (not nav._has_target and m.t > 3.0):
 				m.tries += 1
 				if m.tries > 2 or m.t > 120.0:
@@ -246,6 +245,14 @@ func _step(id: String, dt: float) -> void:
 				m.spot = _pick_spot()
 				if not m.spot.is_finite(): _let_go(id); return
 				nav.go_to(m.spot, nav.Gait.WALK)
+		"settling":
+			# She turns to the stage first and sits once she faces it (a seated pony does not turn,
+			# dev 2026-10-28: "they don't actually... face the stage"); a stuck turn sits anyway.
+			nav.face_point = stage_front - facing * 2.0
+			if _facing_stage(actor) or m.t > SETTLE_SECONDS:
+				_sit(id, actor)
+				_tell(actor)
+				m.phase = "watching"; m.t = 0.0
 		"watching":
 			nav.face_point = stage_front - facing * 2.0
 			# The posture refuses while she is still moving ("Wait until stopped"): ask again until
@@ -288,15 +295,30 @@ func _adopt(id: String, m: Dictionary, body: Node3D) -> void:
 	var here := body.global_position
 	if m.phase == "watching" or Vector2(here.x - m.spot.x, here.z - m.spot.z).length() < 1.2:
 		nav.face_point = stage_front - facing * 2.0
-		_sit(id, body)
-		m.phase = "watching"
+		m.phase = "settling"; m.t = 0.0
 	else:
 		nav.go_to(m.spot, nav.Gait.WALK)
 		m.t = 0.0
 
-## Sits on the grass facing the stage (labs log a refusal with --show-debug).
+## Turning to the stage before she sits takes at most this long.
+const SETTLE_SECONDS := 12.0
+const FACING_TOLERANCE := deg_to_rad(15.0)
+
+func _facing_stage(actor: Node3D) -> bool:
+	var to := stage_front - facing * 2.0 - actor.global_position; to.y = 0.0
+	var forward := -actor.global_basis.z; forward.y = 0.0
+	if to.length() < 0.2 or forward.length() < 0.01: return true
+	return forward.angle_to(to) < FACING_TOLERANCE
+
+## Sits on the grass facing the stage (labs log a refusal with --show-debug). Her automatic
+## lie-down after 30 s is off while she watches: the watch step asks for "sit" again, so lying
+## down meant standing up and sitting again every half minute (seating.gd does the same).
 func _sit(id: String, actor: Node3D) -> void:
 	var ok: Variant = actor.request_posture("sit")
+	var posture: Variant = actor.get("posture")
+	if posture is RefCounted and "lie_after_seconds" in posture and not members[id].has("lie_after"):
+		members[id].lie_after = float(posture.lie_after_seconds)
+		posture.lie_after_seconds = 1e9
 	if debug:
 		var status: Dictionary = actor.posture_status() if actor.has_method("posture_status") else {}
 		print("[show] %s sits: %s %s" % [id, ok, status])
@@ -309,6 +331,7 @@ func _gone(id: String) -> void:
 		var why := "freed" if nav == null else "owner " + str(nav.command_owner)
 		gone_why[why] = int(gone_why.get(why, 0)) + 1
 	members[id].phase = "gone"
+	_restore(id)
 	_unhold(id)
 
 func _unhold(id: String) -> void:
@@ -325,6 +348,7 @@ func _unhold(id: String) -> void:
 func _let_go(id: String) -> void:
 	var m: Dictionary = members[id]
 	m.phase = "gone"
+	_restore(id)
 	_unhold(id)
 	var actor: Node3D = m.actor
 	if bool(m.essence) or not is_instance_valid(actor): return
@@ -335,6 +359,30 @@ func _let_go(id: String) -> void:
 		nav.stay()
 		nav.command_owner = ""
 		nav.wander_enabled = true
+
+## What a watcher with a body gets back: her own lie-down timing, and no show line in her prompt.
+func _restore(id: String) -> void:
+	var m: Dictionary = members[id]
+	var actor: Variant = m.get("actor")
+	if not (actor is Node3D and is_instance_valid(actor)): return
+	(actor as Node3D).remove_meta("show_watching")
+	var posture: Variant = (actor as Node3D).get("posture")
+	if m.has("lie_after") and posture is RefCounted and "lie_after_seconds" in posture:
+		posture.lie_after_seconds = float(m.lie_after)
+	m.erase("lie_after")
+
+## What is happening on stage now, for the prompt of a watcher Anon talks to
+## (director_prompts.gd reads the "show_watching" meta).
+var moment := ""
+func set_moment(text: String) -> void:
+	moment = text
+	for m: Dictionary in members.values():
+		if m.phase == "watching" and not bool(m.essence) and is_instance_valid(m.actor):
+			_tell(m.actor as Node3D)
+
+func _tell(actor: Node3D) -> void:
+	if moment.is_empty(): return
+	actor.set_meta("show_watching", "- You are sitting in the crowd at Trixie's magic show on the schoolhouse stage. On stage just now: %s. The show is on: keep your voice down, keep your eyes on the stage, answer in a short whisper." % moment)
 
 ## Watchers with a body (faces, applause, the picked card).
 func watchers() -> Array[Node3D]:

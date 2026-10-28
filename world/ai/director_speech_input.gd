@@ -31,6 +31,10 @@ func _configure_speech(stt: Dictionary) -> void:
 
 
 func _on_utterance(wav: PackedByteArray, seconds: float, is_feedback := false) -> void:
+	# A firm line (Trixie on stage) is not cut off: his words wait for its end.
+	if host.floor_held() and not is_feedback:
+		host._held_utterance = [wav, seconds, is_feedback]
+		return
 	if host.state != "idle": host.interrupt()
 	host.state = "transcribing"
 	host._transcribing_feedback = is_feedback
@@ -122,14 +126,14 @@ func handle_feedback(text: String) -> void:
 	host.feedback_input.submit(text)
 
 func _on_speech_state(value: String) -> void:
-	if value == "hearing" and (host.state != "idle" or host.group.active()): host.interrupt()
+	if value == "hearing" and (host.state != "idle" or host.group.active()) and not host.floor_held(): host.interrupt()
 	if host.state == "idle":
 		host.hud.set_state("feedback" if value == "hearing" and host.speech.feedback_mode else value, host.hud.detail if value == "listening" else "")
 
 
 ## Button down takes the floor immediately, before any microphone samples arrive.
 func _on_talk_pressed() -> void:
-	host.interrupt()
+	if not host.floor_held(): host.interrupt()
 
 
 func _capture(event: String, details: Dictionary) -> void:

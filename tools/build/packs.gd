@@ -39,6 +39,15 @@ static func android_directories(user_data: String, external_roots: PackedStringA
 		if obb not in dirs: dirs.append(obb)
 	return dirs
 
+## Patch packs (tools/build/release_patch.py): HomeEquestria-update-<base version>.pck holds the
+## files changed since that full build. It sorts after -data and -raw, so it mounts last and wins.
+## One left behind by a later full install is made for another base and stays unmounted.
+const PATCH_PREFIX := "HomeEquestria-update-"
+
+static func patch_fits(name: String) -> bool:
+	if not name.begins_with(PATCH_PREFIX): return true
+	return name.trim_prefix(PATCH_PREFIX).get_basename() == str(ProjectSettings.get_setting("application/config/version", ""))
+
 ## The game's own packs beside the executable: HomeEquestria.pck, -data, -raw (or a renamed exe's).
 ## Any other pack there is a mod (world/modding/mod_loader.gd).
 static func is_game_pack(name: String) -> bool:
@@ -68,6 +77,7 @@ static func _load_from_directories(dirs: Array[String], main_pack: String,
 		for name in names:
 			if name.get_extension().to_lower() not in ["pck", "obb"] or seen.has(name): continue
 			if game_only and not is_game_pack(name): continue
+			if not patch_fits(name): print("[packs] skipped %s: made for another version" % name); continue
 			var path := dir.path_join(name)
 			if path == main_pack: continue
 			if bool(mount.call(path, true)):

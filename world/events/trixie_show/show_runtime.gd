@@ -62,6 +62,14 @@ var _loading: Dictionary = {} # Spawn requester -> threaded resource request sti
 
 func setup(host: Node) -> void:
 	game = host
+	add_to_group("hush_zones")
+
+## Ponies this close to the stage start no chats of their own and walk up to nopony while
+## Trixie performs (dev 2026-10-28: "make everypony by the stage shut the fuck up").
+const HUSH_RADIUS := 28.0
+func hushes(at: Vector3) -> bool:
+	if show.is_empty() or str(show.get("phase", "")) not in ["perform", "bows"]: return false
+	return Vector2(at.x - STAGE_FRONT.x, at.z - STAGE_FRONT.y).length() < HUSH_RADIUS
 
 func facing() -> Vector3:
 	var f := Vector3(STAGE_FRONT.x - STAGE_CENTRE.x, 0.0, STAGE_FRONT.y - STAGE_CENTRE.z)
@@ -357,9 +365,10 @@ func _hold(actor: Node3D) -> void:
 	if encounters != null:
 		encounters.begin("trixie_show:%d" % int(show.day), {
 			"title": "performing a Great and Powerful magic show", "place": "Schoolhouse stage",
-			"participants": [TRIXIE], "movers": {TRIXIE: [OWNER]},
+			"participants": [TRIXIE], "movers": {TRIXIE: [OWNER]}, "hold": true,
 			"knows": {TRIXIE: ["You are putting on one of your magic shows on the schoolhouse stage. Ponies are gathering to watch."]},
 			"commitment": {TRIXIE: "Perform your show with flair; react to the audience; stay on stage until it is over."},
+			"allowed": "You stay on your stage until the show is over, whatever anypony says. If Anon talks to you mid-show, answer in one short in-character line and get on with the show; a request to leave, follow, sit or go somewhere waits until after the show.",
 			"beats": []})
 	_release_essence()
 
@@ -403,9 +412,13 @@ func _advance(dt: float) -> void:
 		"perform":
 			if program.finished:
 				show.phase = "bows"; show.time = 0.0
-				line("closing")
+				show.closing_said = not line("closing", "", _closing_done.bind(show))
 		"bows":
-			if show.time > 6.0: _end("done")
+			# She takes her bow and her closing line finishes before the crowd gets up.
+			if (show.time > 8.0 and bool(show.get("closing_said", true))) or show.time > 30.0: _end("done")
+
+func _closing_done(session: Dictionary) -> void:
+	if is_same(show, session): show.closing_said = true
 
 ## She floats herself up onto the stage in her own magic (dev 2026-10-17: nothing just appears).
 func _onto_stage(actor: Node3D) -> void:
@@ -499,8 +512,9 @@ func _exit_tree() -> void:
 	_loading.clear()
 
 ## Trixie's patter for a moment of the show (show_patter.gd; nothing until the AI is set up).
-func line(key: String, detail := "") -> void:
-	if patter != null: patter.say(key, detail)
+## True when a line was queued; `finished` runs once it was spoken to the end.
+func line(key: String, detail := "", finished := Callable()) -> bool:
+	return patter != null and patter.say(key, detail, finished)
 
 ## For tests and the console.
 func active() -> bool:

@@ -1,8 +1,11 @@
 extends AnimatableBody3D
 ## Hinge at the outside-left jamb. Positive Y rotation swings into the house (-Z).
 @export var handle:=Vector3.ZERO
-## Mirrored pairs choose their swing direction; target stays 0..PI/2.
+## Mirrored pairs choose their swing direction; target stays 0..open_limit() (at most PI/2).
 @export var swing_direction: float = 1.0
+## How far the leaf swings, at most a right angle. A house whose wall stands closer sets less
+## (player bug board #33, 2026-10-28: Fluttershy's front door opened into her cottage wall).
+@export var max_open := PI * .5
 
 @export var navigation_box:=AABB()
 ## Writing either wakes an idle door (it stops ticking once settled, nothing near; 2026-10-14).
@@ -39,6 +42,14 @@ const ARCH_INSETS:={"house_a:FrontDoor":.0207,"house_d:FrontDoor":.0513,"house_e
 	"house_h:FrontDoor":.0378,"house_h:BalconyDoor":.0359}
 const OUTLINE:=preload("res://world/ui/interact_outline.gd")
 const SFX := preload("res://world/audio/interaction_sounds.gd")
+const SHUTDOWN := preload("res://world/shutdown_waits.gd")
+## Knocking (player bug board #31): right-click a shut door on desktop, or rap it twice with a fist
+## in VR. The door only raps and says a knock happened; player/door_knock.gd finds who answers.
+const KNOCK_SOUND := "prop_impact"
+const RAP_SPEED := 0.7   # m/s toward the leaf for a fist to count as a rap
+var _rap_z: Dictionary = {}
+var _raps: Array[float] = []
+var _knock_ready := 0.0
 const OPEN_SOUND := "prop_door_open"
 const CLOSE_SOUND := "prop_door_close"
 const SHUT:=.02 # radians; opening past this plays the open sound, reaching 0 the close
@@ -162,8 +173,8 @@ func request_passage(pony:Node3D) -> bool:
 	_visitors[id].until=Time.get_ticks_msec()+PASSAGE_LEASE_MS
 	_select_passage_owner()
 	if _passage_owner != id: return false
-	target=PI*.5;_close_delay=2.0
-	if opening_angle()>1.50:_passage_crossing=true;return true
+	target=open_limit();_close_delay=2.0
+	if opening_angle()>open_limit()-.07:_passage_crossing=true;return true
 	return false
 
 func release_passage(pony:Node) -> void:
@@ -355,12 +366,15 @@ func _frame_rids() -> Array[RID]:
 
 ## A unicorn opening the door lifts the handle with magic: the handle area glows in her
 ## colour on her side of the leaf, swinging with it (UnicornMagic.burst).
+func open_limit() -> float:
+	return clampf(max_open, 0.0, PI * .5)
+
 func magic_glow(color:Color,seconds:float,from:Vector3) -> void:
 	var side:=signf(to_local(from).z-handle.z)
 	if side==0.0:side=1.0
 	preload("res://world/characters/magic/unicorn_magic.gd").burst(self,handle+Vector3(0,0,side*.06),color,seconds,.22)
 func toggle_door() -> void:
-	if not is_instance_valid(holder):target=0.0 if opening_angle()>.7 else PI*.5
+	if not is_instance_valid(holder):target=0.0 if opening_angle()>.7 else open_limit()
 func begin_grip(hand: Node, point: Vector3) -> bool:
 	if not is_instance_valid(hand) or not can_grip(point):return false
 	return begin_offered_grip(hand,point)
@@ -373,7 +387,7 @@ func begin_offered_grip(hand:Node,point:Vector3)->bool:
 	return true
 func drag(point: Vector3) -> void:
 	if not is_instance_valid(holder) or not point.is_finite():return
-	target=clampf(hand_angle(point)+angle_offset,0,PI*.5)
+	target=clampf(hand_angle(point)+angle_offset,0,open_limit())
 func end_grip() -> void:
 	holder=null;target=opening_angle();set_process(true)
 	if not hovered: _process(0.0)
@@ -404,9 +418,50 @@ func palm_push(side: String, point: Vector3) -> bool:
 	var angle: float = opening_angle()
 	var slope: float = (_leaf_z(point, angle + 0.01) - z) / 0.01
 	if absf(slope) < 0.001: return false
-	target = clampf(angle + (sigma * PUSH_CLEAR - z) / slope, 0.0, PI * 0.5)
+	target = clampf(angle + (sigma * PUSH_CLEAR - z) / slope, 0.0, open_limit())
 	_close_after_passage = false
 	return true
+
+## Desktop: three raps. True when it counts as a knock.
+func knock_from_desktop() -> bool:
+	if is_instance_valid(holder) or opening_angle() > SHUT: return false
+	_rap_times(3)
+	return knock()
+
+func _rap_times(count: int) -> void:
+	for i in count:
+		SFX.play_at(self, KNOCK_SOUND, handle_world())
+		if i < count - 1 and not await SHUTDOWN.seconds(self, 0.24): return
+
+## A knock is heard inside at most every few seconds.
+func knock() -> bool:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now < _knock_ready or opening_angle() > SHUT or not is_inside_tree(): return false
+	_knock_ready = now + 4.0
+	return true
+
+## VR: a fist reaching the shut leaf fast is a rap (its own sound); two within 1.5 s are a knock
+## (returns true then).
+func hand_rap(side: String, point: Vector3, delta: float) -> bool:
+	if is_instance_valid(holder) or opening_angle() > SHUT or not point.is_finite() or not has_node("LeafCollision"):
+		_rap_z.erase(side); return false
+	var collision: CollisionShape3D = $LeafCollision
+	var box: AABB = collision.transform * collision.shape.get_debug_mesh().get_aabb()
+	var local: Vector3 = to_local(point)
+	var along: float = local.x if box.get_center().x >= 0.0 else -local.x
+	if along < 0.0 or along > maxf(absf(box.position.x), absf(box.end.x)) or local.y < box.position.y or local.y > box.end.y:
+		_rap_z.erase(side); return false
+	var z: float = absf(_leaf_z(point, 0.0))
+	var before: float = _rap_z.get(side, INF)
+	_rap_z[side] = z
+	if before == INF or before < 0.05 or z >= 0.05 or (before - z) / maxf(delta, 0.001) < RAP_SPEED: return false
+	SFX.play_at(self, KNOCK_SOUND, point)
+	var now := Time.get_ticks_msec() / 1000.0
+	_raps = _raps.filter(func(t: float) -> bool: return now - t < 1.5)
+	_raps.append(now)
+	if _raps.size() < 2: return false
+	_raps.clear()
+	return knock()
 
 ## World metres from the leaf's centre plane to `point` if the leaf stood at `angle`.
 func _leaf_z(point: Vector3, angle: float) -> float:

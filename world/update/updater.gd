@@ -3,7 +3,9 @@ extends Node
 ## Settings > Updates turns it off) asks GitHub for the latest release of
 ## homedevanon/home-equestria and reads its signed update_manifest.json (update_verify.gd holds
 ## the rules: dev's offline RSA key signs, the game carries only the public key, so a taken-over
-## repo cannot ship an update). When a newer version is out the pause menu shows one line;
+## repo cannot ship an update). One shared node under the tree's root (shared()) serves the title
+## page, the pause menu and Settings > Updates: each shows which version this is and whether it is
+## the newest (version_line()), plus an update button when a newer version is out;
 ## pressing it downloads this system's archive into user://update_staging/, checks the signed size
 ## and sha256, unpacks it there and hands over to a small script that waits for the game to close,
 ## moves the new files in (replaced ones go to user://update_staging/backup/, put back if any move
@@ -20,6 +22,7 @@ const VERIFY := preload("res://world/update/update_verify.gd")
 const SHUTDOWN := preload("res://world/shutdown_waits.gd")
 const STYLE := preload("res://world/ui/menu_style.gd")
 const ICON := preload("res://world/ui/menu_icon.gd")
+const VERSION := preload("res://world/debug/version.gd")
 const API := "https://api.github.com/repos/homedevanon/home-equestria/releases/latest"
 const DOWNLOADS := "https://github.com/homedevanon/home-equestria/releases/download/"
 const RELEASES := "https://github.com/homedevanon/home-equestria/releases"
@@ -52,8 +55,7 @@ var _stop := false
 var _work := ""                  # what the worker thread does, for the progress line
 var _done := 0
 var _total := 0
-var _button: Button
-var _label: Label
+var _views: Array[Dictionary] = []   # {button, label, line} per attach()
 
 
 func _ready() -> void:
@@ -78,6 +80,8 @@ func _ready() -> void:
 	if VERIFY.newer(known, _version()):
 		latest = known; state = "available"
 		_page = str(saved.get_value("check", "page", RELEASES))
+	elif known == _version() or str(saved.get_value("check", "current_for", "")) == _version():
+		state = "current"
 	_refresh()
 	var wanted: Variant = Settings.get_value("updates/check")
 	# Headless test fixtures never call out.
@@ -85,27 +89,58 @@ func _ready() -> void:
 		check()
 
 
-## A line under the pause menu's actions: hidden until a newer version is known.
-func attach(box: Control) -> void:
-	_button = Button.new(); _button.name = "Update"; _button.theme_type_variation = "Primary"
-	_button.alignment = HORIZONTAL_ALIGNMENT_LEFT; _button.icon = ICON.texture("sparkle", 22)
-	_button.custom_minimum_size.y = 43; _button.add_theme_font_size_override("font_size", 18)
-	_button.clip_text = true; _button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_button.pressed.connect(press); box.add_child(_button)
-	_label = STYLE.label("", "Muted", 15); _label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; box.add_child(_label)
+## The one updater of this run, made on first use under the tree's root (it outlives the title
+## and the world, so its check and an install in progress carry over).
+static func shared(from: Node) -> Node:
+	var root := from.get_tree().root
+	var found := root.get_node_or_null("Updater")
+	if found == null:
+		found = load("res://world/update/updater.gd").new(); found.name = "Updater"
+		root.add_child.call_deferred(found)
+	return found
+
+
+## Which version this is and whether a newer one is out, for every menu that shows it.
+func version_line() -> String:
+	var mine := _version()
+	if mine == "": return "Development copy (run from source)"
+	if latest != "" and state in ["available", "working", "failed"]:
+		return "You have an outdated version (%s). Newest: %s" % [mine, latest]
+	if state == "current": return "You have the newest version (%s)" % mine
+	if state == "checking": return "You have version %s. Checking for a newer one..." % mine
+	return "You have version %s" % mine
+
+
+## The version line, an update button shown while a newer version is out, and a status line, at
+## the end of box. quit replaces the game's quit while installing (the pause menu autosaves first).
+func attach(box: Control, quit := Callable(), font_size := 18) -> void:
+	if quit.is_valid(): quit_game = quit
+	var line := STYLE.label("", "Muted", font_size - 3); line.name = "Version"
+	line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(line)
+	var button := Button.new(); button.name = "Update"; button.theme_type_variation = "Primary"
+	button.alignment = HORIZONTAL_ALIGNMENT_LEFT; button.icon = ICON.texture("sparkle", font_size + 4)
+	button.custom_minimum_size.y = font_size * 2.4; button.add_theme_font_size_override("font_size", font_size)
+	button.clip_text = true; button.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	button.pressed.connect(press); box.add_child(button)
+	var label := STYLE.label("", "Muted", font_size - 3); label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER; box.add_child(label)
+	_views.append({"button": button, "label": label, "line": line})
 	_refresh()
 
 
 func _refresh() -> void:
+	_views = _views.filter(func(view: Dictionary) -> bool: return is_instance_valid(view.button))
+	var outdated := latest != "" and state in ["available", "working", "failed"]
+	var action := ("Update to %s now" if can_install else "Get %s from the release page") % latest
+	for view: Dictionary in _views:
+		view.line.text = version_line()
+		view.button.visible = outdated
+		view.button.disabled = state == "working"
+		view.button.text = action
+		view.label.text = status
+		view.label.visible = status != "" and outdated
 	changed.emit()
-	if not is_instance_valid(_button): return
-	_button.visible = latest != "" and state in ["available", "working", "failed"]
-	_button.disabled = state == "working"
-	var action := "Update now" if can_install else "Get it on the release page"
-	_button.text = "Version %s available — %s" % [latest, action]
-	_label.text = status
-	_label.visible = status != "" and _button.visible
 
 
 ## The pause menu button: install here when this copy can, else open the release page.
@@ -130,6 +165,7 @@ func check() -> bool:
 	if found.has("error"):
 		print("[update] check: %s" % found.error)
 		state = "current" if "not newer" in str(found.error) else before if before == "available" else "idle"
+		if state == "current": saved.set_value("check", "current_for", _version()); saved.save(STATE)
 		_refresh(); return false
 	_manifest = found
 	latest = str(found.version); state = "available"
@@ -206,6 +242,12 @@ func install() -> void:
 ## Download, verify, unpack, then hand over to the install script. Returns why it stopped
 ## ("" never comes back: on success the game quits).
 func _download_and_install() -> String:
+	# A patch release (tools/build/release_patch.py) holds only the files changed since its base
+	# full build: it installs on that base alone; any other copy needs the full download.
+	var patch_base := str(_manifest.get("base", ""))
+	if patch_base != "" and patch_base != VERSION.base_version():
+		OS.shell_open(_page if _page.begins_with(RELEASES + "/") else RELEASES)
+		return "Version %s is a small update for %s: download the full game from the release page." % [latest, patch_base]
 	var parts := VERIFY.files_for(_manifest, platform)
 	if parts.is_empty(): return "This release has no download for this system."
 	var total := 0
@@ -307,6 +349,11 @@ func _write_script(source: String, relative: Array[String], install_dir: String)
 	var log_path := ProjectSettings.globalize_path(staging.path_join("install.log"))
 	var exe := OS.get_executable_path()
 	var args: PackedStringArray = OS.get_cmdline_args()
+	# The engine keeps --xr-mode for itself, so the restarted game came back with no mode and asked
+	# Desktop or VR again (updater test 2026-10-28): pass on the mode this copy runs in.
+	if not "--xr-mode" in args:
+		var xr := XRServer.primary_interface
+		args = PackedStringArray(["--xr-mode", "on" if xr != null and xr.is_initialized() else "off"]) + args
 	if not OS.get_cmdline_user_args().is_empty(): args.append("--"); args.append_array(OS.get_cmdline_user_args())
 	var pid := OS.get_process_id()
 	var text := ""
@@ -449,8 +496,10 @@ func _exit_tree() -> void:
 	_thread = null
 
 
+## The running version: a patch pack's own when one is mounted (world/debug/version.gd).
 static func _version() -> String:
-	return str(ProjectSettings.get_setting("application/config/version", ""))
+	var version := VERSION.text()
+	return "" if version == "dev" else version
 
 
 static func _length(path: String) -> int:

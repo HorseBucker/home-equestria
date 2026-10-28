@@ -321,7 +321,8 @@ func selection() -> Dictionary:
 	if not seat_hint.is_empty(): return seat_hint
 	var collider: Node3D = hit.collider as Node3D
 	if collider != null and collider.has_method("toggle_door"):
-		return _door_hint(collider, camera.global_position, "[E] Open / close")
+		var shut: bool = collider.has_method("knock_from_desktop") and float(collider.call("opening_angle")) <= 0.02
+		return _door_hint(collider, camera.global_position, "[E] Open / close   [Right click] Knock" if shut else "[E] Open / close")
 	return _held_hint()
 
 

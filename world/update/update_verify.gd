@@ -24,7 +24,9 @@ const CHUNK := 1 << 20
 ## keeps the generated install scripts free of quoting traps.
 const SAFE_NAME := "^[A-Za-z0-9 ._+\\-/]+$"
 const ASSET_NAME := "^[A-Za-z0-9._+\\-]+$"
-const VERSION_FORM := "^(\\d+)\\.(\\d+)\\.(\\d+)(-[A-Za-z0-9.]+)?$"
+## An optional fourth number marks a small fix on top of a release (0.0.6.1; dev 2026-10-28). Builds
+## before 0.0.6 read only three numbers, so a fourth-number release reaches only 0.0.6 and later.
+const VERSION_FORM := "^(\\d+)\\.(\\d+)\\.(\\d+)(?:\\.(\\d+))?(-[A-Za-z0-9.]+)?$"
 ## A signed release cannot unpack more than this (the 0.0.3 game is 4.6 GB unpacked).
 const MAX_UNPACKED := 32 * 1024 * 1024 * 1024
 
@@ -76,11 +78,11 @@ static func verified_manifest(manifest_bytes: PackedByteArray, sig_text: String,
 	return manifest
 
 
-## [major, minor, patch] for "0.0.4" or "0.0.3-maredev", [] when it is not a release version.
+## [major, minor, patch, fix] for "0.0.4", "0.0.3-maredev" or "0.0.6.1", [] when it is not a release version.
 static func version_parts(version: String) -> Array[int]:
 	var found := RegEx.create_from_string(VERSION_FORM).search(version.strip_edges())
 	if found == null: return []
-	return [int(found.get_string(1)), int(found.get_string(2)), int(found.get_string(3))]
+	return [int(found.get_string(1)), int(found.get_string(2)), int(found.get_string(3)), int(found.get_string(4)) if found.get_string(4) != "" else 0]
 
 
 ## Strictly newer by number. The same number with another label is not an update, and a
@@ -89,7 +91,7 @@ static func newer(candidate: String, current: String) -> bool:
 	var a := version_parts(candidate)
 	var b := version_parts(current)
 	if a.is_empty() or b.is_empty(): return false
-	for i in 3:
+	for i in 4:
 		if a[i] != b[i]: return a[i] > b[i]
 	return false
 

@@ -47,12 +47,11 @@ var duty_hours := 0.0
 var last_summary := ""
 var last_summary_until_ms := 0
 var _duty_clock := -1.0
-## Confirmed shift (board #110): the screen fades, a group of mares is brought to the door as the
-## shift's customers, and once each is served (or has left) the screen fades again and the clock
-## moves on to SHIFT_HOURS after the recorded clock-in, paid as hours worked. Never past closing.
+## Confirmed shift (board #110): the screen fades and a group of mares is brought to the door as the
+## shift's first customers. The shift then runs until the player clocks out or the restaurant closes:
+## no second fade and no skipped hours (player bug board #29: the old three-hour skip after the
+## group "kicked me out 10-20 seconds after starting"; they want to talk to the ponies they serve).
 const GROUP_SIZE := 3
-const SHIFT_HOURS := 3.0
-const LAST_SHIFT_HOUR := 21.75
 const GROUP_TIMEOUT := 300.0
 ## Booked customer id -> "waiting", "served" or "left".
 var shift_group: Dictionary = {}
@@ -362,7 +361,8 @@ func _open_group_shift() -> void:
 		_lock_player(false)
 	_transition = false
 
-## Every booked customer was served or has gone (or the group took far too long).
+## Every booked customer was served or has gone (or the group took far too long): the counter stays
+## open for walk-ins, and the group leaves on foot after their meal like any customer.
 func _check_group(delta: float) -> void:
 	_group_clock += delta
 	var visitors: Variant = customers.get("_visitors")
@@ -372,53 +372,9 @@ func _check_group(delta: float) -> void:
 		if visitors is Dictionary and (visitors as Dictionary).has(id): waiting = true
 		else: shift_group[id] = "left"
 	if waiting and _group_clock <= GROUP_TIMEOUT: return
-	# A group that all left before anyone was served ended the shift a moment after it began
-	# (2026-10-28 player report: two fades and the shift was over). The shift stays open for
-	# walk-in customers instead, and the log says why the group left.
 	if not shift_group.values().has("served"):
 		print("[hayburger] booked group left unserved (", customers.get("_last_reason"), "); shift continues")
-		shift_group.clear()
-		return
-	_close_group_shift()
-
-func _close_group_shift() -> void:
-	if _transition or not _working: return
-	_transition = true
-	var cover := _cover()
-	if cover != null:
-		_lock_player(true)
-		await cover.close_eyes()
-		if not _still_here(cover): return
-	var clock: Node = get_node_or_null("/root/TimeOfDay")
-	# The shift's hours pass and are paid only when the group was actually served (2026-10-25
-	# player report: a group that all left unserved still skipped three hours and paid the full
-	# wage, so ringing the bell again and again paid every time). Otherwise the real time counts.
-	var served_any := shift_group.values().has("served")
-	if clock != null and not shift_started.is_empty() and _working and served_any:
-		var start: float = float(shift_started.day) * 24.0 + float(shift_started.hours)
-		var target: float = minf(start + SHIFT_HOURS, floorf(start / 24.0) * 24.0 + LAST_SHIFT_HOUR)
-		var now: float = _clock_hours()
-		_count_duty()
-		if target > now:
-			clock.day = int(floorf(target / 24.0)); clock.hours = fposmod(target, 24.0)
-			var needs: Node = get_tree().get_first_node_in_group("player_needs")
-			if needs != null and needs.has_method("pass_time"): needs.pass_time(target - now)
-		# The hours of the shift count as worked: the wage reads the clock-in to now.
-		duty_hours = clampf(maxf(duty_hours, maxf(target, now) - start), 0.0, WAGE_MAX_HOURS)
-		_duty_clock = _clock_hours()
-	stop_working()
-	# Hours have passed: fed customers are done eating and go back to their day, from where
-	# they were booked (they were brought to the door during the fade).
-	if is_instance_valid(customers):
-		customers.return_group()
-		customers.release_all()
-	if cover != null:
-		if not await SHUTDOWN.seconds(self, 0.5) or not _still_here(cover): return
-		await cover.open_eyes()
-		if not _still_here(cover): return
-		cover.finish()
-		_lock_player(false)
-	_transition = false
+	shift_group.clear()
 
 func _exit_tree() -> void:
 	_working = false

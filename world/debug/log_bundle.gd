@@ -34,7 +34,7 @@ static func make_bundle(android: bool = OS.has_feature("android"), user_data: St
 	var zip := ZIPPacker.new()
 	if zip.open(path) != OK:
 		push_error("[support] cannot write %s" % path); return ""
-	var version := str(ProjectSettings.get_setting("application/config/version", "dev"))
+	var version: String = preload("res://world/debug/version.gd").text()
 	_add(zip, "version.txt", ("Home: Equestria %s\n%s %s\n%s\n" % [version, OS.get_name(), OS.get_version(),
 		RenderingServer.get_video_adapter_name()]).to_utf8_buffer())
 	for name in _files(LOGS_DIR):
