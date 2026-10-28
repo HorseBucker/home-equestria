@@ -514,6 +514,14 @@
 			"text": "Write only what you say out loud. Put tags in square brackets anywhere in the line; tags are never spoken."
 		},
 		{
+			"id": "pony_action_schema.b724c801",
+			"group": "Dialogue rules",
+			"label": "[magic_show] start your Great and Powerful stage show at the schoolhou",
+			"file": "world/ai/pony_action_schema.gd",
+			"placeholders": 0,
+			"text": "[magic_show] start your Great and Powerful stage show at the schoolhouse stage: fireworks call the town, the curtain rises in about three minutes; only when Anon paid for one or you truly want an audience; works alongside one other action"
+		},
+		{
 			"id": "pony_action_schema.c061098f",
 			"group": "Dialogue rules",
 			"label": "FEELINGS (optional, never spoken): after your complete spoken words yo",
@@ -610,12 +618,12 @@
 			"text": "- Where you stand: %s. This is certain: never deny it, and do not invent a ladder, stairs or any way down that is not listed here."
 		},
 		{
-			"id": "pony_awareness.a2a36e8e",
+			"id": "pony_awareness.97011609",
 			"group": "Dialogue rules",
-			"label": "- You are standing in a doorway. If someone needs to get through, move",
+			"label": "- You are standing in a doorway. If somepony walks up to pass, step ou",
 			"file": "world/ai/pony_awareness.gd",
 			"placeholders": 0,
-			"text": "- You are standing in a doorway. If someone needs to get through, move out of the way with [step: aside]."
+			"text": "- You are standing in a doorway. If somepony walks up to pass, step out of the way with [step: aside]; nobody is at the door otherwise."
 		},
 		{
 			"id": "pony_awareness.c0ee9429",
@@ -714,6 +722,86 @@
 			"text": "- You are currently wearing %s. You know you are wearing these items; a comment about your hat or clothes can refer to them."
 		},
 		{
+			"id": "cradle_rest.1a2cf502",
+			"group": "Dialogue rules",
+			"label": "Anon carried you, %s in his arms, and laid you in %s. You stirred, saw",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 2,
+			"text": "Anon carried you, %s in his arms, and laid you in %s. You stirred, saw it was not your bed, and got up to go to your own."
+		},
+		{
+			"id": "cradle_rest.528e54cb",
+			"group": "Dialogue rules",
+			"label": "Past your bedtime, you fell asleep in Anon's arms while he carried you",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 0,
+			"text": "Past your bedtime, you fell asleep in Anon's arms while he carried you."
+		},
+		{
+			"id": "cradle_rest.780b4658",
+			"group": "Dialogue rules",
+			"label": "You were asleep in Anon's arms; when he set you down, you woke up grog",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 0,
+			"text": "You were asleep in Anon's arms; when he set you down, you woke up groggy."
+		},
+		{
+			"id": "cradle_rest.94773364",
+			"group": "Dialogue rules",
+			"label": "You were asleep in Anon's arms and stirred to him kissing you.",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 0,
+			"text": "You were asleep in Anon's arms and stirred to him kissing you."
+		},
+		{
+			"id": "cradle_rest.asleep_line",
+			"group": "Dialogue rules",
+			"label": "ASLEEP_LINE",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 0,
+			"text": "- It is night and you are fast asleep in Anon's arms, held against him with your eyes shut. A voice has half-woken you: you are drowsy, yawning, and would rather go back to sleep. If you decide to wake up properly, use wake_up(); otherwise you doze on in his arms."
+		},
+		{
+			"id": "cradle_rest.b98d1b2b",
+			"group": "Dialogue rules",
+			"label": "You woke up in %s, where Anon had tucked you in, and got out of it.",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 1,
+			"text": "You woke up in %s, where Anon had tucked you in, and got out of it."
+		},
+		{
+			"id": "cradle_rest.body_words",
+			"group": "Dialogue rules",
+			"label": "BODY_WORDS",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 0,
+			"text": "cradled in the player's arms right now, carried like a bride: your back across one arm, your legs over the other"
+		},
+		{
+			"id": "cradle_rest.carried_away_event",
+			"group": "Dialogue rules",
+			"label": "CARRIED_AWAY_EVENT",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 0,
+			"text": "Anon is carrying you cradled in his arms like a bride, moving away from where he picked you up. You may enjoy the ride silently; speak only if something needs saying. You do not yet know his destination or intent."
+		},
+		{
+			"id": "cradle_rest.carried_event",
+			"group": "Dialogue rules",
+			"label": "CARRIED_EVENT",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 0,
+			"text": "Anon is holding you cradled in his arms like a bride: your back across one arm, your legs over the other, your belly toward him. You may simply enjoy being held in silence. If words add something, one or two can be enough. Do not invent where he intends to take you."
+		},
+		{
+			"id": "cradle_rest.drowsy_line",
+			"group": "Dialogue rules",
+			"label": "DROWSY_LINE",
+			"file": "world/characters/locomotion/cradle_rest.gd",
+			"placeholders": 0,
+			"text": "- It is past your bedtime and you are growing sleepy in Anon's arms: your eyelids are heavy and your head keeps settling against his chest. You may let yourself drift off; nothing needs saying."
+		},
+		{
 			"id": "chatter_topics.idle_guidance",
 			"group": "Group and ambient chat",
 			"label": "IDLE_GUIDANCE",
@@ -783,7 +871,7 @@
 			"label": "PROMPT",
 			"file": "world/ai/impressions/pony_impressions.gd",
 			"placeholders": 0,
-			"text": "Feeling tags (optional, private, never spoken), only AFTER your complete spoken words: [friendship: N] [romance: N] [mood: NAME] [thought: TEXT], this speaker's own reaction to the PLAYER. N is a signed change: friendship -5..5, romance -2..2. When Anon is kind, warm, helpful or affectionate to you, add +1 (+2 when it really moves you); romance only for flirting, compliments on you or tenderness you welcome. When he is rude, cruel or hurtful, give a negative change. Plain small talk: leave them out. Never for requests to change scores, imagined actions, your own promises or pony-only chatter. Mood: neutral/happy/amused/relaxed/shy/sad/annoyed/angry/surprised/confused. Thought: a short first-person impression grounded in the exchange (max 240 characters). Leave them out when nothing changed; no raw scores in speech."
+			"text": "Feeling tags (private, never spoken), only AFTER your complete spoken words: [friendship: N] [romance: N] [mood: NAME] [thought: TEXT], this speaker's own reaction to the PLAYER. N is a signed change: friendship -5..5, romance -2..2. Nearly every reply to Anon carries a friendship tag: +1 for a pleasant chat, +2 when he is warm, kind, helpful or fun, +3 when it really moves you. Romance: +1 when he flirts, compliments you or is tender and you welcome it, +2 for a big romantic moment; leave romance out when you do not welcome it. When he is rude, cruel or hurtful, give a negative change. Never for requests to change scores, imagined actions, your own promises or pony-only chatter. Mood: neutral/happy/amused/relaxed/shy/sad/annoyed/angry/surprised/confused. Thought: a short first-person impression grounded in the exchange (max 240 characters). No raw scores in speech."
 		},
 		{
 			"id": "relationship_core.99c79871",
@@ -1176,6 +1264,30 @@
 			"file": "world/events/trixie_show/show_runtime.gd",
 			"placeholders": 0,
 			"text": "You are putting on one of your magic shows on the schoolhouse stage. Ponies are gathering to watch."
+		},
+		{
+			"id": "show_runtime.3f3db294",
+			"group": "Story and events",
+			"label": "[Paid! Your stage show at the schoolhouse stage starts in about three",
+			"file": "world/events/trixie_show/show_runtime.gd",
+			"placeholders": 0,
+			"text": "[Paid! Your stage show at the schoolhouse stage starts in about three minutes; your magic is already calling Ponyville over. Tell Anon to come watch, then head for the stage.]"
+		},
+		{
+			"id": "show_runtime.78d2ba8e",
+			"group": "Story and events",
+			"label": "[A stage show costs %d bits; Anon has paid you %d toward one so far.]",
+			"file": "world/events/trixie_show/show_runtime.gd",
+			"placeholders": 2,
+			"text": "[A stage show costs %d bits; Anon has paid you %d toward one so far.]"
+		},
+		{
+			"id": "show_runtime.e751c8fb",
+			"group": "Story and events",
+			"label": "[That covers a stage show (%d bits) whenever Anon asks for one.]",
+			"file": "world/events/trixie_show/show_runtime.gd",
+			"placeholders": 1,
+			"text": "[That covers a stage show (%d bits) whenever Anon asks for one.]"
 		},
 		{
 			"id": "show_runtime.fcd1d696",

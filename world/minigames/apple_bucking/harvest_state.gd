@@ -9,15 +9,23 @@ const DAILY_BASKETS: int = 6
 var trees: Dictionary = {}
 var _committing: bool = false
 
+## Trees fruit from spring to autumn and stand bare in winter (dev 2026-10-28: a new game starts
+## in spring, and autumn-only apples left the job empty for 40 in-game days). "cycle" is the day
+## number, so every basket has its own receipt; "season" paces Applejack's invitation.
 static func calendar(day: float, season_days: int) -> Dictionary:
 	var length: int = maxi(1, season_days)
 	var season: int = int(floor(maxf(day, 0.0) / length))
-	var phase: float = fposmod(maxf(day, 0.0), length * 4.0) / length
-	var growth: float = 0.0
-	if phase < 2.0: growth = smoothstep(.25, 2.0, phase)
-	elif phase < 3.0: growth = 1.0
-	return {"cycle": season / 4, "ripe": season % 4 == 2, "growth": growth,
-		"next_autumn": (int(season / 4) * 4 + 6) * length}
+	var ripe: bool = season % 4 != 3
+	return {"cycle": int(floor(maxf(day, 0.0))), "season": season, "ripe": ripe, "growth": 1.0 if ripe else 0.0}
+
+## A picked tree grows a new crop in REGROW_DAYS. Older saves stored next autumn instead and no
+## pick day; those trees bear again at once (at most two days early) rather than standing bare
+## until next autumn.
+const REGROW_DAYS: int = 2
+
+static func regrown_day(row: Dictionary) -> int:
+	if not row.has("day"): return 0
+	return mini(int(row.get("next_ripe_day", 0)), int(row.day) + REGROW_DAYS)
 
 func available(id: String, day: float, season_days: int) -> bool:
 	var now: Dictionary = calendar(day, season_days)
@@ -27,7 +35,7 @@ func available(id: String, day: float, season_days: int) -> bool:
 	if not prior.is_empty() and not prior.paid:
 		return prior.released.size() < int(prior.count)
 	if not now.ripe or baskets_on(day) >= DAILY_BASKETS: return false
-	return prior.is_empty() or (prior.paid and int(prior.cycle) < int(now.cycle) and day >= float(prior.next_ripe_day))
+	return prior.is_empty() or (prior.paid and int(prior.cycle) < int(now.cycle) and day >= float(regrown_day(prior)))
 
 ## Baskets started on this in-game day.
 func baskets_on(day: float) -> int:
@@ -41,17 +49,18 @@ func growth(id: String, day: float, season_days: int) -> float:
 	var now: Dictionary = calendar(day, season_days)
 	var prior: Dictionary = trees.get(id, {})
 	if not prior.is_empty() and not prior.paid: return 1.0
-	if not prior.is_empty() and (not prior.paid or int(prior.cycle) >= int(now.cycle)):
-		return 0.0
-	return float(now.growth)
+	if prior.is_empty() or not now.ripe: return float(now.growth)
+	var started: float = float(prior.get("day", regrown_day(prior) - REGROW_DAYS))
+	return clampf((day - started) / float(maxi(1, regrown_day(prior) - int(started))), 0.0, 1.0)
 
 func begin(id: String, count: int, day: float, season_days: int) -> bool:
 	if _committing or id.is_empty() or count < 1 or count > 64 or not available(id, day, season_days): return false
 	var prior: Dictionary = trees.get(id, {})
 	if not prior.is_empty() and not prior.paid: return false
 	var now: Dictionary = calendar(day, season_days)
+	var today: int = int(floor(maxf(day, 0.0)))
 	trees[id] = {"cycle": int(now.cycle), "count": count, "released": [], "collected": [], "paid": false,
-		"next_ripe_day": int(now.next_autumn), "day": int(floor(maxf(day, 0.0)))}
+		"next_ripe_day": today + REGROW_DAYS, "day": today}
 	return true
 
 ## Stable original fruit indices, released exactly once by a certified strike.

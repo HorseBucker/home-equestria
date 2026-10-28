@@ -25,14 +25,38 @@ var _watchers: Array = []   # [matcher: Variant, callback: Callable]
 
 func _ready() -> void:
 	get_tree().node_added.connect(_on_node_added)
-	for mod: Dictionary in LOADER.active():
-		if str(mod.entry).is_empty(): continue
-		var script := load(str(mod.entry)) as Script
-		var node: Variant = script.new() if script != null and script.can_instantiate() else null
-		if not node is Node:
-			push_warning("[mods] %s: entry %s is not a Node script" % [mod.id, mod.entry]); continue
-		(node as Node).name = str(mod.id)
-		add_child(node)
+	for mod: Dictionary in LOADER.active(): _start(mod)
+
+
+## Settings → Mods switch (mod_loader.gd switch()). Starts or stops the pack's entry scripts now
+## when it can; returns false when the change waits for the next launch. An entry started
+## mid-game has missed world_ready and player_ready: it reads `Mods.game` in its _ready instead.
+## A stopped entry is freed; its _exit_tree must undo what it changed in the world.
+func switch(file: String, enabled: bool) -> bool:
+	if not LOADER.switch(file, enabled): return false
+	for mod: Dictionary in LOADER.mods:
+		if mod.file != file: continue
+		if enabled and mod.errors.is_empty(): _start(mod)
+		elif not enabled: _stop(str(mod.id))
+	return true
+
+func _start(mod: Dictionary) -> void:
+	if str(mod.entry).is_empty() or has_node(NodePath(str(mod.id))): return
+	var script := load(str(mod.entry)) as Script
+	var node: Variant = script.new() if script != null and script.can_instantiate() else null
+	if not node is Node:
+		push_warning("[mods] %s: entry %s is not a Node script" % [mod.id, mod.entry]); return
+	(node as Node).name = str(mod.id)
+	add_child(node)
+
+func _stop(id: String) -> void:
+	var node := get_node_or_null(NodePath(id))
+	if node == null: return
+	remove_child(node)
+	node.queue_free()
+	_watchers = _watchers.filter(func(watcher: Array) -> bool:
+		var owner := (watcher[1] as Callable).get_object() as Node
+		return owner == null or (owner != node and not node.is_ancestor_of(owner)))
 
 
 ## Every mod found this launch, loaded or not (Settings → Mods lists these).
@@ -94,7 +118,7 @@ func _on_node_added(node: Node) -> void:
 func _check_watchers(node: Node) -> void:
 	if not is_instance_valid(node): return
 	for watcher: Array in _watchers:
-		if matches(node, watcher[0]): (watcher[1] as Callable).call(node)
+		if (watcher[1] as Callable).is_valid() and matches(node, watcher[0]): (watcher[1] as Callable).call(node)
 
 static func _is_game(node: Node) -> bool:
 	var script := node.get_script() as Script

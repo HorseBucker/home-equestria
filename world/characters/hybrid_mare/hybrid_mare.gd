@@ -1109,9 +1109,8 @@ func boop_count() -> int:
 	return boop_node.boops if boop_node != null else 0
 
 
-## The player holds one of her hooves (not her own raised or pushing hoof, which uses the same hold).
 func is_hoof_held() -> bool:
-	return hoof_hold.active() and hoof_hold.by_player
+	return hoof_hold.active()
 
 ## Petting sessions so far (pony_touch_body.gd), for the awareness events.
 func pet_count() -> int:

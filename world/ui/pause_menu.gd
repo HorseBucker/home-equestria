@@ -21,6 +21,7 @@ const STYLE := preload("res://world/ui/menu_style.gd")
 const ICON := preload("res://world/ui/menu_icon.gd")
 const CARD := preload("res://world/ui/menu_card.gd")
 const FX := preload("res://world/ui/menu_fx.gd")
+const UPDATER := preload("res://world/update/updater.gd")
 const CATALOGUE := preload("res://world/saves/save_catalogue.gd")
 const SHELF := preload("res://world/saves/save_shelf.gd")
 const LOGO := preload("res://world/ui/title/logo.png")
@@ -170,6 +171,10 @@ func _build_main(root: Control) -> void:
 	_pony_notice.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_pony_notice.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_pony_notice.hide(); box.add_child(_pony_notice)
+	# Signed in-place updates (dev 2026-10-28): a quiet check, then one line here when a newer
+	# version is out (world/update/updater.gd).
+	var updater := UPDATER.new(); updater.name = "Updater"; updater.quit_game = quit_game
+	add_child(updater); updater.attach(box)
 
 
 ## Where and when the player is, for the column's heading.

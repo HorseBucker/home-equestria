@@ -2,14 +2,14 @@ extends RefCounted
 const CONTROLS := preload("res://world/ai/speech_controls.gd")
 const PLACES := preload("res://world/navigation/place_directory.gd")
 ## Data only. Never turn model text into method names, code, paths or coordinates.
-const TYPES := ["look_at", "approach", "call_pony", "send_pony", "follow", "go_to", "step", "lead", "stay", "cancel", "resume_routine", "sit", "stand", "lie_down", "fly_to", "hover", "land", "loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "sit_on_seat", "go_home", "air_show", "relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "kiss_player", "wake_up", "teleport_to_ponyville", "send_letter", "give_house"]
+const TYPES := ["look_at", "approach", "call_pony", "send_pony", "follow", "go_to", "step", "lead", "stay", "cancel", "resume_routine", "sit", "stand", "lie_down", "fly_to", "hover", "land", "loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "sit_on_seat", "go_home", "air_show", "relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "kiss_player", "wake_up", "teleport_to_ponyville", "send_letter", "give_house", "magic_show"]
 const SPEECH_LIMIT := 2880
 const STEP_DIRECTIONS := ["forward", "back", "left", "right", "away", "aside"]
 const STEP_SPELLINGS := {"forwards": "forward", "ahead": "forward", "backward": "back", "backwards": "back", "backward_s": "back",
 	"back_up": "back", "behind": "back", "sideways": "aside", "out_of_the_way": "aside", "out_of_way": "aside", "to_the_side": "aside",
 	"side": "aside", "away_from_player": "away", "away_from_you": "away"}
 const FIELDS := {
-	"teleport_to_ponyville": [], "give_house": [],
+	"teleport_to_ponyville": [], "give_house": [], "magic_show": [],
 	"call_pony": ["pony_id"], "send_pony": ["pony_id", "target_id"],
 	"request_space": [], "buck_player": [], "cuddle": [], "kiss_player": [], "wake_up": [], "send_letter": [], "relationship_offer": ["kind", "activity", "location_id"], "relationship_answer": ["offer_id", "accept"],
 	"look_at": ["target_id", "duration_s"], "approach": ["target_id", "distance_m"],
@@ -60,6 +60,8 @@ const ALIASES := {"lookat": "look_at", "look": "look_at", "goto": "go_to", "walk
 	"letter": "send_letter", "send_a_letter": "send_letter", "write_letter": "send_letter", "letter_to_celestia": "send_letter", "send_letter_to_celestia": "send_letter", "fire_letter": "send_letter",
 	"give_home": "give_house", "grant_house": "give_house", "grant_home": "give_house", "assign_house": "give_house", "house_grant": "give_house",
 	"airshow": "air_show", "show": "air_show", "stunts": "air_show", "stunt_show": "air_show", "aerobatics": "air_show", "flying_show": "air_show",
+	"perform_show": "magic_show", "stage_show": "magic_show", "start_show": "magic_show", "magicshow": "magic_show", "trixie_show": "magic_show",
+	"put_on_show": "magic_show", "put_on_a_show": "magic_show", "great_and_powerful_show": "magic_show", "perform": "magic_show",
 	"move": "step", "step_aside": "step", "move_aside": "step", "make_way": "step", "scoot": "step", "shift": "step"}
 ## One line per command for the prompt: the exact tag and what it does.
 const TAG_HELP := {
@@ -90,7 +92,8 @@ const TAG_HELP := {
 	"request_space": "[request_space] ask Anon to give you some space", "buck_player": "[buck_player] buck Anon away (only real, lasting anger at unwelcome contact)",
 	"cuddle": "[cuddle] cuddle up to Anon", "kiss_player": "[kiss_player] kiss Anon",
 	"send_letter": "[send_letter] write a quick note on a scroll and send it to Princess Celestia with your green fire",
-	"give_house": "[give_house] officially make a free Ponyville house Anon's own home, for good (the empty one he is in or beside, else the nearest free one); only when you give it, never just to talk about houses; works alongside one other action"}
+	"give_house": "[give_house] officially make a free Ponyville house Anon's own home, for good (the empty one he is in or beside, else the nearest free one); only when you give it, never just to talk about houses; works alongside one other action",
+	"magic_show": "[magic_show] start your Great and Powerful stage show at the schoolhouse stage: fireworks call the town, the curtain rises in about three minutes; only when Anon paid for one or you truly want an audience; works alongside one other action"}
 
 ## Turns a model's tag name into a TYPES entry ("" when it is not an action).
 static func action_type(raw: String) -> String:
@@ -118,6 +121,8 @@ static func decode_tags(text: String, actor: String, turn: int, context: Diction
 		var name := raw.strip_edges().to_lower().replace(" ", "_").replace("-", "_")
 		var value := found.get_string(2).strip_edges()
 		var type := action_type(raw)
+		# Trixie cannot fly: her plain [show] means her stage show, not an air show (dev 2026-10-28).
+		if name == "show" and "magic_show" in context.get("capabilities", []): type = "magic_show"
 		# Air show: a figure tag joins the reply's show (or starts one); two trick tags chain.
 		var figure: String = SHOW_TAGS.get(name, "") if type in ["", "loop_de_loop", "barrel_roll", "air_show"] else ""
 		if type == "air_show" or figure != "":
@@ -162,8 +167,8 @@ static func decode_tags(text: String, actor: String, turn: int, context: Diction
 		if type == "teleport_to_ponyville" and not value.is_empty():
 			dropped.append("teleport_to_ponyville takes no arguments"); continue
 		var action := _tag_action(type, value, turn, actions.size())
-		# A house grant moves nopony: it may come with her walk or follow.
-		var channel := "gaze" if type == "look_at" else ("grant" if type == "give_house" else "movement")
+		# A house grant or Trixie's stage show moves nopony now: either may come with her walk or follow.
+		var channel := "gaze" if type == "look_at" else ("grant" if type in ["give_house", "magic_show"] else "movement")
 		var error := validate(action, context)
 		if error == "" and channel in channels: error = "Only one %s per reply" % ("look_at" if channel == "gaze" else "movement")
 		if error == "" and actions.size() >= 2: error = "At most two actions per reply"
@@ -274,7 +279,7 @@ static func decode(text: String, actor: String, turn: int, context: Dictionary, 
 		if action.id in ids: return {"error": "Duplicate action IDs in reply"}
 		if action.type in ["relationship_offer","relationship_answer","request_space","buck_player","cuddle","teleport_to_ponyville","give_house"] and CONTROLS.sanitize(value.speech).is_empty():return {"error":"This action requires spoken words before it can finish"}
 		ids.append(action.id)
-		var channel := "gaze" if action.type == "look_at" else ("grant" if action.type == "give_house" else "movement")
+		var channel := "gaze" if action.type == "look_at" else ("grant" if action.type in ["give_house", "magic_show"] else "movement")
 		if channel in channels: return {"error": "One intention per channel per reply"}
 		channels.append(channel)
 	return {"speech": value.speech, "actions": value.actions.duplicate(true), "impression":preload("res://world/ai/impressions/pony_impressions.gd").sanitize(value.get("impression")),

@@ -532,9 +532,15 @@ func handle_text(text: String) -> void:
 	_recorded = false
 	_set_attention(id, player_head)
 	var members := _group_candidates(id)
-	if introduced_name(text, own_name) and is_instance_valid(world_context) and is_instance_valid(world_context.player_bonds) and world_context.player_bonds.has_method("mark_name_known"):
+	var told := told_name(text, own_name)
+	if not told.is_empty() and is_instance_valid(world_context) and is_instance_valid(world_context.player_bonds) and world_context.player_bonds.has_method("mark_name_known"):
 		for listener: String in (members if members.size() >= 2 else [id]):
-			world_context.player_bonds.mark_name_known(listener)
+			world_context.player_bonds.mark_name_known(listener, told)
+	# A payment made in the Pay panel since her last turn (told_paid): she hears it with his line.
+	var paid_note := str(characters[id].get("paid_note", ""))
+	if not paid_note.is_empty():
+		characters[id].erase("paid_note")
+		text = paid_note + "\n" + text
 	var bonds_runtime: Node=get_tree().get_first_node_in_group("player_relationships")
 	if bonds_runtime!=null: bonds_runtime.player_text(id,text,members.size()<2,_turn_id)
 	for participant in (members if members.size() >= 2 else [id]):
@@ -639,6 +645,41 @@ static func introduced_name(text: String, own_name: String) -> bool:
 			start = words.find(phrase, start + 1)
 	return false
 
+
+## The name the player introduces himself with, or "" (2026-10-28 player report: a pony learned
+## his name only when it was exactly the configured one, so any other name was forgotten).
+## "My name is X", "my name's X", "name's X" and "call me X" teach any one-word name; "I am" and
+## "I'm" only the configured name, since "I'm tired" is not an introduction.
+static func told_name(text: String, own_name: String) -> String:
+	if introduced_name(text, own_name): return own_name.capitalize()
+	var words := text.to_lower().replace("’", "'")
+	for prefix: String in ["my name is ", "my name's ", "call me "]:
+		var start := words.find(prefix)
+		while start >= 0:
+			if start == 0 or words[start - 1] not in "abcdefghijklmnopqrstuvwxyz":
+				var rest := words.substr(start + prefix.length()).strip_edges()
+				var name := ""
+				for c: String in rest:
+					if c not in "abcdefghijklmnopqrstuvwxyz'-": break
+					name += c
+				name = name.trim_suffix("'").trim_suffix("-")
+				if name.length() >= 2 and name.length() <= 20 and name not in NOT_NAMES: return name.capitalize()
+			start = words.find(prefix, start + 1)
+	return ""
+
+## Words that follow "call me" or "my name is" without being a name ("call me later", "call me crazy").
+const NOT_NAMES := ["not", "just", "a", "an", "the", "so", "really", "what", "whatever", "anything", "nothing", "your", "his", "her", "my", "mister", "sir",
+	"later", "back", "crazy", "maybe", "tomorrow", "sometime", "anytime", "whenever", "again", "soon", "now", "when", "if", "please", "up", "over",
+	"silly", "stupid", "old", "weird", "nuts", "mad", "lucky", "sometimes", "anything", "something", "that", "this", "it", "out", "in", "on", "by", "whatever"]
+
+
+## Anon paid her in the Pay panel (world/ui/pay_panel.gd, bit_payments.gd): the bits have already
+## moved; she is only told. She reacts at once when free, else hears it with his next line.
+func told_paid(id: String, note: String) -> void:
+	if not characters.has(id): return
+	var context := "[Observed situation, not player speech] " + note + " React in character in one or two short sentences."
+	if begin_player_greeting(id, context): return
+	characters[id]["paid_note"] = "[Observed: " + note + "]"
 
 ## Called only after the deterministic approach reaches the player.
 ## `context` replaces the default "walked over to Anon" situation (princess visits).

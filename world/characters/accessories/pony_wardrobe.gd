@@ -16,7 +16,10 @@ extends Node
 const KINDS := ["scarf", "beanie", "sunhat", "socks", "wizard_hat", "cape", "spa-necklace", "bowtie", "necktie", "cowpony-hat", "detective-hat", "nurse-cap", "cat-eye-glasses", "aviators", "goggles", "headphones"]
 const WORN_NAMES := {"scarf":"a scarf", "beanie":"a detective hat", "sunhat":"a cowpony hat",
 	"socks":"striped thigh-high socks", "wizard_hat":"a wizard hat", "cape":"a cape", "spa-necklace":"a spa pendant necklace", "bowtie":"a bow tie", "necktie":"a necktie", "cowpony-hat":"a cowpony hat", "detective-hat":"a detective hat", "nurse-cap":"a nurse cap", "cat-eye-glasses":"cat-eye glasses", "aviators":"aviator glasses", "goggles":"flight goggles", "headphones":"headphones"}
-const COLOURS := [Color("c8423c"), Color("3f6fb5"), Color("e0b640"), Color("5a9a55"), Color("9b5bb5"), Color("e07aa8"), Color("f0ece0"), Color("3b3b45")]
+## The first eight are the shop's colours; the rest are dyes for the wardrobe mirror (dev
+## 2026-10-28, thread: "more sock colours"). pony_outfit.gd COLOUR_COUNT must match.
+const COLOURS := [Color("c8423c"), Color("3f6fb5"), Color("e0b640"), Color("5a9a55"), Color("9b5bb5"), Color("e07aa8"), Color("f0ece0"), Color("3b3b45"),
+	Color("f08a3c"), Color("6ec6e8"), Color("3aa89a"), Color("b8e06a"), Color("7a4a2e"), Color("f4c6d8"), Color("c9b3f0"), Color("1d2a5a")]
 const HEADWEAR := ["beanie", "sunhat", "cowpony-hat", "detective-hat", "nurse-cap", "wizard_hat", "goggles", "headphones"]
 const TRIXIE := "trixie"
 ## Show defaults that reuse fitted adult-mare pieces. Hair-export defaults (Applejack's hat)

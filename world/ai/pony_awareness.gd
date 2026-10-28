@@ -359,7 +359,9 @@ func describe(sample: Dictionary, player_name: String, now: float) -> PackedStri
 	# An unknown cover carries no decision value and is left out.
 	if str(sample.cover) != "Indoor/outdoor status is unknown.": lines.append("- " + sample.cover)
 	if sample.get("doorway", false):
-		lines.append("- You are standing in a doorway. If someone needs to get through, move out of the way with [step: aside].")
+		# The older wording ("if someone needs to get through") had ponies hearing knocks at the door
+		# in every indoor chat (2026-10-28 player report). Nobody is at the door unless an event says so.
+		lines.append("- You are standing in a doorway. If somepony walks up to pass, step out of the way with [step: aside]; nobody is at the door otherwise.")
 	if sample.get("riding", false):
 		lines.append("- You are riding in Anon's hot-air balloon, in its basket with him. " + ("It is up in the air, drifting over Equestria; you step off once it lands with the gate open." if sample.get("aloft", false) else "It is resting on the ground with the gate open."))
 	if sample.get("asleep", false):

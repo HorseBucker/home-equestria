@@ -232,6 +232,9 @@ func _input(event: InputEvent) -> void:
 		_pressed = false
 		if _action == "pet": _finish()
 	if event is InputEventKey and event.pressed and not event.echo and event.physical_keycode in [KEY_H, KEY_K, KEY_C, KEY_G]:
+		# Letters typed into the chat box (world/ui/chat_box.gd) are words, not hug/kiss/grab keys.
+		var focus := get_viewport().gui_get_focus_owner()
+		if focus is LineEdit or focus is TextEdit: return
 		if _action in ["pet", "hoof_hold"]: _finish()
 
 

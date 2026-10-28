@@ -384,7 +384,13 @@ func _slider(line: HBoxContainer, key: String, spec: Dictionary) -> void:
 		widest = maxf(widest, _text_width(text, font_size - 1))
 	value.custom_minimum_size.x = widest + (32.0 if typed else 4.0)
 	# The arrow keys move by `arrow_step` where a fine range has one (mouse sensitivity).
-	if spec.has("arrow_step"): slider.custom_step = float(spec.arrow_step)
+	# Godot 4.5's Slider has no custom_step: step here, before the slider's own 1-unit move.
+	if spec.has("arrow_step"):
+		slider.gui_input.connect(func(event: InputEvent) -> void:
+			var direction := 1.0 if event.is_action_pressed("ui_right", true) else (-1.0 if event.is_action_pressed("ui_left", true) else 0.0)
+			if direction == 0.0: return
+			slider.value += direction * float(spec.arrow_step)
+			slider.accept_event())
 	slider.custom_minimum_size = Vector2(clampf(_room - widest - 14.0, font_size * 7.0, font_size * 14.0), font_size * 1.6)
 	slider.value_changed.connect(func(at: float) -> void:
 		Settings.set_value(key, presets[int(at)] if not presets.is_empty() else at))
@@ -435,10 +441,10 @@ static func _option_index(key: String) -> int:
 
 
 ## Settings → Mods (world/modding/mod_loader.gd): every mod pack found this launch with an On/Off
-## switch, kept in user://mods/mods.cfg for the next launch.
+## switch, kept in user://mods/mods.cfg; entry-only mods switch at once (Mods.switch()).
 func _build_mods(list: VBoxContainer) -> void:
 	var loader := preload("res://world/modding/mod_loader.gd")
-	_note(list, "Mods can run code on your computer. Only install mods from people you trust. Switches apply the next time the game starts.")
+	_note(list, "Mods can run code on your computer. Only install mods from people you trust. Most mods switch on and off at once; the rest apply the next time the game starts.")
 	_button(list, "Open mods folder", _open_mods_folder).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if loader.packs.is_empty():
 		_note(list, "No mods installed. Put .pck mods in the mods folder, then restart the game.")
@@ -458,7 +464,7 @@ func _build_mods(list: VBoxContainer) -> void:
 			toggle.text = "On" if on else "Off"
 			if on != bool(pack.enabled): Settings.message = "Restart the game to apply mod changes."
 			refresh()
-		toggle.pressed.connect(func() -> void: loader.set_enabled(file, file in loader.disabled_files()); show.call())
+		toggle.pressed.connect(func() -> void: Mods.switch(file, file in loader.disabled_files()); show.call())
 		toggle.text = "Off" if file in disabled else "On"
 
 

@@ -1,5 +1,6 @@
 extends Node3D
 const BLUE=Color("35b7ff")
+const BITS := preload("res://world/ai/bit_payments.gd")
 var owner_ui:Node
 var store:Node
 var panel:Node3D
@@ -27,6 +28,7 @@ func setup(ui:Node,context:Node):
 		if rig is CollisionObject3D:_excluded.append(rig.get_rid())
 	panel=preload("res://world/ui/profile/pony_profile_view.gd").new();add_child(panel)
 	panel.closed.connect(close);panel.back.connect(back)
+	panel.pay.connect(_pay);panel.hire_show.connect(_hire_show)
 	pointer=preload("res://world/ui/controller_pointer.gd").new();add_child(pointer);pointer.set_color(BLUE)
 	_material=ShaderMaterial.new();_material.shader=load("res://addons/cel-shader/outline-tinted.gdshader");_material.set_shader_parameter("outline_color",BLUE);_material.set_shader_parameter("outline_width",.006)
 	_hand_material=ShaderMaterial.new();_hand_material.shader=load("res://world/ui/profile/hand_glow.gdshader");_hand_material.set_shader_parameter("outline_color",BLUE);_hand_material.set_shader_parameter("outline_width",.003)
@@ -106,7 +108,37 @@ func _facts(id: String) -> Dictionary:
 	for event: Dictionary in store.events_for(id, 64):
 		if "player" in event.get("subjects", []): memories.append(str(event.text).left(160))
 	info.memories = memories.slice(maxi(0, memories.size() - 3))
+	var game: Node = owner_ui.get_parent()
+	info.purse = BITS.balance(store, id)
+	info.player_bits = int(owner_ui.inventory.bits) if owner_ui.get("inventory") != null else 0
+	var show: Node = game.get_node_or_null("TrixieShow") if is_instance_valid(game) else null
+	if id == "trixie" and show != null:
+		info.show_price = int(show.SHOW_PRICE)
+		info.show_ready = not show.active()
 	return info
+
+## Pay buttons: the bits move here (bit_payments.gd); her model is only told afterwards.
+func _pay(amount: int) -> void:
+	if not is_instance_valid(selected): return
+	var id: String = selected.identity.id
+	if not BITS.pay(owner_ui.get_parent(), selected, id, amount).is_empty(): _populate(); return
+	_tell(id, "Anon just paid you %d bits. You now have %d bits." % [amount, BITS.balance(store, id)])
+	_populate()
+
+## Trixie's hire button: SHOW_PRICE bits paid, then her show starts (show_runtime.gd paid_show).
+func _hire_show() -> void:
+	if not is_instance_valid(selected) or selected.identity.id != "trixie": return
+	var show: Node = owner_ui.get_parent().get_node_or_null("TrixieShow")
+	if show == null or show.active(): return
+	var price := int(show.SHOW_PRICE)
+	if not BITS.pay(owner_ui.get_parent(), selected, "trixie", price).is_empty(): _populate(); return
+	var note: String = show.paid_show(price, true)
+	_tell("trixie", "Anon just paid you %d bits to put on a stage show. %s" % [price, note.trim_prefix("[").trim_suffix("]")])
+	_populate()
+
+func _tell(id: String, note: String) -> void:
+	var director: Variant = owner_ui.get_parent().get("director")
+	if director is Node and is_instance_valid(director) and director.has_method("told_paid"): director.told_paid(id, note)
 
 func _highlight(pony:Node3D):
 	if target==pony:return

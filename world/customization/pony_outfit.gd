@@ -7,6 +7,8 @@ extends RefCounted
 ## Human clothes never come here, and these never reach Anon's human wardrobe.
 const FITTED := preload("res://world/characters/accessories/pony_fitted_accessories.gd")
 const WARDROBE_PATH := "res://world/characters/accessories/pony_wardrobe.gd"
+## Size of pony_wardrobe.gd COLOURS (kept here so saves validate without loading the builder).
+const COLOUR_COUNT := 16
 const ITEMS_PATH := "res://world/shop/shop_items.gd"
 ## player/pony_form.gd FIRST_PERSON_HIDDEN_LAYER: hats and glasses stay out of her own eye.
 const FIRST_PERSON_HIDDEN_LAYER := 1 << 17

@@ -33,6 +33,7 @@ func situation_block(id: String) -> String:
 	var observation: Dictionary = host.awareness.sample(id, node, host.characters, host.player_head, host._now(), host._earshot(id), true)
 	lines.append_array(host.awareness.describe(observation, str(host.config.get_value("player_name", "Anon")), host._now()))
 	lines.append(preload("res://world/characters/accessories/pony_wardrobe.gd").situation_line(node))
+	if is_instance_valid(host.world_context): lines.append(preload("res://world/ai/bit_payments.gd").situation_line(host.world_context, id))
 	# The player-body line rides in the fixed head (solo_head), not in every live block.
 	# First meeting or not, and whether she knows his name (player_bonds.gd knowledge_line).
 	if is_instance_valid(host.world_context) and is_instance_valid(host.world_context.player_bonds) and host.world_context.player_bonds.has_method("knowledge_line"):

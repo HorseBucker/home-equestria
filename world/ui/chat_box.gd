@@ -44,8 +44,8 @@ func _open() -> bool:
 	if "controls_locked" in player and player.controls_locked:
 		var activity := OWNER.current(inventory)
 		if activity == null or not activity.has_method("owns_control_lock") or not activity.owns_control_lock(): return false
-	OWNER.cancel_current(inventory)
-	if "controls_locked" in player and player.controls_locked: return false
+	# Typing no longer cancels what Anon is doing (2026-10-28 player report: Enter stood him up
+	# and dropped the mare he carried). Movement is locked while the field is open.
 	visible = true
 	_mouse_before = Input.mouse_mode
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE

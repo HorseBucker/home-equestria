@@ -9,7 +9,8 @@ extends RefCounted
 ## Packs come from the mods folders (user://mods/, and mods/ beside the executable) and, as
 ## before, loose .pck files beside the executable that are not the game's own. They load in file
 ## name order, after the game's packs. Switches in Settings → Mods are kept in user://mods/mods.cfg
-## and apply on the next launch. Guide for modders and their AI agents: res://mods/README.md,
+## and apply at once for mods that only run an entry script (switch()); anything else applies on
+## the next launch. Guide for modders and their AI agents: res://mods/README.md,
 ## res://mods/AGENTS.md (source repository only).
 
 const USER_DIR := "user://mods"
@@ -82,7 +83,37 @@ static func disabled_files() -> PackedStringArray:
 	var value: Variant = config.get_value("mods", "disabled", PackedStringArray())
 	return PackedStringArray(value) if value is Array or value is PackedStringArray else PackedStringArray()
 
-## Settings → Mods switch; takes effect on the next launch.
+## Settings → Mods switch. Saves it for the next launch, then applies it now when every mod in the
+## pack only runs an entry script: a pack first switched on mid-game is mounted without replacing
+## game files, so its own res://mods/<id> files arrive now and any game-file replacements wait for
+## the next launch. Packs that extend scripts, merge data or only replace game files keep their
+## current state until then. Returns true when the mods' enabled flags changed now; the Mods
+## autoload then starts or stops their entry scripts.
+static func switch(file: String, enabled: bool) -> bool:
+	set_enabled(file, enabled)
+	var found := packs.filter(func(row: Dictionary) -> bool: return row.file == file)
+	if found.is_empty(): return false
+	var row: Dictionary = found[0]
+	if row.enabled == enabled: return false
+	if enabled and not row.mounted:
+		var folders := _mod_folders()
+		if not ProjectSettings.load_resource_pack(row.path, false):
+			row.error = "could not be read as a resource pack"; return false
+		row.mounted = true
+		for id: String in _mod_folders():
+			if id not in folders:
+				row.ids.append(id)
+				mods.append(read_manifest(id, row))
+	var list := mods.filter(func(mod: Dictionary) -> bool: return mod.file == file)
+	if list.is_empty() or not list.all(_entry_only): return false
+	row.enabled = enabled
+	for mod: Dictionary in list: mod.enabled = enabled
+	return true
+
+static func _entry_only(mod: Dictionary) -> bool:
+	return (mod.extends as Array).is_empty() and not DirAccess.dir_exists_absolute(MODS_ROOT.path_join(mod.id).path_join("merge"))
+
+## Saves a Settings → Mods switch for the next launch.
 static func set_enabled(file: String, enabled: bool) -> void:
 	var disabled := disabled_files()
 	if enabled:

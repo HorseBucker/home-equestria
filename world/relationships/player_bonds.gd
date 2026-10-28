@@ -115,16 +115,18 @@ func knowledge(id: String) -> Dictionary:
 func mark_met(id: String) -> void:
 	_know(id, "met")
 
-func mark_name_known(id: String) -> void:
-	_know(id, "knows_name")
+## `told` is the name he gave her ("" keeps the configured one).
+func mark_name_known(id: String, told := "") -> void:
+	_know(id, "knows_name", told)
 
-func _know(id: String, key: String) -> void:
+func _know(id: String, key: String, told := "") -> void:
 	if context == null or context._read_only or id.is_empty(): return
 	var all: Dictionary = data.get("knowledge", {})
 	var known: Dictionary = (all.get(id, {}) as Dictionary).duplicate()
-	if bool(known.get(key, false)): return
+	if bool(known.get(key, false)) and (told.is_empty() or str(known.get("told_name", "")) == told): return
 	known.erase("unknown")
 	known[key] = true
+	if not told.is_empty(): known.told_name = told.left(20)
 	if key == "met" and not known.has("first_met"): known.first_met = now()
 	all[id] = known
 	data.knowledge = all
@@ -135,7 +137,8 @@ func _know(id: String, key: String) -> void:
 func knowledge_line(id: String) -> String:
 	var known := knowledge(id)
 	var w := _player_words()
-	var name_line := "" if bool(known.get("knows_name", false)) else " You do not know %s name yet: \"Anon\" is only how these notes refer to %s, so do not call %s that unless %s tells you." % [w.possessive, w.object, w.object, w.subject]
+	var told := str(known.get("told_name", ""))
+	var name_line := (" %s told you %s name is %s; call %s that." % [w.subject.capitalize(), w.possessive, told, w.object] if not told.is_empty() and told.to_lower() != "anon" else "") if bool(known.get("knows_name", false)) else " You do not know %s name yet: \"Anon\" is only how these notes refer to %s, so do not call %s that unless %s tells you." % [w.possessive, w.object, w.object, w.subject]
 	if bool(known.get("unknown", false)):
 		return "- Anon and you: you may or may not have met before; do not invent shared history or a past friendship." + name_line
 	if not bool(known.get("met", false)):

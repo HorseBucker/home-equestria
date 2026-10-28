@@ -147,8 +147,8 @@ func refresh() -> void:
 		_ripe_count = count
 		markers_changed.emit()
 	var now: Dictionary = STATE.calendar(when, length)
-	if count > 0 and _invited_cycle != int(now.cycle):
-		_invited_cycle = int(now.cycle)
+	if count > 0 and _invited_cycle != int(now.season):
+		_invited_cycle = int(now.season)
 		invitation_available.emit({"id":"apple_bucking", "pony_id":"applejack",
 			"text":"The apples are ripe. Buck a trunk and I'll gather them into the baskets.", "markers":activity_markers()})
 	if _notice != null:

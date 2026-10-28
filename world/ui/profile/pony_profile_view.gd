@@ -3,6 +3,10 @@ extends "res://world/ui/spatial_menu_panel.gd"
 ## Relationship rules stay in PlayerBonds; this view presents current facts.
 signal closed
 signal back
+## Pay row (dev 2026-10-28): bits move only through these buttons (world/ai/bit_payments.gd).
+signal pay(amount: int)
+signal hire_show
+const PAY_AMOUNTS := [5, 20, 50, 100]
 const PLUM := Color("6b3f86")
 const LILAC := Color("c06fdb")
 const PINK := Color("f6a6d9")
@@ -14,6 +18,9 @@ var subline: Label
 var summary: RichTextLabel
 var _last_text := ""
 var meters: Dictionary = {}
+var purse: Label
+var pay_buttons: Dictionary = {}
+var hire_button: Button
 
 func _ready() -> void:
 	super._ready()
@@ -44,23 +51,38 @@ func _ready() -> void:
 	summary.add_theme_constant_override("line_separation", 5)
 	col.add_child(summary)
 	summary.get_v_scroll_bar().value_changed.connect(func(_value: float): refresh())
+	purse = Label.new(); purse.add_theme_font_size_override("font_size", 27)
+	purse.add_theme_color_override("font_color", PLUM); col.add_child(purse)
+	var pay_row := HBoxContainer.new(); pay_row.add_theme_constant_override("separation", 12); col.add_child(pay_row)
+	for amount: int in PAY_AMOUNTS:
+		var button := _button("Pay %d" % amount, pay_row)
+		button.pressed.connect(func(): pay.emit(amount))
+		pay_buttons[amount] = button
+	hire_button = _button("Hire a show", pay_row)
+	hire_button.pressed.connect(func(): hire_show.emit())
 	var buttons := HBoxContainer.new(); buttons.add_theme_constant_override("separation", 16); col.add_child(buttons)
 	for caption: String in ["Another pony", "Close"]:
-		var button := Button.new(); button.text = caption; button.custom_minimum_size.y = 64
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 30)
-		button.add_theme_color_override("font_color", PLUM)
-		for state: String in ["hover", "pressed", "focus"]: button.add_theme_color_override("font_" + state + "_color", PLUM)
-		button.add_theme_stylebox_override("normal", _style(MIST, Color.WHITE))
-		button.add_theme_stylebox_override("hover", _style(PINK, Color.WHITE))
-		button.add_theme_stylebox_override("pressed", _style(PINK.darkened(.06), Color.WHITE))
-		button.add_theme_stylebox_override("focus", _style(Color.TRANSPARENT, LILAC))
-		button.mouse_entered.connect(refresh); button.mouse_exited.connect(refresh)
-		button.focus_entered.connect(refresh); button.focus_exited.connect(refresh)
-		buttons.add_child(button)
+		var button := _button(caption, buttons)
 		if caption == "Close": button.pressed.connect(func(): closed.emit())
 		else: button.pressed.connect(func(): back.emit())
 	hide()
+
+func _button(caption: String, row: HBoxContainer) -> Button:
+	var button := Button.new(); button.text = caption; button.custom_minimum_size.y = 64
+	button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	button.add_theme_font_size_override("font_size", 30)
+	button.add_theme_color_override("font_color", PLUM)
+	for state: String in ["hover", "pressed", "focus"]: button.add_theme_color_override("font_" + state + "_color", PLUM)
+	button.add_theme_color_override("font_disabled_color", Color(PLUM, 0.35))
+	button.add_theme_stylebox_override("normal", _style(MIST, Color.WHITE))
+	button.add_theme_stylebox_override("hover", _style(PINK, Color.WHITE))
+	button.add_theme_stylebox_override("pressed", _style(PINK.darkened(.06), Color.WHITE))
+	button.add_theme_stylebox_override("disabled", _style(Color("f3eef5"), Color.WHITE))
+	button.add_theme_stylebox_override("focus", _style(Color.TRANSPARENT, LILAC))
+	button.mouse_entered.connect(refresh); button.mouse_exited.connect(refresh)
+	button.focus_entered.connect(refresh); button.focus_exited.connect(refresh)
+	row.add_child(button)
+	return button
 
 func _add_meter(parent: VBoxContainer, key: String, caption: String, icon: Texture2D, color: Color) -> void:
 	var row := HBoxContainer.new(); row.add_theme_constant_override("separation", 16); parent.add_child(row)
@@ -136,13 +158,20 @@ func show_profile(id: String, identity: Resource, info: Dictionary) -> void:
 				text = "Your romantic relationship with " + title + " ended."
 			lines.append("• " + _plain(text))
 	var body := "\n\n".join(lines)
-	var next_text := JSON.stringify([id, title, stage, body, love, friendship, love_label, standing, romance_visible])
+	var purse_bits := int(info.get("purse", 0)); var player_bits := int(info.get("player_bits", 0))
+	var show_price := int(info.get("show_price", 0)); var show_ready := bool(info.get("show_ready", false))
+	var next_text := JSON.stringify([id, title, stage, body, love, friendship, love_label, standing, romance_visible, purse_bits, player_bits, show_price, show_ready])
 	if next_text == _last_text: return
 	_last_text = next_text
 	var changed_pony := heading.text != title
 	heading.text = title; subline.text = "Relationship: " + stage; summary.text = body
 	_set_meter("love", love, love_label, romance_visible)
 	_set_meter("friendship", friendship, standing)
+	purse.text = "%s's purse: %d bits    Yours: %d bits" % [title, purse_bits, player_bits]
+	for amount: int in pay_buttons: (pay_buttons[amount] as Button).disabled = player_bits < amount
+	hire_button.visible = show_price > 0
+	hire_button.text = "Hire a show · %d" % show_price
+	hire_button.disabled = not show_ready or player_bits < show_price
 	if changed_pony: summary.scroll_to_line(0)
 	refresh()
 

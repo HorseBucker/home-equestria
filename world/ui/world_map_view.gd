@@ -250,6 +250,18 @@ func _draw() -> void:
 			draw_circle(pixel+Vector2(-2,-1),3.5,Color("f46950"))
 			draw_circle(pixel+Vector2(2,-1),3.5,Color("f46950"))
 			draw_line(pixel+Vector2(0,-4),pixel+Vector2(4,-7),Color("a7d875"),2.5,true)
+		elif marker.get("activity", "") == "trixie_show":
+			# Trixie's own map mark in a ring that flashes while her show is on (show_runtime.gd).
+			var radius := pony_radius() + 3.0
+			var lit: bool = marker.get("flash", false)
+			draw_circle(pixel, radius + 3.0, Color(GOLD if lit else INK, alpha))
+			draw_circle(pixel, radius, Color(0.45, 0.6, 1.0, alpha))
+			PONY_DATA.load_icons()
+			var icon: Dictionary = PONY_DATA.icons.get("trixie", {})
+			if not icon.is_empty() and PONY_DATA.atlas != null:
+				var rect: Array = icon.rect
+				var side := radius * sqrt(2.0)
+				draw_texture_rect_region(PONY_DATA.atlas, Rect2(pixel - Vector2.ONE * side * 0.5, Vector2.ONE * side), Rect2(rect[0], rect[1], rect[2], rect[3]), Color(1, 1, 1, alpha))
 		var place_font: Font = PLACE_FONT if local else font
 		var font_size: int = LOCAL_PLACES.FONT_SIZE if local else label_font_size
 		var text_size := place_font.get_string_size(marker.name, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)

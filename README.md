@@ -1,6 +1,6 @@
 # Home: Equestria
 
-A VR (and desktop) life-sim in Ponyville. Current version: **0.0.3-maredev**.
+A VR (and desktop) life-sim in Ponyville. Current version: **0.0.4-maredev**.
 
 ### Which files do I need?
 
@@ -9,12 +9,12 @@ A VR (and desktop) life-sim in Ponyville. Current version: **0.0.3-maredev**.
 | Play on Windows | Windows from MEGA, **or** both `windows.zip` parts from the latest release |
 | Play on Linux | Linux from MEGA, **or** both `linux.tar.gz` parts from the latest release |
 | Play on Quest standalone | Quest from MEGA, **or** the `quest.apk` from the latest release. Nothing else. |
-| Edit the game from source | `Source code` (or clone the repo) **plus** all three `source-data` zips from the latest release |
+| Edit the game from source | `Source code` (or clone the repo) **plus** all three `source-data` zips from the latest release, extracted into the repo root next to `project.godot` (they hold the ground, foliage and other generated data git leaves out) |
 
 MEGA:
-- Windows: https://mega.nz/file/7x5GEJZI#g91cDKFtAdPkEZfI1Gjmg42FVRm3yU6eLXtWk3z1iqQ
-- Linux: https://mega.nz/file/ugA0TDyA#Ss9DQqF9rwT6UT-JhT9_4CdzUnJUHAf7JnlJRphiaAM
-- Quest: https://mega.nz/file/384VnaCB#p8Nqe7GnuSWfu3O_3fRolURyNBUt8sUgOYnp4PVA8LU
+- Windows: https://mega.nz/file/OkJ3mBDb#MLCK8sBqQ4GPWMSesgNK2UzWwK0wSbH2QA12RdcsmUo
+- Linux: https://mega.nz/file/XoRSgDQL#FI9EM4Ns37nzOnUYT_5rjcTWhVEoxdYaXhiUFFBe7D0
+- Quest: https://mega.nz/file/nkxBgLaA#U1f9JWvNbVIYCB-471AcM8pMRSAf5OJymkOjPX-tP60
 
 GitHub downloads (no speed limit, same files): https://github.com/homedevanon/home-equestria/releases/latest
 The release page explains every file, how to join the two-part downloads and their SHA-256.

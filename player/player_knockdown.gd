@@ -47,6 +47,7 @@ func start(body: CharacterBody3D, impulse: Vector3) -> bool:
 		if avatar==null:
 			avatar=load("res://player/anon_body.tscn").instantiate();avatar.calibration_path=""
 			body.add_child(avatar);avatar.setup(camera,left,right);temporary_avatar=true
+			preload("res://world/customization/clothing_profile.gd").dress_like_player(body,avatar)
 	if avatar!=null:avatar.couch_rest_frame=frame
 	body.flying=false;body.velocity=impulse.limit_length(7.0)
 	active=true;elapsed=0.0;grounded_time=0.0;amount=0.0;recovering=false

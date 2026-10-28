@@ -66,7 +66,9 @@ const WEAR := {"scarf": ["scarf", 50], "beanie": ["detective hat", 50], "sunhat"
 	"wizard_hat": ["wizard hat", 50], "cape": ["starry cape", 50], "spa-necklace": ["spa pendant", 50], "bowtie": ["bow tie", 50], "necktie": ["necktie", 50], "cowpony-hat": ["cowpony hat", 50], "detective-hat": ["detective hat", 50], "nurse-cap": ["nurse cap", 50],
 	"cat-eye-glasses": ["cat-eye glasses", 50], "aviators": ["aviator glasses", 50], "goggles": ["flight goggles", 50], "headphones": ["headphones", 50]}
 const FITTED_WEAR := ["spa-necklace", "bowtie", "necktie", "cowpony-hat", "detective-hat", "nurse-cap", "cat-eye-glasses", "aviators", "goggles", "headphones"]
-const WEAR_COLOURS := ["red", "blue", "gold", "green", "purple", "pink", "cream", "charcoal"]
+## Index-matched with pony_wardrobe.gd COLOURS; the last eight are wardrobe-mirror dyes.
+const WEAR_COLOURS := ["red", "blue", "gold", "green", "purple", "pink", "cream", "charcoal",
+	"orange", "sky blue", "teal", "lime", "brown", "pastel pink", "lavender", "navy"]
 static var _scenes: Dictionary = {}
 static var _icons: Dictionary = {}
 

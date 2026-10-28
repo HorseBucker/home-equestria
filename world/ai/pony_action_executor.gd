@@ -77,6 +77,10 @@ func capabilities() -> Array:
 		if str(actor.identity.id) == "rainbow_dash": result.append("sonic_rainboom")
 	if is_instance_valid(navigator) and (_sky_home() != null or _home_house() != null): result.append("go_home")
 	if actor.has_method("send_letter"): result.append("send_letter")
+	# Trixie may call her own stage show when Anon has paid for one or her week's rest is over.
+	if actor.get("identity") != null and str(actor.identity.id) == "trixie":
+		var show := _trixie_show()
+		if show != null and show.ai_start(true): result.append("magic_show")
 	if not result.is_empty(): result.append("cancel")
 	if actor.has_meta("relationship_runtime"): result.append_array(["relationship_offer","relationship_answer","request_space","buck_player","cuddle"])
 	if actor.has_meta("relationship_runtime"):
@@ -120,7 +124,7 @@ func submit(actions: Array, targets: Dictionary, turn: int, ai_origin := false) 
 				var posed: bool = actor.request_posture(action.type)
 				_report(action, "completed" if posed else "failed", "Posture while riding" if posed else str(actor.posture_status().refusal))
 				continue
-			if action.type in ["call_pony", "send_pony", "approach", "follow", "go_to", "step", "lead", "stay", "sit_on_seat", "fly_to", "hover", "land", "loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "air_show", "go_home", "resume_routine"]:
+			if action.type in ["call_pony", "send_pony", "approach", "follow", "go_to", "step", "lead", "stay", "sit_on_seat", "fly_to", "hover", "land", "loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "air_show", "magic_show", "go_home", "resume_routine"]:
 				_report(action, "failed", "Riding in the balloon; that waits until it lands")
 				continue
 		match action.type:
@@ -146,6 +150,10 @@ func submit(actions: Array, targets: Dictionary, turn: int, ai_origin := false) 
 			"send_letter":
 				var sent: bool = actor.send_letter()
 				_report(action, "completed" if sent else "failed", "Letter written and sent to Princess Celestia" if sent else "Busy; cannot write a letter right now")
+			"magic_show":
+				var show := _trixie_show()
+				var started: bool = show != null and show.ai_start()
+				_report(action, "completed" if started else "failed", "Show called: fireworks over the schoolhouse stage, curtain in about three minutes" if started else "No stage show possible right now")
 			"give_house":
 				if is_instance_valid(coordinator): coordinator.dispatch_house(character_id, action)
 				else: _report(action, "failed", "House grant coordinator unavailable")
@@ -643,6 +651,13 @@ func _sky_home() -> Node:
 	var rest: Node = population.host.get_node_or_null("NightRest")
 	if rest == null or not rest.SKY_HOMES.has(str(actor.identity.id)): return null
 	return null if _home_house() != null else rest
+
+## The game's TrixieShow (show_runtime.gd), or null.
+func _trixie_show() -> Node:
+	var population := get_tree().get_first_node_in_group("pony_populations")
+	if population == null or not ("host" in population) or not is_instance_valid(population.host): return null
+	var show: Node = population.host.get_node_or_null("TrixieShow")
+	return show if show != null and show.has_method("ai_start") else null
 
 ## Her own house in town, or null.
 func _home_house() -> Node3D:

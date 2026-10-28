@@ -6,6 +6,10 @@ extends Node
 ## pack is published in parts and joined here. Files land in user://quest-data/<version>/, which
 ## tools/build/packs.gd mounts on every later launch; other versions' folders are removed once
 ## this one is complete. A dropped connection or a full disk retries, keeping finished parts.
+## Each joined pack must match the SHA-256 this APK carries (quest_data_manifest.json, written by
+## tools/release_all.py) before it is mounted (2026-10-28 updater review: a pack holds scripts, so a
+## taken-over release must not be able to swap one). A pack that fails is set aside as .bad and
+## fetched once more; a second failure stops the download.
 
 signal progress(text: String)
 signal finished
@@ -42,14 +46,28 @@ func start() -> void:
 	add_child(_http)
 	var targets: Array = manifest.get("targets", [])
 	for target: Dictionary in targets:
+		if not _valid_sha(str(target.get("sha256", ""))):
+			progress.emit("This build's data list has no checksums. Install the full game data, then reopen."); return
 		for part: Dictionary in target.parts: _total += int(part.size)
 	set_process(true)
 	for target: Dictionary in targets:
 		var path := folder().path_join(str(target.name))
 		var size := 0
 		for part: Dictionary in target.parts: size += int(part.size)
-		while not _complete(path, size):
-			if not await _fetch_target(target, path): return
+		var tries := 0
+		while true:
+			while not _complete(path, size):
+				if not await _fetch_target(target, path): return
+			progress.emit("Checking game data...")
+			var digest := await _sha256(path)
+			if digest == str(target.sha256).to_lower(): break
+			if digest.is_empty(): return # Tree leaving.
+			push_warning("[quest-data] %s failed its checksum" % str(target.name))
+			DirAccess.rename_absolute(ProjectSettings.globalize_path(path), ProjectSettings.globalize_path(path + ".bad"))
+			tries += 1
+			if tries >= 2:
+				set_process(false)
+				progress.emit("The downloaded game data failed its safety check, so it was not loaded. Please report this on the bug board."); return
 		_done += size
 	for target: Dictionary in targets:
 		ProjectSettings.load_resource_pack(folder().path_join(str(target.name)), true)
@@ -117,6 +135,20 @@ func _retry(text: String) -> bool:
 static func _reason(result: Array) -> String:
 	return "HTTP %d" % int(result[1]) if int(result[0]) == HTTPRequest.RESULT_SUCCESS else "error %d" % int(result[0])
 
+
+static func _valid_sha(text: String) -> bool:
+	return text.length() == 64 and text.is_valid_hex_number()
+
+## SHA-256 of a file in chunks, a frame between chunks ("" only when the tree is leaving).
+func _sha256(path: String) -> String:
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null: return "unreadable"
+	var hashing := HashingContext.new()
+	hashing.start(HashingContext.HASH_SHA256)
+	while file.get_position() < file.get_length():
+		hashing.update(file.get_buffer(COPY_CHUNK))
+		if not await SHUTDOWN.frame(self): return ""
+	return hashing.finish().hex_encode()
 
 static func _complete(path: String, size: int) -> bool:
 	if not FileAccess.file_exists(path): return false

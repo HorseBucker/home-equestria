@@ -103,6 +103,17 @@ func run() -> void:
 		check(model.transform.basis.y.is_equal_approx(Vector3.DOWN) and is_equal_approx(model.transform.origin.y, 1.2), "Dinnerbone turns the model over and stands it on its ears (%s)" % str(model.transform))
 		dinnerbone.call("_turn", pony)
 		check(model.transform.basis.y.is_equal_approx(Vector3.DOWN), "turning twice does not turn her back")
+	# Live switches: entry-only packs start and stop now, the rest wait for the next launch.
+	check(mods.switch("dinnerbone.pck", false) and mods.get_node_or_null("dinnerbone") == null, "switching Dinnerbone off stops it now")
+	check("dinnerbone.pck" in LOADER.disabled_files() and not mods.is_active("dinnerbone"), "and saves the switch")
+	check(model.transform.basis.y.is_equal_approx(Vector3.UP) and is_zero_approx(model.transform.origin.y), "and turns ponies back onto their hooves (%s)" % str(model.transform))
+	var after_off := Node.new(); after_off.add_to_group("ponies_test"); root.add_child(after_off)
+	await process_frame
+	check(mods.switch("dinnerbone.pck", true) and mods.get_node_or_null("dinnerbone") != null, "switching it back on starts it again")
+	check(mods.switch("d_off.pck", true) and FileAccess.file_exists("res://mods/off_test/mod.json") and mods.is_active("off_test"), "a pack switched off at launch mounts and runs when switched on")
+	check(not mods.switch("b_merge.pck", false) and mods.get_node_or_null("merge_test") != null, "a pack with merges and script extensions waits for the next launch")
+	check("b_merge.pck" in LOADER.disabled_files(), "but its switch is saved")
+	after_off.queue_free()
 	print("MOD_LOADER_DONE ", "PASS" if failures == 0 else "FAIL", " checks=", checks, " failures=", failures)
 	mods.queue_free(); pony.queue_free(); grouped.queue_free(); later.queue_free(); context.free(); game.free()
 	await process_frame

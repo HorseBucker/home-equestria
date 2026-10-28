@@ -203,6 +203,16 @@ func _step(id: String, actor: Node3D, card: Dictionary, hours: float) -> void:
 			_set_busy(id, false)
 			_publish(id, actor, card)
 			return
+		if _talking(id) and not (actor.get("flight") != null and actor.flight.active()):
+			if nav.get("_has_target") == true:
+				# On her way somewhere when he spoke to her: she stops, and takes the step up again
+				# after the chat while its hour lasts.
+				running.stop(card.ctx)
+				_cancel_step_state(card.ctx)
+				card.action = null
+				_set_busy(id, false)
+				_publish(id, actor, card)
+			return   # at it in place: the step and its clock wait for the chat
 		var result: String = running.tick(card.ctx, CHECK)
 		if result != "running":
 			if result == "done": _remember(id, actor, card.steps[card.index])
@@ -220,7 +230,7 @@ func _step(id: String, actor: Node3D, card: Dictionary, hours: float) -> void:
 		card.index += 1   # the moment passed (sidetracked, asleep, busy): let it go
 		_publish(id, actor, card)
 		return
-	if hours < float(step.start) or not _free(actor, nav): return
+	if hours < float(step.start) or not _free(actor, nav) or _talking(id): return
 	# Out with friends when the next thing comes up: sometimes she stays with them.
 	var group: Dictionary = actor.get_meta("social_group", {})
 	if group.get("members", []).size() > 1 and _sidetracked(id, card, step): return
@@ -270,6 +280,15 @@ func _sidetracked(id: String, card: Dictionary, step: Dictionary) -> bool:
 		step.start = minf(float(step.start) + 0.75, float(step.until))
 		return true
 	return false
+
+## In a chat with the player she stays put (player reports 2026-10-28: ponies walked away
+## mid-conversation; a step's hour came, or a step walked on, while he talked to her). The director lets her go
+## after her goodbye, ~60 s of quiet, or when he walks off (director_holds.gd holds_in_place).
+## A move the AI chose for her ([follow], [go_to], [lead]) owns her navigator: never held here.
+func _talking(id: String) -> bool:
+	var director: Variant = get_parent().get("director") if get_parent() != null else null
+	return is_instance_valid(director) and director is Node and (director as Node).has_method("holds_in_place") \
+		and bool((director as Node).call("holds_in_place", id))
 
 ## Free for a plan step: nopony holds her, no player/AI command, not asleep, not flying on
 ## another errand; the living world's own outings and wandering may be interrupted.

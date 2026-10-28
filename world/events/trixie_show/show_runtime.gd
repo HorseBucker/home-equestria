@@ -40,8 +40,16 @@ const EARSHOT := 45.0
 const GATHER_SECONDS := 75.0
 ## Before Trixie is even on her way (dev 2026-10-17: "the great and powerful trixie captures
 ## ponyville's audience with her magic! ponies start walking BEFORE trixie arrives"): her magic
-## flares over the stage and the town starts walking over for this long first.
-const BUZZ_SECONDS := 60.0
+## flares over the stage and the town starts walking over for this long first. About three
+## minutes from the first firework to the curtain with the gathering (dev 2026-10-28), so a player
+## who sees the fireworks or the flashing map icon has time to get there.
+const BUZZ_SECONDS := 150.0
+## Fireworks go up over the stage this often until the curtain.
+const FIREWORK_EVERY := 12.0
+## What Anon pays Trixie for a show of his own (bit_payments.gd, dev 2026-10-28). Paid shows play
+## at any hour; the daily roll still books its own.
+const SHOW_PRICE := 50
+const MARKER_ID := "activity:trixie_show"
 
 var game: Node
 var show: Dictionary = {}
@@ -165,7 +173,7 @@ func start(_watched := false) -> bool:
 	state.shows = int(state.get("shows", 0)) + 1
 	_save()
 	var seed_value := hash(str(game.population.config_path) + "trixie_show_program:%d:%d" % [day, int(state.shows)])
-	show = {"day": day, "phase": "buzz", "time": 0.0, "seed": seed_value, "spawned": false, "offstage": false, "player_saw": false}
+	show = {"day": day, "phase": "buzz", "time": 0.0, "seed": seed_value, "spawned": false, "offstage": false, "player_saw": false, "fx_clock": 0.0}
 	audience = AUDIENCE.new()
 	audience.begin(get_tree(), stage_front(), facing(), seed_value, game.population, game.get_node_or_null("DayRunner"))
 	audience.debug = "--show-debug" in preload("res://world/dev_tools.gd").user_args()
@@ -177,6 +185,59 @@ func start(_watched := false) -> bool:
 	print("[show] Trixie's show begins (day %d, acts %s)" % [day, str(program.acts)])
 	_beacon()
 	return true
+
+## Bits Anon has paid Trixie (bit_payments.gd). She keeps them toward a show; once they cover
+## SHOW_PRICE and he asks for one, it starts. Returns the note she hears.
+func paid_show(paid: int, asked: bool) -> String:
+	var state := _state()
+	var context: Node = game.get("world_context") if game != null else null
+	if state.is_empty() or context == null or bool(context.get("_read_only")): return ""
+	var credit := int(state.get("paid_bits", 0)) + maxi(0, paid)
+	state.paid_bits = credit
+	_save()
+	if active(): return "[Your stage show is already on at the schoolhouse.]"
+	if credit < SHOW_PRICE: return "[A stage show costs %d bits; Anon has paid you %d toward one so far.]" % [SHOW_PRICE, credit]
+	if not asked: return "[That covers a stage show (%d bits) whenever Anon asks for one.]" % SHOW_PRICE
+	if not _start_paid(): return "[You cannot put on a show right now.]"
+	state.paid_bits = credit - SHOW_PRICE
+	_save()
+	return "[Paid! Your stage show at the schoolhouse stage starts in about three minutes; your magic is already calling Ponyville over. Tell Anon to come watch, then head for the stage.]"
+
+## Trixie's own [magic_show] tag (pony_action_executor.gd, dev 2026-10-28): a show Anon paid for
+## spends SHOW_PRICE of her credit; without one she may still call a show once the week's cooldown
+## has passed. check_only answers whether she could, starting nothing.
+func ai_start(check_only := false) -> bool:
+	if active() or game == null: return false
+	var state := _state()
+	if state.is_empty(): return false
+	var clock := get_node_or_null("/root/TimeOfDay")
+	var paid := int(state.get("paid_bits", 0)) >= SHOW_PRICE
+	if not paid and not off_cooldown(int(clock.day) if clock != null else 0, int(state.get("last_day", -1000))): return false
+	if check_only: return true
+	if not (_start_paid() if paid else start()): return false
+	if paid:
+		state.paid_bits = int(state.paid_bits) - SHOW_PRICE
+		_save()
+	return true
+
+## A paid show leaves the weekly cooldown alone, so the town's own shows still come.
+func _start_paid() -> bool:
+	var state := _state()
+	var last := int(state.get("last_day", -1000))
+	if not start(): return false
+	state.last_day = last
+	_save()
+	return true
+
+## The show's flashing map icon (Trixie's own map mark), every half second while it is on.
+func _publish_marker(on: bool) -> void:
+	if not is_inside_tree(): return
+	var markers: Array[Dictionary] = []
+	if on:
+		markers.append({"id": MARKER_ID, "name": "Trixie's show", "kind": "activity", "activity": "trixie_show", "icon_id": TRIXIE,
+			"flash": int(float(show.get("time", 0.0)) * 2.0) % 2 == 0, "position": Vector2(STAGE_CENTRE.x, STAGE_CENTRE.z)})
+	for map_view: Node in get_tree().get_nodes_in_group("world_map_views"):
+		map_view.set_activity_markers("trixie_show", markers)
 
 ## Trixie's magic over the stage, seen across town: the call that sets the crowd walking.
 func _beacon() -> void:
@@ -312,6 +373,12 @@ func _advance(dt: float) -> void:
 		_end("trixie gone"); return
 	if show.phase in ["perform", "bows"] and _near_stage(EARSHOT): show.player_saw = true
 	audience.tick(dt, show.phase in ["buzz", "call", "gather", "perform"])
+	_publish_marker(true)
+	if show.phase in ["buzz", "call", "gather"]:
+		show.fx_clock = float(show.get("fx_clock", 0.0)) + dt
+		if show.fx_clock >= FIREWORK_EVERY:
+			show.fx_clock = 0.0
+			_beacon()
 	match show.phase:
 		"buzz":
 			if show.time >= BUZZ_SECONDS:
@@ -416,6 +483,7 @@ func _end(reason: String) -> void:
 	var encounters: Node = game.get("encounters")
 	if encounters != null: encounters.complete("trixie_show:%d" % day)
 	show = {}
+	_publish_marker(false)
 	audience = null
 	program = null
 	patter = null

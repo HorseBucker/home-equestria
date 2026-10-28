@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Home: Equestria"
 config/description="Cozy VR life-sim in Equestria."
-config/version="0.0.3-maredev"
+config/version="0.0.4-maredev"
 run/main_scene="res://world/ui/title_screen.tscn"
 config/use_custom_user_dir=true
 config/custom_user_dir_name="home-equestria-public"

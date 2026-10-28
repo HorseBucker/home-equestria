@@ -19,7 +19,8 @@ A `mods` folder beside the game's executable works too, and so does a `.pck` pla
 beside the executable (the older way).
 
 **Settings → Mods** lists every mod with its name, version and author, plus an On/Off switch.
-Switches take effect the next time the game starts. Mods load in file name order, after the
+A mod that only runs an entry script switches on and off at once. A mod that extends game
+scripts or merges data switches the next time the game starts. Mods load in file name order, after the
 game's own data, so a mod named `zz_...` loads after one named `aa_...` and wins when both change
 the same thing.
 
@@ -112,6 +113,11 @@ tree is reachable, and `Mods` gives you stable shortcuts:
 | `Mods.state(id)` | Your mod's section of the current world's save, a `Dictionary`. Change it, then call `Mods.save_changed()`. Empty before a world loads. A removed mod's section is kept and does no harm. |
 | `Mods.data_folder(id)` | `user://mods/data/<id>/` for your own files outside any world. |
 | `Mods.list()`, `Mods.is_active(id)` | Which mods are loaded, so mods can work together. |
+| `Mods.game` | The current world's `game` node, or null. A mod switched on mid-game has missed `world_ready`, so read this in `_ready`. |
+
+When a player switches your mod off mid-game, its entry node is freed. Put the undo in
+`_exit_tree()`: give back the player, restore what you changed on ponies and other nodes, and
+free what you added outside your own node.
 
 ```gdscript
 extends Node

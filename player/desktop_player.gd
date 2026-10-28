@@ -55,6 +55,8 @@ var view_hold := false
 var form_driver: Node = null
 
 var flying := false
+## Debug fly that ignores collision (Shift+\).
+var noclip := false
 ## Shared across footwear and pony form; grounded full stamina has no recovery work.
 var wing_flight := preload("res://player/wing_flight.gd").new()
 var wing_sandals_equipped := false
@@ -234,7 +236,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				if is_instance_valid(seat): stand_up()
 				if is_instance_valid(form_driver) and form_driver._piloting(): form_driver.avatar.flight.cancel()
 				elif wing_flight.active: wing_flight.finish()
-				flying = not flying
+				# Shift+\ flies through walls and ground (noclip, dev 2026-10-27: stuck under the floor).
+				var through := (event as InputEventKey).shift_pressed
+				if flying and noclip != through: noclip = through
+				else:
+					flying = not flying
+					noclip = flying and through
 			KEY_Z, KEY_X:
 				# AnonPony: Z sits down on the ground, X lies down; again (or Space, or walking) stands.
 				if (event as InputEventKey).physical_keycode == KEY_X and not flying:
@@ -496,7 +503,8 @@ func _fly(input: Vector2, sprinting: bool) -> void:
 	var fwd := -camera.global_transform.basis.z * -input.y
 	var right := camera.global_transform.basis.x * input.x
 	velocity = (fwd + right).normalized() * speed + Vector3.UP * vertical * speed
-	move_and_slide()
+	if noclip: global_position += velocity * get_physics_process_delta_time()
+	else: move_and_slide()
 
 
 ## AnonPony on foot: the pony walks itself (player/pony_form.gd drive) and this rig follows it,

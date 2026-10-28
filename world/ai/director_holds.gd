@@ -49,9 +49,19 @@ func engaged(id: String) -> bool:
 		and host.awareness.can_hear(node, host.player_head, host._earshot(id))
 
 
-## Engaged and not walking along with a talking group: stays where she is, no wandering.
+## Engaged and not walking along with a talking group: stays where she is, no wandering, and
+## her day plan waits (day_runner.gd; player reports 2026-10-28: ponies walked off mid-chat
+## when a step's hour came). Once he walks off more than WALK_AWAY_METRES between turns she is
+## free again, though she still hears him; while she is answering him she stays wherever he is.
+const WALK_AWAY_METRES := 8.0
 func holds_in_place(id: String) -> bool:
-	return engaged(id) and not host.movement_dialogue_allowed(id)
+	if not engaged(id) or host.movement_dialogue_allowed(id): return false
+	if participant_busy(id): return true
+	var node: Variant = host.characters[id].node
+	if not node is Node3D or not is_instance_valid(host.player_head): return false
+	var apart: Vector3 = (node as Node3D).global_position - host.player_head.global_position
+	apart.y = 0.0
+	return apart.length() <= WALK_AWAY_METRES
 
 
 ## She has somewhere to be: a short goodbye in her own words, then she is free to leave.

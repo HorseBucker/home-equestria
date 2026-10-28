@@ -88,6 +88,9 @@ const DEFAULTS := {
 	"reading/paper": "cream",
 	"reading/font": "literata",
 	"reading/size": 26,
+	# A quiet check for a newer signed release when a world opens, every 6 hours at most
+	# (world/update/updater.gd, dev 2026-10-28).
+	"updates/check": true,
 }
 ## Validation and display. choice: [value, label] pairs; int/float: min, max, step, fmt;
 ## bool: [off label, on label]. "note" is appended to the row label ("restart" etc.).
@@ -162,6 +165,7 @@ const SPECS := {
 	"reading/paper": {"type": "choice", "options": [["white", "White"], ["cream", "Cream"], ["sepia", "Sepia"], ["grey", "Grey"], ["night", "Night"]]},
 	"reading/font": {"type": "choice", "options": [["literata", "Literata (book serif)"], ["atkinson", "Atkinson Hyperlegible"], ["dyslexic", "OpenDyslexic"], ["celestia", "Celestia (Equestrian)"]]},
 	"reading/size": {"type": "int", "min": 16, "max": 44, "step": 2, "fmt": "%d px"},
+	"updates/check": {"type": "bool", "labels": ["Off", "On"]},
 }
 ## Actions offered for rebinding (project.godot [input]); debug actions are left out.
 const BINDABLE := [["Move forward", "move_forward"], ["Move back", "move_back"], ["Move left", "move_left"],
@@ -192,6 +196,7 @@ const TABS := [
 	["Accessibility", [["Subtitles", "access/subtitles"], ["Subtitle size", "access/subtitle_scale"], ["Caption background", "access/caption_card"], ["Background opacity", "access/caption_opacity"], ["Pony speech text", "access/speech_text"], ["Menu text size", "access/ui_scale"], ["Reduced motion", "access/reduced_motion"]]],
 	["Reading", [["Paper", "reading/paper"], ["Font", "reading/font"], ["Text size", "reading/size"]]],
 	["Mods", []],
+	["Updates", [["Check for new versions", "updates/check"]]],
 ]
 ## Shadow tiers the "Shadows" row selects on top of the quality preset (Quality.user_overrides).
 const SHADOW_TIERS := {

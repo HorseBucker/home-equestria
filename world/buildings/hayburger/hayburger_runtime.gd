@@ -371,7 +371,15 @@ func _check_group(delta: float) -> void:
 		if shift_group[id] != "waiting": continue
 		if visitors is Dictionary and (visitors as Dictionary).has(id): waiting = true
 		else: shift_group[id] = "left"
-	if not waiting or _group_clock > GROUP_TIMEOUT: _close_group_shift()
+	if waiting and _group_clock <= GROUP_TIMEOUT: return
+	# A group that all left before anyone was served ended the shift a moment after it began
+	# (2026-10-28 player report: two fades and the shift was over). The shift stays open for
+	# walk-in customers instead, and the log says why the group left.
+	if not shift_group.values().has("served"):
+		print("[hayburger] booked group left unserved (", customers.get("_last_reason"), "); shift continues")
+		shift_group.clear()
+		return
+	_close_group_shift()
 
 func _close_group_shift() -> void:
 	if _transition or not _working: return

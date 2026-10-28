@@ -51,7 +51,8 @@ func begin(t: SceneTree, front: Vector3, toward_audience: Vector3, seed_value: i
 	facing = Vector3(toward_audience.x, 0.0, toward_audience.z).normalized()
 	rng.seed = seed_value
 	# Every show draws a different crowd, from a modest gathering to most of the town.
-	target = int(round(lerpf(8.0, 24.0, pow(rng.randf(), 0.8))))
+	# 15-30 watchers (dev 2026-10-28).
+	target = int(round(lerpf(15.0, 30.0, pow(rng.randf(), 0.8))))
 
 ## Called about twice a second while the show is on. `open` is false once the finale started:
 ## nopony new sets out then, the ones on their way still arrive.

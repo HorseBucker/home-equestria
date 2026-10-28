@@ -11,7 +11,8 @@
 					"name": "quest-data.pck.part2",
 					"size": 1967301930
 				}
-			]
+			],
+			"sha256": "117941ff407b948f13a3be64f94ad707671251c34a22169dbbd10e8ed37f451d"
 		},
 		{
 			"name": "HomeEquestria-raw.pck",
@@ -20,7 +21,8 @@
 					"name": "quest-raw.pck",
 					"size": 309276792
 				}
-			]
+			],
+			"sha256": "7b334e98fade67f956937b4e1e74bf8cf6d85b3f6906149913b1b0185721fbc1"
 		}
 	]
 }

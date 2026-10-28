@@ -43,6 +43,7 @@ func _ready() -> void:
 			avatar.calibration_path = ""
 			player.add_child(avatar)
 			avatar.setup(camera, _left, _right)
+			preload("res://world/customization/clothing_profile.gd").dress_like_player(player, avatar)
 			_temporary_avatar = true
 	if avatar != null:
 		avatar.couch_rest_frame = couch.rest_frame(seat)

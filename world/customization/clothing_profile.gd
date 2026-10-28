@@ -164,7 +164,7 @@ static func valid(value: Variant) -> bool:
 		if not socks is Dictionary or not socks.get("worn") is bool:return false
 		var colour:Variant=socks.get("color")
 		if not (colour is int or colour is float):return false
-		if not is_finite(float(colour)) or colour!=int(colour) or colour<0 or colour>7:return false
+		if not is_finite(float(colour)) or colour!=int(colour) or colour<0 or colour>=PONY_OUTFIT.COLOUR_COUNT:return false
 	if value.has("worn"):
 		if not value.worn is Dictionary:return false
 		for garment:String in GARMENTS.GARMENTS:
@@ -347,6 +347,16 @@ func wear_pony_item(store: RefCounted, id: String, token: String = "", slot: int
 		_store().call("_add_unit",next_slots,at,{"id":returned})
 	return _commit_pony(store,items,next_slots,checked)
 
+## Re-dyes the thigh highs AnonPony is wearing at the wardrobe mirror (pony_clothing_view.gd).
+func dye_pony_socks(store: RefCounted, colour: int) -> String:
+	if colour<0 or colour>=PONY_OUTFIT.COLOUR_COUNT:return "No such colour."
+	var items:=pony_items(saved)
+	for i in items.size():
+		if PONY_OUTFIT.kind(items[i])=="socks":
+			items[i]="wear:socks:%d"%colour
+			return _commit_pony(store,items,store.slots.duplicate(true),store.loans.duplicate(true))
+	return "She is not wearing thigh highs."
+
 ## Takes a piece off AnonPony and puts it back in the briefcase.
 func take_off_pony_item(store: RefCounted, id: String) -> String:
 	var items:=pony_items(saved)
@@ -393,12 +403,25 @@ func save() -> bool:
 	if not path.is_empty():
 		if SAVE_FILE.write(path,{"version":1,"clothes":data})!=OK:last_error="Could not save clothing.";return false
 	saved=data.duplicate(true);last_error="";changed.emit();return true
+## A stand-in Anon made for a moment (couch or bed rest, knockdown) wears what the player wears
+## (2026-10-28 player report: lying down to sleep showed the stock suit). Finds the profile through
+## the briefcase that owns this player body.
+static func dress_like_player(body: Node, actor: Node) -> void:
+	if not is_instance_valid(body) or not is_instance_valid(actor) or not body.is_inside_tree(): return
+	for source: Node in body.get_tree().get_nodes_in_group("interaction_hint_sources"):
+		if source.get("player_body") == body and source.get("clothing") != null:
+			source.clothing.attach(actor)
+			return
+
 func attach(actor: Node):
 	if actor==null:return
 	if "wing_flight" in actor: actor.wing_flight = flight_model
 	var expressions := _expressions_actor(actor)
 	if not expressions: GARMENTS.assemble(actor)
 	_actors.append(weakref(actor))
+	# Stand-ins (dress_like_player) come and go with every rest and knockdown; their materials
+	# leave the list with them instead of piling up for the whole session.
+	_materials.assign(_materials.filter(func(mat:ShaderMaterial)->bool:return not mat.has_meta("clothing_actor") or (mat.get_meta("clothing_actor") as WeakRef).get_ref()!=null))
 	for mesh in actor.find_children("*","MeshInstance3D",true,false):
 		if expressions:
 			if String(mesh.name) != "AnonBody": continue
@@ -411,6 +434,7 @@ func attach(actor: Node):
 			mat.set_shader_parameter("clothing_mask",load(EXPRESSIONS_MASK_PATH if expressions else MASK_PATH))
 			if expressions:mat.set_shader_parameter("shoe_mask",load(EXPRESSIONS_SHOE_MASK_PATH))
 			# Keep the original source texture, UV settings and outline next-pass.
+			mat.set_meta("clothing_actor",weakref(actor))
 			mesh.set_surface_override_material(surface,mat);_materials.append(mat)
 	apply_materials();apply_garments()
 
@@ -453,7 +477,7 @@ func attach_pony(actor:Node3D) -> void:
 	_pony_actors.append(weakref(actor));apply_pony_socks()
 
 func set_pony_socks(worn:bool, colour:int) -> bool:
-	if colour<0 or colour>7:return false
+	if colour<0 or colour>=PONY_OUTFIT.COLOUR_COUNT:return false
 	data["pony_socks"]={"worn":worn,"color":colour}
 	apply_pony_socks();changed.emit();return true
 

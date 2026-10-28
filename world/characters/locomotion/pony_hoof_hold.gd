@@ -11,12 +11,7 @@ var spring_velocity:=Vector3.ZERO
 var neutral:=Vector3.ZERO
 var pose:Dictionary={}
 var release_weight:=0.0
-## The player's grabs only (pony_awareness.gd tells her "The player took hold of your hoof").
 var grab_count:=0
-## Whether the player's hand holds the leg (player/pony_hoof_grabber.gd, desktop_interactions.gd)
-## rather than one of her own gestures on the same hold: a talking raise, a fidget, a door push, an
-## excited kick (player report, 2026-10-27: ponies "believe I took their hooves when I did not").
-var by_player:=false
 var residual:=0.0
 var _delta:=1.0/60.0
 ## Scripted gesture (no hand): the knee is led forward and up, the cannon folds back at the
@@ -48,16 +43,14 @@ func candidate(point:Vector3,reach:float=.09)->Dictionary:
 			if d<distance:
 				distance=d;best={"leg":i,"bone":chain[k-1],"anchor":fk[chain[k-1]].affine_inverse()*point,"distance":d}
 	return best
-func begin(hit:Dictionary,point:Vector3,player:=true)->bool:
+func begin(hit:Dictionary,point:Vector3)->bool:
 	if hit.is_empty() or leg_index>=0 or not pony.grounded() or pony._held:return false
 	if pony.posture!=null and pony.posture.active():pony.request_posture("stand");return false
 	leg_index=hit.leg;bone=hit.bone;anchor=hit.anchor;target=point;softened=point;spring_velocity=Vector3.ZERO
 	neutral=pony.global_transform.affine_inverse()*point;release_weight=0.0;pose.clear()
 	for index:int in pony.profile.legs[leg_index].chain:pose[index]=pony.corrected_pose[index]
 	pony.feet[leg_index].planted=false;pony.feet[leg_index].valid=false
-	pony.set_sim_tier(pony.SimTier.HERO);pony.stop()
-	by_player=player
-	if player:grab_count+=1
+	pony.set_sim_tier(pony.SimTier.HERO);pony.stop();grab_count+=1
 	return true
 ## [hoofraise]: lift a forehoof like the show's raised, curled foreleg. side 0 = left, 1 = right.
 func raise(side:int,seconds:=1.8)->bool:
@@ -84,7 +77,7 @@ func kick(side:int,seconds:=.6)->bool:
 	var hoof:Vector3=fk[leg.end].origin
 	var s:float=pony.get("body_scale") if pony.get("body_scale")!=null else 1.0
 	var goal:=hoof+(frame().basis.z).normalized()*KICK_BACK*s+Vector3.UP*KICK_UP*s
-	if not begin({"leg":i,"bone":leg.leaf,"anchor":fk[leg.leaf].affine_inverse()*hoof},goal,false):return false
+	if not begin({"leg":i,"bone":leg.leaf,"anchor":fk[leg.leaf].affine_inverse()*hoof},goal):return false
 	gesture_left=seconds
 	_gesture_local=pony.global_transform.affine_inverse()*goal
 	return true
@@ -113,7 +106,7 @@ func _lift(side:int,seconds:float,toward:Vector3)->bool:
 		goal=elbow+forward*elbow.distance_to(knee)
 		fold=DOOR_FOLD_DEG
 	var hit:={"leg":i,"bone":leg.middle,"anchor":fk[leg.middle].affine_inverse()*knee}
-	if not begin(hit,goal,false):return false
+	if not begin(hit,goal):return false
 	curl=deg_to_rad(fold);curl_bone=knee_bone;gesture_left=seconds
 	# A talking raise is held in her own frame, so turning to face him carries the hoof along.
 	_gesture_local=pony.global_transform.affine_inverse()*goal if not toward.is_finite() else Vector3.INF
@@ -127,7 +120,7 @@ func release()->void:
 ## Body-frame goal of a talking raise (INF otherwise).
 var _gesture_local:=Vector3.INF
 func reset()->void:
-	by_player=false;leg_index=-1;pose.clear();release_weight=0.0;residual=0.0;gesture_left=0.0;curl=0.0;curl_bone=-1;_gesture_local=Vector3.INF
+	leg_index=-1;pose.clear();release_weight=0.0;residual=0.0;gesture_left=0.0;curl=0.0;curl_bone=-1;_gesture_local=Vector3.INF
 func grip()->Transform3D:
 	if leg_index<0:return Transform3D.IDENTITY
 	var fk:=globals();var result:=fk[bone];result.origin=result*anchor;return result

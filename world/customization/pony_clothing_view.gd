@@ -12,6 +12,12 @@ const CARRIED_ROWS := 4
 ## The briefcase (world/inventory/inventory_store.gd), set by clothing_customizer.gd.
 var store: RefCounted
 
+## Dye swatches inside the worn thigh highs' row (dev 2026-10-28: more sock colours).
+func sock_swatch_rect(row: Rect2, colour: int) -> Rect2: return Rect2(row.position.x + 96 + colour * 20, row.position.y + 12, 17, 20)
+
+func _socks_colour(id: String) -> int:
+	return PONY_OUTFIT.colour(id) if PONY_OUTFIT.kind(id) == "socks" else -1
+
 func worn_rect(index: int) -> Rect2: return Rect2(24, WORN_TOP + index * ROW_HEIGHT, 580, ROW_HEIGHT - 6)
 func carried_rect(index: int) -> Rect2: return Rect2(24 + (index % 2) * 294, CARRIED_TOP + (index / 2) * ROW_HEIGHT, 286, ROW_HEIGHT - 6)
 
@@ -48,7 +54,16 @@ func _draw() -> void:
 	for i in mini(worn.size(), WORN_ROWS):
 		var rect := worn_rect(i)
 		draw_rect(rect, Color("39413e"))
-		text(PONY_OUTFIT.SLOT_LABELS.get(PONY_OUTFIT.slot(worn[i]), "") + ":  " + PONY_OUTFIT.display_name(worn[i]), rect.position + Vector2(14, 30), 21, Color("f2e7d0"))
+		var dyed := _socks_colour(worn[i])
+		if dyed >= 0:
+			text("Socks:", rect.position + Vector2(14, 30), 21, Color("f2e7d0"))
+			var palette: Array = (load(PONY_OUTFIT.WARDROBE_PATH) as GDScript).get("COLOURS")
+			for c in palette.size():
+				var swatch := sock_swatch_rect(rect, c)
+				if c == dyed: draw_rect(swatch.grow(3), Color("f2e7d0"))
+				draw_rect(swatch, palette[c])
+		else:
+			text(PONY_OUTFIT.SLOT_LABELS.get(PONY_OUTFIT.slot(worn[i]), "") + ":  " + PONY_OUTFIT.display_name(worn[i]), rect.position + Vector2(14, 30), 21, Color("f2e7d0"))
 		var button := Rect2(rect.end.x - 150, rect.position.y + 5, 140, rect.size.y - 10)
 		draw_rect(button, Color("667b5c")); text("Take off", button.position + Vector2(26, 26), 19, Color("fff2d9"))
 	text("IN YOUR BRIEFCASE", Vector2(34, CARRIED_TOP - 14), 21, Color("cbd0c0"))
@@ -70,7 +85,12 @@ func _draw() -> void:
 func choose(pixel: Vector2) -> bool:
 	var worn := _worn()
 	for i in mini(worn.size(), WORN_ROWS):
-		if worn_rect(i).has_point(pixel):
+		if _socks_colour(worn[i]) >= 0:
+			for c in PONY_OUTFIT.COLOUR_COUNT:
+				if sock_swatch_rect(worn_rect(i), c).grow(1).has_point(pixel):
+					message = profile.dye_pony_socks(store, c) if store != null else "The briefcase is not here."
+					refresh(); return message.is_empty()
+		if worn_rect(i).has_point(pixel) and (_socks_colour(worn[i]) < 0 or pixel.x >= worn_rect(i).end.x - 150):
 			message = profile.take_off_pony_item(store, worn[i]) if store != null else "The briefcase is not here."
 			refresh(); return message.is_empty()
 	var carried := _carried()
