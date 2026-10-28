@@ -89,6 +89,9 @@ var _setup_window: Window
 ## AI context (world/ui/ai_context_page.gd): what ponies remember, what a request sends, errors.
 var _context_page: Control
 var _context_button: Button
+## Journal (world/ui/journal_page.gd): the talk of any world, as pictures to share.
+var journal_button: Button
+var _journal_page: Control
 var _setup_start := false
 var ready_for_entry := false
 var entering := false
@@ -405,6 +408,7 @@ func _lay_out() -> void:
 	if not (_desktop_pages() and _home_page.visible): _settings_ui.relayout(page_size - Vector2(80, 50))
 	_credits_page.custom_minimum_size = page_size - Vector2(52, 44); _credits_page.size = _credits_page.custom_minimum_size
 	_context_page.relayout(page_size)
+	_journal_page.relayout(page_size - Vector2(80, 50))
 
 
 ## The window changed size under an open page: reshape and stand it again.
@@ -487,6 +491,10 @@ func _build_panel() -> void:
 	new_game_button.pressed.connect(_new_game)
 	load_button = _button("Load game", 542, false)
 	load_button.pressed.connect(_open_load)
+	load_button.size.x = 270
+	journal_button = _button("Journal", 542, false)
+	journal_button.pressed.connect(_open_journal)
+	journal_button.position.x = 460; journal_button.size.x = 270
 	settings_button = _button("Settings", 618, false)
 	settings_button.pressed.connect(_open_settings)
 	quit_button = _button("Quit", 694, false)
@@ -495,7 +503,7 @@ func _build_panel() -> void:
 	credits_button.pressed.connect(_open_credits)
 	credits_button.size.x = 270
 	quit_button.position.x = 460; quit_button.size.x = 270
-	for b in [new_game_button, load_button, settings_button, credits_button, quit_button]: b.size.y = 68
+	for b in [new_game_button, load_button, journal_button, settings_button, credits_button, quit_button]: b.size.y = 68
 	# Only loading and problems are ever written here.
 	status = _label("", 770, 26, WHITE)
 	status.add_theme_color_override("font_outline_color", PLUM); status.add_theme_constant_override("outline_size", 8)
@@ -515,6 +523,10 @@ func _build_panel() -> void:
 	_context_page = preload("res://world/ui/ai_context_page.gd").new()
 	panel.content.add_child(_context_page); _context_page.setup(panel)
 	_context_page.closed.connect(_close_context)
+	_journal_page = preload("res://world/ui/journal_page.gd").new()
+	panel.content.add_child(_journal_page); _journal_page.setup(panel)
+	_journal_page.position = Vector2(40, 28); _journal_page.relayout(Vector2(PANEL.PIXELS) - Vector2(80, 50))
+	_journal_page.closed.connect(_close_journal)
 	_fx = preload("res://world/ui/menu_fx.gd").new(); _fx.name = "Flourishes"
 	panel.content.add_child(_fx); _fx.attach(panel.content, panel.refresh)
 	_browser.fx = _fx
@@ -883,14 +895,28 @@ func _close_context() -> void:
 	_focused = maxi(0, _settings_ui.focusables().find(_context_button)); panel.refresh()
 
 
+func _open_journal() -> void:
+	_set_card(false)
+	_home_page.hide(); _journal_page.open(); _focused = 0; panel.refresh()
+
+func _close_journal() -> void:
+	_journal_page.hide(); _home_page.show(); _set_card(true)
+	_focused = _focus_list().find(journal_button)
+	journal_button.grab_focus(); panel.refresh()
+
+func _journal_open() -> bool:
+	return _journal_page != null and _journal_page.visible
+
+
 func _focus_list() -> Array:
+	if _journal_open(): return _journal_page.controls
 	if _context_page != null and _context_page.visible: return _context_page.controls
 	if _provider_page!=null and _provider_page.visible:return _provider_page.controls
 	if _credits_open(): return _credits_page.focusables()
 	if _settings_open(): return _settings_ui.focusables()
 	if _opening_open(): return _opening_buttons + [_opening_back]
 	if _load_open(): return _browser.focusables()
-	return [enter_button, new_game_button, load_button, settings_button, credits_button, quit_button]
+	return [enter_button, new_game_button, load_button, journal_button, settings_button, credits_button, quit_button]
 
 func _place_panel() -> void:
 	panel.global_transform = _panel_spot()
@@ -985,7 +1011,7 @@ func _finish_scenery() -> void:
 	enter_button.disabled = not ready_for_entry
 	new_game_button.disabled = not ready_for_entry
 	load_button.disabled = not ready_for_entry
-	if not ready_for_entry: _focused = 3 # Settings stays usable while data is absent.
+	if not ready_for_entry: _focused = _focus_list().find(settings_button) # Settings stays usable while data is absent.
 	_focus_button(0)
 	status.text = problem
 	panel.refresh()
@@ -1174,6 +1200,7 @@ func _controller_pressed(action: StringName, controller: XRController3D) -> void
 	if action == &"primary_click": recenter()
 	if action == &"grip_click" and _provider_page.visible:_close_provider();return
 	if action == &"grip_click" and _context_page != null and _context_page.visible: _close_context(); return
+	if action == &"grip_click" and _journal_open(): _journal_page.back(); return
 	if action == &"grip_click" and _settings_open(): _close_settings(); return
 	if action == &"grip_click" and _credits_open(): _close_credits(); return
 	if action == &"grip_click" and _load_open():
@@ -1203,6 +1230,11 @@ func _input(event: InputEvent) -> void:
 		elif event.pressed and not event.echo and event.keycode==KEY_TAB:_focus_button(-1 if event.shift_pressed else 1)
 		else:panel.send_key(event)
 		get_viewport().set_input_as_handled();return
+	# The journal's picture title takes typed keys, also in a room-scale headset.
+	if _journal_open() and _journal_page.typing() and event is InputEventKey:
+		if event.pressed and not event.echo and event.keycode == KEY_ESCAPE: _journal_page.back()
+		else: panel.send_key(event)
+		get_viewport().set_input_as_handled(); return
 	if _settings_open() and event is InputEventKey and not _settings_ui.capturing.is_empty():
 		panel.send_key(event); get_viewport().set_input_as_handled(); return
 	if xr_active and not seated:return
@@ -1230,6 +1262,8 @@ func _input(event: InputEvent) -> void:
 			recenter()
 		elif event.pressed and not event.echo and _context_page != null and _context_page.visible and event.keycode == KEY_ESCAPE:
 			_close_context()
+		elif event.pressed and not event.echo and _journal_open() and event.keycode == KEY_ESCAPE:
+			_journal_page.back()
 		elif event.pressed and not event.echo and _settings_open() and event.keycode == KEY_ESCAPE:
 			_close_settings()
 		elif event.pressed and not event.echo and _credits_open() and event.keycode == KEY_ESCAPE:

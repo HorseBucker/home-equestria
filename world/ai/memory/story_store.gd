@@ -120,6 +120,15 @@ func search(pony: String, words: Array, before: int, limit := 6) -> Array:
 func lines_after(id: int, limit := 2000) -> Array:
 	return _rows("SELECT * FROM lines WHERE id > ? AND kind != 'brain' ORDER BY id LIMIT ?;", [id, limit])
 
+## The newest `limit` lines of the given kinds, oldest first (the journal page, world/ui/journal_data.gd).
+func lines_of_kinds(kinds: Array, limit := 20000) -> Array:
+	if kinds.is_empty(): return []
+	var bindings: Array = kinds.duplicate()
+	bindings.append(limit)
+	var rows := _rows("SELECT * FROM lines WHERE kind IN (%s) ORDER BY id DESC LIMIT ?;" % ",".join(kinds.map(func(_k): return "?")), bindings)
+	rows.reverse()
+	return rows
+
 func summary(key: String) -> Dictionary:
 	var rows := _rows("SELECT text, through FROM summary WHERE key = ?;", [key])
 	return {"text": str(rows[0].text), "through": int(rows[0].through)} if not rows.is_empty() else {"text": "", "through": 0}
