@@ -74,8 +74,50 @@ func give(pony_id: String, item_id: String, pony: Node3D = null) -> bool:
 	if not can_give(pony_id, item_id, pony): return false
 	var list: Array = gifts().get(pony_id, [])
 	list.append(item_id); gifts()[pony_id] = list
+	# A new piece of a kind she had taken off is worn again.
+	var off: Array = taken_off().get(pony_id, [])
+	off.erase(item_id.split(":")[1])
 	if game.world_context.has_method("_changed"): game.world_context._changed()
 	return true
+
+## Player bug board #32 ("i want her to remove them so I can touch her hoofa"): asked in
+## conversation, she takes a piece off ([take_off: ITEM]) and keeps it off until she puts it back on
+## ([put_on: ITEM]) or is given a new one of that kind. Saved with the world ("pony_off").
+func taken_off() -> Dictionary:
+	var state: Dictionary = game.world_context.state
+	if not state.get("pony_off") is Dictionary: state["pony_off"] = {}
+	return state.pony_off
+
+## Words a pony may use for a piece, beyond its own name ("hat" means whichever hat she wears).
+const ITEM_WORDS := {"hat": HEADWEAR, "cap": ["nurse-cap", "beanie"], "glasses": ["cat-eye-glasses", "aviators", "goggles"],
+	"sunglasses": ["aviators"], "stockings": ["socks"], "thigh_highs": ["socks"], "leggings": ["socks"], "sock": ["socks"],
+	"necklace": ["spa-necklace"], "pendant": ["spa-necklace"], "tie": ["necktie", "bowtie"], "bow_tie": ["bowtie"]}
+
+## The kinds among `among` that a spoken item name means.
+static func match_item(spoken: String, among: Array) -> Array:
+	var word := spoken.strip_edges().to_lower().replace(" ", "_").replace("-", "_").trim_prefix("my_").trim_prefix("the_").trim_prefix("your_")
+	var found: Array = []
+	if word.length() < 3: return found
+	for kind: String in among:
+		var plain := kind.replace("-", "_")
+		if word == plain or word == plain.trim_suffix("s") or str(WORN_NAMES.get(kind, "")).replace(" ", "_").replace("-", "_").ends_with(word): found.append(kind)
+	if found.is_empty():
+		for kind: Variant in ITEM_WORDS.get(word, ITEM_WORDS.get(word.trim_suffix("s"), [])):
+			if kind in among: found.append(kind)
+	return found
+
+## Take off (on = false) or put back on: what she did, or "" when she has nothing by that name.
+func set_worn(id: String, spoken: String, on: bool) -> String:
+	var off: Array = taken_off().get(id, [])
+	var kinds := match_item(spoken, off if on else wanted(id, _season()).keys())
+	if kinds.is_empty(): return ""
+	for kind: String in kinds:
+		if on: off.erase(kind)
+		elif kind not in off: off.append(kind)
+	if off.is_empty(): taken_off().erase(id)
+	else: taken_off()[id] = off
+	if game.world_context.has_method("_changed"): game.world_context._changed()
+	return ", ".join(kinds.map(func(kind: String) -> String: return str(WORN_NAMES.get(kind, kind))))
 
 func _season() -> String:
 	var weather: Node = game.get_node_or_null("Weather")
@@ -123,6 +165,7 @@ func wanted(id: String, season: String) -> Dictionary:
 			for kind: String in result.keys():
 				if FITTED.slot(kind) == slot: result.erase(kind)
 		result[parts[1]] = int(parts[2])
+	for kind: Variant in taken_off().get(id, []): result.erase(kind)
 	return result
 
 func dress(pony: Node3D, id: String, season: String) -> void:

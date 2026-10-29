@@ -139,19 +139,81 @@ func summary_keys() -> Array:
 func set_summary(key: String, text: String, through: int) -> bool:
 	return _run("INSERT INTO summary (key, text, through) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET text = excluded.text, through = excluded.through;", [key, text.left(6000), through])
 
-func open_threads(pony: String, limit := 4) -> Array:
-	var rows := _rows("SELECT * FROM threads WHERE pony = ? AND closed = 0 ORDER BY id DESC LIMIT ?;", [pony, limit])
+## A thread lasts about one in-game day from when it was first opened (player thread report 2026-10-29:
+## one WANT restated every brain turn filled all six slots for ten days and ON YOUR MIND fed it back).
+const THREAD_LIFE_MINUTES := 1440
+## Words that say nothing about what a thread is about (similar()).
+const THREAD_COMMON := ["you", "want", "wants", "soon", "the", "and", "her", "his", "him", "she", "for", "with", "that",
+	"this", "about", "from", "into", "will", "what", "anon", "some", "something", "they", "them", "then", "than", "are",
+	"was", "has", "have", "get", "got", "now", "still", "again"]
+
+## Open threads, newest last. With `now_day` >= 0, threads first opened more than THREAD_LIFE_MINUTES
+## before that day/minute are left out; nothing is written, so loading an older save brings them back.
+func open_threads(pony: String, limit := 4, now_day := -1, now_minute := 0) -> Array:
+	var sql := "SELECT threads.* FROM threads LEFT JOIN lines ON lines.id = threads.opened WHERE threads.pony = ? AND threads.closed = 0"
+	var bindings: Array = [pony]
+	if now_day >= 0:
+		sql += " AND (lines.id IS NULL OR lines.day * 1440 + lines.minute > ?)"
+		bindings.append(now_day * 1440 + now_minute - THREAD_LIFE_MINUTES)
+	sql += " ORDER BY threads.id DESC LIMIT ?;"
+	bindings.append(limit)
+	var rows := _rows(sql, bindings)
 	rows.reverse()
 	return rows
 
+## A restated thread (same pony, similar() text, not yet expired at the `opened` line's time) moves
+## to newest with the new wording but keeps its first `opened`, so restating a want neither fills
+## the slots with copies nor keeps it alive past THREAD_LIFE_MINUTES (player thread report 2026-10-29).
 func add_thread(pony: String, text: String, opened: int) -> int:
-	if not _run("INSERT INTO threads (pony, text, opened) VALUES (?, ?, ?);", [pony, text.left(400), opened]): return 0
+	var first := opened
+	var at := _rows("SELECT day * 1440 + minute AS t FROM lines WHERE id = ?;", [opened])
+	var live: Array = [pony]
+	var sql := "SELECT threads.id AS id, threads.text AS text, threads.opened AS opened FROM threads LEFT JOIN lines ON lines.id = threads.opened WHERE threads.pony = ? AND threads.closed = 0"
+	if not at.is_empty() and at[0].t != null:
+		sql += " AND (lines.id IS NULL OR lines.day * 1440 + lines.minute > ?)"
+		live.append(int(at[0].t) - THREAD_LIFE_MINUTES)
+	for row: Dictionary in _rows(sql + ";", live):
+		if not similar(str(row.text), text): continue
+		if int(row.opened) > 0: first = mini(first, int(row.opened))
+		_run("DELETE FROM threads WHERE id = ?;", [int(row.id)])
+	if not _run("INSERT INTO threads (pony, text, opened) VALUES (?, ?, ?);", [pony, text.left(400), first]): return 0
+	var id := int(db.last_insert_rowid)
 	# Old threads fade: a pony keeps her six newest open.
 	_run("UPDATE threads SET closed = 1 WHERE pony = ? AND closed = 0 AND id NOT IN (SELECT id FROM threads WHERE pony = ? AND closed = 0 ORDER BY id DESC LIMIT 6);", [pony, pony])
-	return int(db.last_insert_rowid)
+	return id
 
 func close_thread(id: int) -> void:
 	_run("UPDATE threads SET closed = 1 WHERE id = ?;", [id])
+
+## Closes this pony's open threads similar() to `text` (a DONE director note); returns how many.
+func close_matching(pony: String, text: String) -> int:
+	var closed := 0
+	for row: Dictionary in _rows("SELECT id, text FROM threads WHERE pony = ? AND closed = 0;", [pony]):
+		if similar(str(row.text), text):
+			close_thread(int(row.id)); closed += 1
+	return closed
+
+## The words a thread is about: lower case, no punctuation, no short or THREAD_COMMON words, a
+## plural "s" dropped.
+static func thread_words(text: String) -> Dictionary:
+	var words := {}
+	for raw: String in RegEx.create_from_string("[^a-z0-9]+").sub(text.to_lower(), " ", true).split(" ", false):
+		if raw.length() < 3 or raw in THREAD_COMMON: continue
+		var word := raw.left(-1) if raw.length() > 4 and raw.ends_with("s") and not raw.ends_with("ss") else raw
+		words[word] = true
+	return words
+
+## Two thread texts are the same thing when at least half the words of the shorter one, and at
+## least two (one when it has a single word), appear in the other.
+static func similar(a: String, b: String) -> bool:
+	var x := thread_words(a)
+	var y := thread_words(b)
+	var shorter := mini(x.size(), y.size())
+	if shorter == 0: return false
+	var shared := 0
+	for word: String in x:
+		if y.has(word): shared += 1
+	return shared >= mini(2, shorter) and shared * 2 >= shorter
 
 func add_usage(kind: String, input: int, output: int, day: int, minute: int, cached := 0) -> void:
 	_run("INSERT INTO usage (kind, input, output, day, minute, cached) VALUES (?, ?, ?, ?, ?, ?);", [kind.left(40), input, output, day, minute, cached])

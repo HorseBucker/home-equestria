@@ -26,6 +26,10 @@ var _active: Node
 var _hug_down := false
 var _hug_used := false
 var _hug_absent := 0.0
+## Group hug (player bug board #28): other ponies close by who welcome a hug join the one he
+## hugs (pony_affection.begin checks each one's trust); they all let go with her.
+const GROUP_HUG_REACH := 1.4
+var _group_hug: Array[Node] = []
 ## She started this kiss (relationship_runtime kiss_player): it holds without his button until it
 ## turns deep; his button press ends it as usual.
 var _her_kiss := false
@@ -165,6 +169,11 @@ func _physics_step(_delta: float) -> void:
 			_active.target=mouth_world()
 			_active.eye=camera.global_position
 			_active.face=camera.global_basis.orthonormalized()
+		for joined:Node in _group_hug.duplicate():
+			if not is_instance_valid(joined) or joined.kind!="hug" or joined.mare.global_position.distance_to(camera.global_position)>1.8:
+				if is_instance_valid(joined) and joined.kind=="hug":joined.end()
+				_group_hug.erase(joined);continue
+			joined.target=mouth_world();joined.eye=camera.global_position;joined.face=camera.global_basis.orthonormalized()
 	_kiss_near((is_instance_valid(_active) and _active.kind=="kiss") or _bridal_reaching())
 	# While she holds him in a deep kiss, the move stick does nothing (turning still works).
 	if is_instance_valid(body):
@@ -251,7 +260,7 @@ func begin_from_pony(pony: Node3D) -> bool:
 	if controller != null and controller.has_method("get_is_active") and not controller.get_is_active(): return false
 	if controller == null and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED: return false
 	var runtime: Node = pony.get_meta("relationship_runtime") if pony.has_meta("relationship_runtime") else null
-	if runtime == null or not runtime.bonds.welcomes(str(pony.get_meta("relationship_id", "")), "kiss"): return false
+	if runtime == null or runtime.bonds.kiss_barred(str(pony.get_meta("relationship_id", ""))): return false
 	if pony.global_position.distance_to(camera.global_position) > 1.8: return false
 	var affection := pony.get_node_or_null("Affection")
 	if affection == null: return false
@@ -294,6 +303,13 @@ func _attempt_hug() -> void:
 	if affection!=null and affection.begin("hug",mouth_world()):
 		_active=affection
 		SOUNDS.play_at(candidate,"prop_contact_cloth")
+		for pony:Node3D in ponies:
+			if pony==candidate or not is_instance_valid(pony) or not pony.is_inside_tree() or not pony.is_visible_in_tree():continue
+			var flat:=pony.global_position-camera.global_position;flat.y=0.0
+			if flat.length()>GROUP_HUG_REACH:continue
+			var joining:Node=pony.get_node_or_null("Affection")
+			if joining!=null and joining.kind.is_empty() and joining.begin("hug",mouth_world()):_group_hug.append(joining)
+		if not _group_hug.is_empty():print("[hug] group hug: %d join %s"%[_group_hug.size(),candidate.name])
 
 ## Compatibility entry point for callers of the original AI-kiss implementation.
 func kiss_from_pony(pony: Node3D) -> bool:
@@ -331,6 +347,9 @@ func _looked_away() -> bool:
 
 func _end_contact() -> void:
 	if is_instance_valid(_active):_active.end()
+	for joined:Node in _group_hug:
+		if is_instance_valid(joined) and joined.kind=="hug":joined.end()
+	_group_hug.clear()
 	_active=null;_her_kiss=false;_cradle_locked=false;_cradle_short=0.0;_cradle_time=0.0
 	if is_instance_valid(body) and body.has_meta("kiss_hold"):body.remove_meta("kiss_hold")
 	_kiss_near(false)

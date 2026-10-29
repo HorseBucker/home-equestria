@@ -31,6 +31,11 @@ var _curve_rate := -1.0
 ## cycles"). Day 0 starts on a full moon.
 var day := 0
 const MOON_CYCLE_DAYS := 29.5
+## World seconds skipped in one go (sleeping sets the clock straight to morning). Real-time "a
+## moment ago" windows add it (conversation_director._now, player_bonds.now) so a night's sleep
+## reads as a night, not as 30 seconds (dev 2026-10-29). Saved with the clock.
+var skipped_seconds := 0.0
+var _seen_hours := -1.0
 
 var hours: float = 8.5:
 	set(value):
@@ -61,7 +66,18 @@ func _process(_delta: float) -> void:
 	var now := _clock_usec()
 	var elapsed := maxf(0.0, (now - _last_clock_usec) * 0.000001)
 	_last_clock_usec = now
+	# Half a game hour between two frames is a skip: the shortest day (15 minutes) runs an hour in 37 s.
+	var total := day * 24.0 + hours
+	if _seen_hours >= 0.0 and total - _seen_hours >= 0.5: skipped_seconds += (total - _seen_hours) * 3600.0
 	advance(elapsed * Engine.time_scale)
+	_seen_hours = day * 24.0 + hours
+
+
+## skipped_seconds of the clock in the running game, 0 without one (tests, tools).
+static func skipped() -> float:
+	var loop := Engine.get_main_loop() as SceneTree
+	var clock: Node = loop.root.get_node_or_null("TimeOfDay") if loop != null else null
+	return float(clock.skipped_seconds) if clock != null else 0.0
 
 
 func _notification(what: int) -> void:
@@ -105,7 +121,7 @@ func _ensure_curve() -> void:
 
 func snapshot() -> Dictionary:
 	return {"version":1,"day":day,"hours":hours,"day_length_minutes":day_length_minutes,
-		"active_seconds":active_seconds,"sunset_clock_rate":sunset_clock_rate}
+		"active_seconds":active_seconds,"sunset_clock_rate":sunset_clock_rate,"skipped_seconds":skipped_seconds}
 
 
 static func valid_state(value: Variant) -> bool:
@@ -126,6 +142,9 @@ func restore_state(value: Dictionary) -> bool:
 	day_length_minutes = float(settings.get_value("world/day_length_minutes")) if settings != null else float(value.day_length_minutes)
 	active_seconds = float(value.active_seconds)
 	sunset_clock_rate = float(value.sunset_clock_rate)
+	var skip: Variant = value.get("skipped_seconds", 0.0)
+	skipped_seconds = float(skip) if (skip is float or skip is int) and is_finite(float(skip)) and float(skip) >= 0.0 else 0.0
+	_seen_hours = -1.0   # loading another day is not a skip
 	_last_clock_usec = _clock_usec()
 	return true
 

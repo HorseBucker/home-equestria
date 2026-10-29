@@ -290,6 +290,11 @@ func sample(id: String, observer: Node3D, characters: Dictionary, player: Node3D
 		sample.sky = "the black sky of space, full of stars; no air, wind or weather here"
 		sample.erase("season")
 	var events: Array = previous.get("events", []).filter(func(event): return now - event.time < EVENT_LIFETIME)
+	# Recent events are timed in real seconds; a sleep skips game hours in a few of them (player bug
+	# board #36: a pickup before a full day's sleep read as "18 s ago"). A jump forgets them.
+	var day_clock: Node = observer.get_node_or_null("/root/TimeOfDay")
+	sample["clock"] = float(day_clock.day) * 24.0 + float(day_clock.hours) if day_clock != null else 0.0
+	if float(sample.clock) - float(previous.get("clock", sample.clock)) >= 1.0: events = []
 	if not previous.is_empty():
 		if sample.held != previous.held: events.append({"time": now, "text": "The player picked you up." if sample.held else "The player put you down."})
 		if sample.hoofholds > previous.get("hoofholds",0): events.append({"time":now,"text":"The player took hold of your hoof."})

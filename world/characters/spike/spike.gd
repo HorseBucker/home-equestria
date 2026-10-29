@@ -926,8 +926,37 @@ func _letter_run() -> void:
 			if not await SHUTDOWN.seconds(self, 0.05): return
 			left -= 0.05
 	follow.call()
-	if not breathe_fire(holder): holder.queue_free()
+	if breathe_fire(holder):
+		# Sent: Princess Celestia answers the next morning (world/ai/celestia_reply.gd; player thread
+		# report 2026-10-29, a letter that never got a reply stayed on Twilight's mind for days).
+		get_tree().call_group("celestia_reply", "letter_sent", str(identity.id) if identity != null else "spike")
+	else: holder.queue_free()
 	if not await SHUTDOWN.seconds(self, 2.0): return
+	_letter_busy = false
+
+## Princess Celestia's answer coming back (world/ai/celestia_reply.gd): one green belch, and the
+## reply scroll grows out of the flame into his claw; he holds it up a moment, then tucks it away.
+## False while he is held, asleep or busy, so the reply waits for him.
+func receive_letter() -> bool:
+	if _letter_busy or _held or sleeping or thrown.active() or gesture_playing() or _action_left > 0.0: return false
+	stop()
+	if not breathe_fire(): return false
+	_letter_busy = true
+	_reply_run()
+	return true
+
+func _reply_run() -> void:
+	# spike_fire.gd lights the flame BREATH_DELAY (0.95 s) in; the scroll appears inside it.
+	if not await SHUTDOWN.seconds(self, 1.1): return
+	var holder := Node3D.new(); holder.name = "SpikeReply"; holder.top_level = true
+	add_child(holder)
+	if ResourceLoader.exists(LETTER): holder.add_child((load(LETTER) as PackedScene).instantiate())
+	var held := 0.0
+	while held < 4.0:
+		holder.global_transform = claw_frame().scaled_local(Vector3.ONE * clampf(held / 0.3, 0.05, 1.0))
+		if not await SHUTDOWN.seconds(self, 0.05): return
+		held += 0.05
+	holder.queue_free()
 	_letter_busy = false
 
 ## The "write" loop as a short upper-body gesture.

@@ -135,6 +135,16 @@ static func build(parent: Node3D) -> void:
 		st.generate_normals()
 		var reveal := MeshInstance3D.new(); reveal.name="CarvedWindowReveal"; reveal.mesh=st.commit(); frame.add_child(reveal)
 		reveal.create_trimesh_collision()
+		# Player bug board #37: the oval is big enough to jump into from outside, and a player who
+		# pushed on through the thin pane ended up inside the tree. A solid plug fills the reveal from
+		# just outside the pane to the bark, so the window only ever opens with the eyes.
+		var plug := StaticBody3D.new(); plug.name = "WindowPlug"; plug.collision_mask = 0; frame.add_child(plug)
+		var hull := PackedVector3Array()
+		for i in SEGMENTS:
+			hull.append(inner[i] + Vector3(window.out) * .1)
+			hull.append(outer[i])
+		var plug_shape := ConvexPolygonShape3D.new(); plug_shape.points = hull
+		var plug_collision := CollisionShape3D.new(); plug_collision.shape = plug_shape; plug.add_child(plug_collision)
 		KIT.tube(frame,"InnerOvalTrim",inner,.065,edge)
 		KIT.tube(frame,"OuterOvalTrim",outer,.065,wood)
 		# A nearly clear pane leaves the real outside world visible, with no emissive sky card.

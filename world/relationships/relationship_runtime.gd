@@ -2,10 +2,15 @@ extends Node
 ## Bridge between persistent bonds, completed dialogue, activities and physical actors.
 const INTENT := preload("res://world/relationships/relationship_intent.gd")
 const HOUSE := preload("res://world/buildings/house_interior.gd")
-const ACTION_HELP := "Relationship actions: relationship_offer(kind,activity,location_id) proposes an eligible offer to Anon; activity is walk/fishing/orchard/meal/visit, or place for time together at a mapped place (then give its location_id, e.g. a lake; omit location_id otherwise). For a named destination use go_to and the mapped location; each agreeing companion travels there independently and stops on arrival. Follow Anon only for a walk without a named destination; it ends when he stays beyond walking range. If he takes his balloon during a shared activity, you can board it with him. relationship_answer(offer_id,accept) answers ONLY an existing player offer. Use a boolean accept. State your actual offer or answer in speech. These changes commit only when your spoken line finishes. Never answer your own offer or fabricate player acceptance. request_space() withdraws physical permission for three minutes; say that you want space. buck_player() kicks Anon back with your hind legs when your spoken line ends; only for real, lasting anger at unwelcome contact, never for boops or petting you secretly enjoy. cuddle() walks over and rests with Anon on the bed, couch, supported grass or deployed blanket he is lying on, only if you want to. Actual friendship chooses beside or shoulder company; an established romantic relationship permits a closer snuggle, subject to current boundaries. kiss_player() walks up and initiates a kiss when your relationship welcomes it. Adults only. A short spoken line is optional; Anon can end it with the kiss button."
+const ACTION_HELP := "Relationship actions: relationship_offer(kind,activity,location_id) proposes an eligible offer to Anon; activity is walk/fishing/orchard/meal/visit, or place for time together at a mapped place (then give its location_id, e.g. a lake; omit location_id otherwise). For a named destination use go_to and the mapped location; each agreeing companion travels there independently and stops on arrival. Follow Anon only for a walk without a named destination; it ends when he stays beyond walking range. If he takes his balloon during a shared activity, you can board it with him. relationship_answer(offer_id,accept) answers ONLY an existing player offer. Use a boolean accept. State your actual offer or answer in speech. These changes commit only when your spoken line finishes. Never answer your own offer or fabricate player acceptance. request_space() withdraws physical permission for three minutes; say that you want space. buck_player() kicks Anon back with your hind legs when your spoken line ends; only for real, lasting anger at unwelcome contact, never for boops or petting you secretly enjoy. cuddle() walks over and rests with Anon on the bed, couch, supported grass or deployed blanket he is lying on, only if you want to. Actual friendship chooses beside or shoulder company; an established romantic relationship permits a closer snuggle, subject to current boundaries. kiss_player() walks up and initiates a kiss; your relationship line says whether that is natural yet. Adults only. A short spoken line is optional; Anon can end it with the kiss button."
 ## Added to the relationship prompt only while the player is a young AnonPony (world/life/player_form.gd), so a
 ## human's prompt is unchanged.
 const YOUNG_HELP := " Anon is a foal (a filly or colt), so there is no romance with Anon: no dates, dating, courtship, moving in, engagement, marriage, kisses or flank smacks, and never [kiss_player]."
+## Player thread report 2026-10-29: with no kiss tag to use, a pony asked for a kiss invented a
+## condition instead ("beat me in a race first, loser carries the pears") and repeated it for days.
+## dev 2026-10-29: the stage must not forbid her kiss, only discourage it very strongly. So
+## [kiss_player] stays offered and this line rides along while the bond does not welcome it yet.
+const KISS_NOT_READY := "Your relationship is not at kissing yet, so [kiss_player] is very nearly off-limits. Use it only for a truly beautiful moment, or when Anon has genuinely, cleverly won you over; asking, pestering or a nice day is not enough. Otherwise say you are not ready, in your own way, and never invent a task, race or condition he must meet first."
 const PLAYER_FORM := preload("res://world/life/player_form.gd")
 var game: Node
 var bonds: Node
@@ -25,6 +30,9 @@ func setup(host: Node) -> void:
 	add_to_group("player_relationships")
 	host.world_context.event_recorded.connect(_event)
 	bonds.boundary.connect(_boundary)
+	# Princess Celestia's replies to Spike's letters (player thread report 2026-10-29).
+	var replies := preload("res://world/ai/celestia_reply.gd").new()
+	replies.name = "CelestiaReply"; add_child(replies); replies.setup(host)
 
 func register_actor(actor: Node3D) -> void:
 	var identity: Resource = actor.get("identity")
@@ -48,7 +56,8 @@ func action_context(id: String) -> Dictionary:
 func prompt_for(id: String) -> String:
 	# The relationship tag rules (formerly ACTION_HELP, 1.5 KB on every request and every group
 	# participant) ride once in the dialogue prompt's fixed head (director_prompts.gd RELATIONSHIP_RULES).
-	return bonds.prompt_for(id) + ("\n" + YOUNG_HELP.strip_edges() if _young_player() else "")
+	var result: String = bonds.prompt_for(id) + ("\n" + YOUNG_HELP.strip_edges() if _young_player() else "")
+	return result + ("\n" + KISS_NOT_READY if _kiss_not_ready(id) else "")
 
 func _home_for_offer(id: String) -> String:
 	if not is_instance_valid(game.population): return ""
@@ -225,7 +234,11 @@ func _process(delta: float) -> void:
 ## Eligibility is checked both when exposing the action and again on arrival.
 func can_kiss_player(id: String) -> bool:
 	var actor := _actor(id)
-	return actor != null and actor.identity != null and not actor.identity.filly and not actor.sleeping and not _young_player() and bonds.welcomes(id, "kiss")
+	return actor != null and actor.identity != null and not actor.identity.filly and not actor.sleeping and not _young_player() and not bonds.kiss_barred(id)
+
+## She may kiss him (can_kiss_player) but the bond does not welcome it yet (KISS_NOT_READY).
+func _kiss_not_ready(id: String) -> bool:
+	return can_kiss_player(id) and not bonds.welcomes(id, "kiss")
 
 ## A filly or colt player (world/life/player_form.gd); human Anon and grown AnonPony are not.
 func _young_player() -> bool:

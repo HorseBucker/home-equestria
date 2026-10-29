@@ -228,21 +228,26 @@ func _screen() -> Vector2:
 
 
 func _build_support(root: Control) -> void:
-	var inner := _card(root, "support", Vector2(700, 520))
+	var inner := _card(root, "support", Vector2(700, 590))
 	var box := VBoxContainer.new(); box.add_theme_constant_override("separation", 12); inner.add_child(box)
 	var head := HBoxContainer.new(); head.add_theme_constant_override("separation", 10); box.add_child(head)
 	var mark := ICON.make("lifebuoy", 34, STYLE.PINK); mark.size_flags_vertical = Control.SIZE_SHRINK_CENTER; head.add_child(mark)
 	head.add_child(STYLE.label("Support", "Heading", 36))
-	var note := STYLE.label("Something went wrong? Make a logs bundle and attach the zip to your report. It holds the game logs and your settings, never your API key.", "Muted", 18)
+	var note := STYLE.label("Stuck in a wall or a tree? Get unstuck takes you to the nearest front door. Something went wrong? Make a logs bundle and attach the zip to your report. It holds the game logs and your settings, never your API key.", "Muted", 18)
 	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; note.custom_minimum_size.x = 620
 	box.add_child(note)
-	for entry in [["Copy logs bundle", _make_bundle, "archive", ""], ["Open support folder" if OS.has_feature("android") else "Open logs folder", _open_logs, "folder", ""],
+	for entry in [["Get unstuck", _unstuck, "home", ""], ["Copy logs bundle", _make_bundle, "archive", ""], ["Open support folder" if OS.has_feature("android") else "Open logs folder", _open_logs, "folder", ""],
 			["Debug: Trixie show tomorrow", _book_trixie_show, "sparkle", ""], ["Back", _show.bind("main"), "back", "Ghost"]]:
 		var b := Button.new(); b.text = entry[0]; b.custom_minimum_size.y = 48; b.add_theme_font_size_override("font_size", 20)
 		b.icon = ICON.texture(str(entry[2]), 22); b.alignment = HORIZONTAL_ALIGNMENT_LEFT; b.theme_type_variation = str(entry[3])
 		b.pressed.connect(entry[1]); box.add_child(b)
 	_support_status = STYLE.label("", "Muted", 17); _support_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_support_status.custom_minimum_size.x = 620; box.add_child(_support_status)
+
+
+## Player bug board #37: out of a wall, a tree or a roof, to the nearest front door.
+func _unstuck() -> void:
+	_support_status.text = preload("res://player/unstuck.gd").run(game)
 
 
 ## Debug: book a Trixie stage show for the next game day at 17:00 (world/events/trixie_show/).

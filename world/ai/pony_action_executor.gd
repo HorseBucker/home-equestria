@@ -65,6 +65,9 @@ func _wake_actor() -> bool:
 	actor.request_posture("stand")
 	return true
 
+func _wardrobe() -> Node:
+	return actor.get_tree().get_first_node_in_group("pony_wardrobe") if is_instance_valid(actor) and actor.is_inside_tree() else null
+
 func capabilities() -> Array:
 	var result: Array = []
 	if not is_instance_valid(actor): return result
@@ -81,6 +84,12 @@ func capabilities() -> Array:
 	if actor.get("identity") != null and str(actor.identity.id) == "trixie":
 		var show := _trixie_show()
 		if show != null and show.ai_start(true): result.append("magic_show")
+	# Clothes she wears or took off (pony_wardrobe.gd set_worn); offered only when there is any.
+	var wardrobe := _wardrobe()
+	if wardrobe != null and actor.get("identity") != null:
+		var id := str(actor.identity.id)
+		if not wardrobe.wanted(id, wardrobe._season()).is_empty(): result.append("take_off")
+		if not (wardrobe.taken_off().get(id, []) as Array).is_empty(): result.append("put_on")
 	if not result.is_empty(): result.append("cancel")
 	if actor.has_meta("relationship_runtime"): result.append_array(["relationship_offer","relationship_answer","request_space","buck_player","cuddle"])
 	if actor.has_meta("relationship_runtime"):
@@ -154,6 +163,13 @@ func submit(actions: Array, targets: Dictionary, turn: int, ai_origin := false) 
 				var show := _trixie_show()
 				var started: bool = show != null and show.ai_start()
 				_report(action, "completed" if started else "failed", "Show called: fireworks over the schoolhouse stage, curtain in about three minutes" if started else "No stage show possible right now")
+			"take_off", "put_on":
+				var wardrobe := _wardrobe()
+				var on: bool = action.type == "put_on"
+				var changed: String = wardrobe.set_worn(str(actor.identity.id), str(action.kind), on) if wardrobe != null else ""
+				if not changed.is_empty(): wardrobe.dress(actor, str(actor.identity.id), wardrobe._season())
+				_report(action, "completed" if not changed.is_empty() else "failed",
+					("Now wearing " if on else "Took off ") + changed if not changed.is_empty() else ("You have nothing like that put away" if on else "You are not wearing that"))
 			"give_house":
 				if is_instance_valid(coordinator): coordinator.dispatch_house(character_id, action)
 				else: _report(action, "failed", "House grant coordinator unavailable")

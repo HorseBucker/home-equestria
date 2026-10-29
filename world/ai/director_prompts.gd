@@ -3,6 +3,7 @@ extends RefCounted
 ## Split out of conversation_director.gd (2026-10-13); the host keeps forwards for every name reachable
 ## from elsewhere, so callers did not change. `host` is the owning conversation_director node; shared state stays there.
 
+const VARIETY := preload("res://world/ai/dialogue_variety.gd")
 const FACE_TAGS := preload("res://world/ai/pony_dialogue_tags.gd")
 const ACTION_SCHEMA := preload("res://world/ai/pony_action_schema.gd")
 const PLAYER_FORM := preload("res://world/life/player_form.gd")
@@ -168,6 +169,10 @@ func system_prompt(id: String) -> String:
 	var actions: String = host._action_prompt(id)
 	if actions != "": prompt += "\n\n" + actions
 	if story != null and host.get("_brain_due") == true: prompt += "\n\n" + MEMORY.BRAIN_INSTRUCTION
+	# A pet topic she keeps coming back to across days (player thread report 2026-10-29); only
+	# costs tokens on the turns it fires.
+	var fixation: String = VARIETY.fixation_note(entry.spoken, host._player_text)
+	if fixation != "": prompt += "\n\n" + fixation
 	return prompt
 
 
@@ -222,7 +227,7 @@ Requests are not compulsions: accept, clarify or decline. Saying yes does not mo
 const RELATIONSHIP_RULES := "Relationship tags need spoken words stating your offer or answer and commit only when the line finishes; never answer your own offer or invent Anon's acceptance. On an outing to a named place each agreeing companion uses [go_to] and stops on arrival; follow Anon only on a walk with no named destination (it ends when he stays beyond walking range). During a shared activity you can board his balloon with him. A cuddle is beside or shoulder company in friendship, a closer snuggle only in an established romance, within current boundaries. Friendship and romance are separate: even full attraction never makes you partners; only an explicit proposal the other accepts does. Declining is allowed; affection and marriage never grant blanket permission. Never claim a milestone the game has not confirmed, and never say scores aloud."
 ## Fuller help than TAG_HELP where the old relationship help carried rules (solo extras and the group
 ## action reference; the solo cuddle line lives in SOLO_ACTIONS).
-const SOLO_EXTRA_HELP := {"kiss_player": "[kiss_player] walk up and kiss Anon when your relationship welcomes it; adults only. A short spoken line is optional; Anon can end it with the kiss button",
+const SOLO_EXTRA_HELP := {"kiss_player": "[kiss_player] walk up and kiss Anon; adults only, and only when your relationship line allows it. A short spoken line is optional; Anon can end it with the kiss button",
 	"cuddle": "[cuddle] walk over and rest with Anon where he lies (bed, couch, supported grass, blanket), only if you want to"}
 
 

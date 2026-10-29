@@ -77,8 +77,10 @@ func bind(store: Node) -> void:
 func register(id: String, adult: bool) -> void:
 	adults[id] = adult
 
+## Wall-clock seconds plus world time skipped by sleeping (time_of_day.gd skipped_seconds), so a
+## cooldown or "again within 30 seconds" never spans a night's sleep.
 func now() -> float:
-	return Time.get_unix_time_from_system()
+	return Time.get_unix_time_from_system() + preload("res://autoload/time_of_day.gd").skipped()
 
 func day() -> float:
 	var clock := get_node_or_null("/root/TimeOfDay")
@@ -304,6 +306,13 @@ func welcomes(id: String, kind: String) -> bool:
 	if kind == "hug": return partner or fond or STAGES.find(r.stage) >= 1 or r.trust >= 10.0
 	if partner: return true
 	return fond and mood != "annoyed"
+
+## Hard stops for a kiss she starts herself (relationship_runtime.can_kiss_player): a minor
+## either side, her "space" cooldown or anger. Stage is not one: it only discourages (dev 2026-10-29).
+func kiss_barred(id: String) -> bool:
+	if not adults.get(id, false) or _young_player(): return true
+	if now() < float(record_for(id).cooldowns.get("boundary", 0.0)): return true
+	return is_instance_valid(context.impressions) and str(context.impressions.profile(id).mood) == "angry"
 
 func contact(id: String, kind: String) -> bool:
 	var r := record_for(id)

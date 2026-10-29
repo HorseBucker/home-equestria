@@ -83,7 +83,7 @@ func begin(value: String, point: Vector3, by_her := false) -> bool:
 	var runtime: Node=(mare.get_meta("relationship_runtime") if mare.has_meta("relationship_runtime") else null)
 	if value=="kiss" and by_her:
 		if mare.sleeping or mare.identity.filly or _young_player() or _buck_time>=0 or runtime==null:return false
-		if not runtime.bonds.welcomes(str(mare.get_meta("relationship_id", "")), "kiss"):return false
+		if runtime.bonds.kiss_barred(str(mare.get_meta("relationship_id", ""))):return false
 		mare.boop_node.play_kiss()
 		mare.expressions.fluster(1.0)
 	elif value=="kiss":

@@ -110,7 +110,7 @@ func _on_physical_reaction(kind:String,id:String,deferred:bool=false,summary:=""
 	var runtime: Node = host.get_tree().get_first_node_in_group("encounters")
 	if runtime != null and kind != "farewell" and kind != "quiet": runtime.event(id, kind, event.left(160) if not event.is_empty() else kind.replace("_", " "))
 	var messages:Array=host.characters[id].history.duplicate(true)
-	host._physical_context=("[Your situation, not spoken dialogue] " if kind=="farewell" else "[Observed physical event, not spoken dialogue] ")+event
+	host._physical_context=host.time_gap_note(id)+("[Your situation, not spoken dialogue] " if kind=="farewell" else "[Observed physical event, not spoken dialogue] ")+event
 	var instruction:=" LESS IS MORE: one or two words, or only [silence], are often enough; longer chatter only when the moment invites it, not after every touch. Do not repeat this instruction."
 	messages.append({"role":"user","content":host._physical_context+instruction})
 	# Contact and handling are the player's doing too: they take the connection.

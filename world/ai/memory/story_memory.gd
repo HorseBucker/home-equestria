@@ -31,7 +31,7 @@ const SUMMARY_STALE_SECONDS := 300.0
 const SUMMARY_TEXT_CHARS := 900
 ## Command bookkeeping worth remembering once finished; movement and gaze never are.
 const MEMORABLE_ACTIONS := ["relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle",
-	"kiss_player", "give_house", "send_letter", "air_show", "sonic_rainboom", "wake_up", "magic_show"]
+	"kiss_player", "give_house", "send_letter", "air_show", "sonic_rainboom", "wake_up", "magic_show", "take_off", "put_on"]
 ## Journal kinds the summary skips: routine bookkeeping (today's routine still reaches prompts
 ## through day_events), command intentions and private director notes.
 const SUMMARY_SKIP_KINDS := ["intention", "brain", "day", "shared_outing", "conversation"]
@@ -145,9 +145,15 @@ func context_for(pony: String, present: Array, cue: String, skip_player_chat := 
 	today = today.slice(maxi(0, today.size() - 10))
 	if not today.is_empty():
 		parts.append("YOUR DAY SO FAR\n" + "\n".join(today.map(func(row): return line_text(row, pony))))
-	var threads := store.open_threads(pony, 4)
-	if not threads.is_empty():
-		parts.append("ON YOUR MIND\n" + "\n".join(threads.map(func(row): return "- " + str(row.text))))
+	# Expired threads stay out, and a save from before the thread dedupe may still hold copies of one
+	# want: each thing is listed once, newest wording (player thread report 2026-10-29).
+	var mind: Array[String] = []
+	var threads := store.open_threads(pony, 6, int(now.day), int(now.minute))
+	for i in range(threads.size() - 1, -1, -1):
+		var thought := str(threads[i].text)
+		if mind.size() < 4 and not mind.any(func(seen: String) -> bool: return STORE.similar(seen, thought)): mind.insert(0, thought)
+	if not mind.is_empty():
+		parts.append("ON YOUR MIND\n" + "\n".join(mind.map(func(thought: String) -> String: return "- " + thought)))
 	var feelings: PackedStringArray = []
 	for other in present:
 		var id := str(other)
@@ -220,7 +226,7 @@ Encounters: 1-3 sentences on what happened between them
 Notable moments: short list separated by semicolons (promises, secrets, firsts, fights, gifts)
 Others: who else matters to her lately and why, one short sentence
 Future hooks: what she wants or plans next, one short sentence
-Keep each pony under 90 words. Merge her previous summary with the new events; keep what still matters, drop trivia, keep exact names, places and promises."""
+Keep each pony under 90 words. Merge her previous summary with the new events; keep what still matters, drop trivia, keep exact names, places and real promises. Drop bets, dares and running jokes once settled, stale for days or repeating without progress; never let one topic dominate."""
 
 func _covered() -> int:
 	return int(store.summary("through").through)
@@ -452,10 +458,13 @@ static func _block_finished(body: Array) -> bool:
 
 ## Planning notes ahead of the spoken reply. Providers may refuse this now and then (Opus did on
 ## 2026-10-15); the client simply retries. Never soften the prompt for one provider (dev 2026-10-15).
+## NEXT once said "make it happen in this reply or the next" and weak models invented off-screen
+## events; DONE closes threads (player thread report 2026-10-29).
 const BRAIN_INSTRUCTION := """DIRECTOR NOTES (required this turn): start your reply with a private <brain>...</brain> block, plain text, at most 60 words, nobody hears it:
 WANT pony_id: what this pony wants right now, apart from Anon (one line per pony present)
 ELSEWHERE: one thing happening off-screen in town that ponies might hear about later
-NEXT: one concrete thing that will happen soon (an arrival, an interruption, a reveal, a request, something going wrong); make it happen in this reply or the next
+NEXT: one likely thing that could happen soon, grounded in who and what is here now; never an event about a pony or thing not present
+DONE: what is settled, dropped or no longer matters (optional)
 Setbacks must be fair: foreshadowed or the result of earlier facts. After </brain>, write the normal reply."""
 
 ## Strips story notes from a reply, storing them. Returns the cleaned reply.
@@ -471,6 +480,17 @@ func _store_brain(note: String, speaker: String, present: Array) -> void:
 	if not is_open(): return
 	var now := _now()
 	store.add_line(now.day, now.minute, "", "brain", speaker, "", note.strip_edges(), [speaker])
+	# DONE first: it settles older threads of the ponies this note speaks for, never this note's own
+	# WANT/NEXT ("DONE pony_id: ..." also accepted; player thread report 2026-10-29).
+	for raw in note.split("\n"):
+		var line := raw.strip_edges()
+		if not line.begins_with("DONE") or line.find(":") < 0: continue
+		var settled := line.substr(line.find(":") + 1).strip_edges()
+		if settled.is_empty(): continue
+		var owners: Array = [speaker]
+		for id in present:
+			if str(id) not in owners and str(id) != "player": owners.append(str(id))
+		for pony: String in owners: store.close_matching(pony, settled)
 	for raw in note.split("\n"):
 		var line := raw.strip_edges()
 		if line.begins_with("WANT "):

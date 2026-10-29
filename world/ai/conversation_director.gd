@@ -24,6 +24,7 @@ const FACE_TAGS := preload("res://world/ai/pony_dialogue_tags.gd")
 const ACTION_SCHEMA := preload("res://world/ai/pony_action_schema.gd")
 const ACTION_COORDINATOR := preload("res://world/ai/pony_action_coordinator.gd")
 const VARIETY := preload("res://world/ai/dialogue_variety.gd")
+const CLOCK := preload("res://autoload/time_of_day.gd")
 const INTENT := preload("res://world/ai/pony_intent_consistency.gd")
 const SENTENCES := preload("res://world/ai/speech_sentences.gd")
 const CONTROLS := preload("res://world/ai/speech_controls.gd")
@@ -554,6 +555,7 @@ func handle_text(text: String) -> void:
 	if not paid_note.is_empty():
 		characters[id].erase("paid_note")
 		text = paid_note + "\n" + text
+	var gap_note := time_gap_note(id)
 	var bonds_runtime: Node=get_tree().get_first_node_in_group("player_relationships")
 	if bonds_runtime!=null: bonds_runtime.player_text(id,text,members.size()<2,_turn_id)
 	for participant in (members if members.size() >= 2 else [id]):
@@ -563,7 +565,7 @@ func handle_text(text: String) -> void:
 	var entry: Dictionary = characters[id]
 	var history: Array = entry.history
 	if members.size() < 2:
-		history.append({"role": "user", "content": text})
+		history.append({"role": "user", "content": gap_note + text})
 		# Multi-sentence replies play as beats; mark the line as already in her history
 		# so the beat path does not append it a second time.
 		entry.last_player_history_turn = _turn_id
@@ -938,7 +940,7 @@ func _on_speech_started(id: String) -> void:
 	_beat_listener_heard = _listener_hears_current()
 	speech.set_muted(false)
 	entry.spoken.append(spoken)
-	if entry.spoken.size() > 12: entry.spoken.pop_front()
+	if entry.spoken.size() > VARIETY.FIXATION_WINDOW: entry.spoken.pop_front()
 	if not group.ambient or not group.active() or _player_hears_current():
 		reply.emit(id, spoken)
 		if hud.has_method("start_line"):
@@ -1046,7 +1048,25 @@ func _finish_silence() -> void:
 
 
 static func _now() -> float:
-	return Time.get_ticks_msec() / 1000.0
+	# Plus world time skipped by sleeping, so every "a moment ago" window (contacts, carries, the
+	# same chat, recent events) sees the night pass (dev 2026-10-29: picked up, slept 24 hours,
+	# picked up again = "twice in 30 seconds").
+	return Time.get_ticks_msec() / 1000.0 + CLOCK.skipped()
+
+
+## Player bug board #36: after Anon slept a whole day, her chat history still ran straight on, so a
+## pickup after the sleep read as a second pickup a few seconds after the first. When an hour or
+## more of game time has passed since her last exchange with him, her next turn says so. Every call
+## stamps the exchange.
+func time_gap_note(id: String) -> String:
+	var clock: Node = get_node_or_null("/root/TimeOfDay")
+	if clock == null or not characters.has(id): return ""
+	var now := float(clock.day) * 24.0 + float(clock.hours)
+	var gap := now - float(characters[id].get("clock_last", now))
+	characters[id]["clock_last"] = now
+	if gap < 1.0 or (characters[id].history as Array).is_empty(): return ""
+	var span := "about an hour has" if gap < 1.5 else "about %d hours have" % roundi(gap) if gap < 36.0 else "about %d days have" % roundi(gap / 24.0)
+	return "[Not spoken: %s passed since your last exchange with Anon; the lines above are from before that.]\n" % span
 
 
 func _physics_process(delta: float) -> void:

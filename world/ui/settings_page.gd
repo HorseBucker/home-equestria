@@ -494,8 +494,14 @@ func _mod_text(pack: Dictionary, mods: Array) -> String:
 	return "\n".join(lines)
 
 
+## The "mods" folder beside the game on desktop (mod_loader.gd mod_dirs() reads it too; a player
+## report 2026-10-29: easier to find than AppData), else the user-data one (Quest, source runs, or
+## a game folder the player cannot write to).
 func _open_mods_folder() -> void:
 	var folder := ProjectSettings.globalize_path(preload("res://world/modding/mod_loader.gd").USER_DIR)
+	if OS.has_feature("template") and not OS.has_feature("android"):
+		var beside := OS.get_executable_path().get_base_dir().path_join("mods")
+		if DirAccess.make_dir_recursive_absolute(beside) == OK: folder = beside
 	DirAccess.make_dir_recursive_absolute(folder)
 	Settings.message = ("Mods folder: " if OS.shell_open(folder) == OK else "Could not open a file manager. The mods folder is ") + folder
 	refresh()
