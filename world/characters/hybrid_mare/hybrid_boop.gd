@@ -99,6 +99,33 @@ var _native: RefCounted
 var _native_bones := PackedInt32Array()
 var _skull_shape: Node3D
 var _muzzle_shape: Node3D
+## A pointing fingertip within FINGER_NEAR of her nose: hybrid_mare.gd holds her head still so the
+## nose stays where the finger is aimed (dev 2026-10-29: "keep their nose still").
+const FINGER_NEAR := 0.25
+var finger_near := false
+## A finger on her nose pushes it in a little (dev 2026-10-29): the nose bone and the NoseShape
+## sphere move PRESS_DEPTH along the press, so the physics hand follows it in.
+const PRESS_DEPTH := 0.008
+## World offset of the pressed nose, eased toward the press and back.
+var press_offset := Vector3.ZERO
+var _press_dir := Vector3.ZERO
+var _press_until := 0
+var _nose_shape: Node3D
+var _nose_press: NosePress
+
+
+## Moves one bone by a skeleton-space offset after the face modifiers (mouth, eyes) ran. Off while
+## nothing presses, so it costs nothing on the crowd.
+class NosePress extends SkeletonModifier3D:
+	var bone := -1
+	var offset := Vector3.ZERO
+
+	func _process_modification() -> void:
+		var sk := get_skeleton()
+		if sk == null or bone < 0: return
+		var parent := sk.get_bone_parent(bone)
+		var parent_basis := sk.get_bone_global_pose(parent).basis if parent >= 0 else Basis()
+		sk.set_bone_pose_position(bone, sk.get_bone_pose_position(bone) + parent_basis.inverse() * offset)
 
 
 func setup(target_mare: Node3D, skeleton: Skeleton3D) -> void:
@@ -124,6 +151,12 @@ func setup(target_mare: Node3D, skeleton: Skeleton3D) -> void:
 		snoot.add_child(cs)
 	# Child of the mare herself, so a ray hit on the snoot resolves to her `pet`.
 	mare.add_child(snoot)
+	_nose_shape = snoot.get_node("NoseShape")
+	_nose_press = NosePress.new()
+	_nose_press.name = "NosePress"
+	_nose_press.bone = _nose_bone
+	_nose_press.active = false
+	skeleton.add_child(_nose_press)
 	_native = NATIVE.create() if NATIVE.enabled("boop") else null
 	if _native != null:
 		_native_bones = PackedInt32Array([_head_bone, _nose_bone, skeleton.find_bone(MUZZLE_BONE),
@@ -238,6 +271,25 @@ func _read_input(side: String) -> Vector2:
 	return Vector2(controller.get_float("trigger"), controller.get_float("grip"))
 
 
+## Push her nose in along `direction` (world, toward her) for the next 0.12 s; call it every
+## frame the finger stays on it.
+func press(direction: Vector3) -> void:
+	if not direction.is_finite() or direction.length_squared() < .0001: return
+	wake_tick()
+	_press_dir = direction.normalized()
+	_press_until = Time.get_ticks_msec() + 120
+
+
+func _advance_press(delta: float) -> void:
+	var wanted := _press_dir * PRESS_DEPTH if Time.get_ticks_msec() < _press_until else Vector3.ZERO
+	press_offset = press_offset.move_toward(wanted, delta * PRESS_DEPTH / .1)
+	var pressed := press_offset.length_squared() > 1e-9
+	if _nose_shape != null: _nose_shape.position = snoot.global_basis.inverse() * press_offset if pressed else Vector3.ZERO
+	if _nose_press != null:
+		_nose_press.active = pressed
+		if pressed: _nose_press.offset = head_skeleton.global_basis.inverse() * press_offset
+
+
 func tip_world(side: String) -> Vector3:
 	if _visible_samples.has(side):return _visible_samples[side].tip
 	var hand: Node3D = _hands.get(side)
@@ -282,6 +334,9 @@ func touching_snoot(side: String) -> bool:
 func _unprofiled_physics_process(delta: float) -> void:
 	if snoot == null: return
 	if mare.sim_tier != 0 or mare._far == true:
+		finger_near = false
+		_press_until = 0
+		if press_offset != Vector3.ZERO: _advance_press(1.0)
 		# Beyond hand reach (clip tiers, 6 m and out): blush fades, decals follow only while shown.
 		_advance_blush(delta)
 		if blush_amount > 0.0: _sync_snoot()
@@ -289,6 +344,7 @@ func _unprofiled_physics_process(delta: float) -> void:
 		return
 	_sync_snoot()
 	_advance_scratching(delta)
+	var near := false
 	for side in _hands:
 		if not is_instance_valid(_hands[side]): continue
 		_visible_samples.erase(side)
@@ -299,6 +355,9 @@ func _unprofiled_physics_process(delta: float) -> void:
 			if not sample.get("active",false):
 				_visible_ready[side]=false;_latched[side]=false;continue
 			_visible_samples[side]=sample
+		var pointing_here := is_pointing(side)
+		var tip_now := tip_world(side)
+		if pointing_here and tip_now.is_finite() and tip_now.distance_to(nose_world()) < FINGER_NEAR: near = true
 		var touching := touching_snoot(side)
 		var on_nose := touching_nose(side)
 		if _visible_samples.has(side):
@@ -310,6 +369,7 @@ func _unprofiled_physics_process(delta: float) -> void:
 				var wall:=mare.get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(wrist,nose_world(),1))
 				on_nose=wall.is_empty()
 			touching=on_nose
+		if on_nose and pointing_here: press(nose_world() - tip_now)
 		if not on_nose:
 			if _touch_tip.has(side) and tip_world(side).distance_to(_touch_tip[side]) > 0.005:
 				_latched[side] = false
@@ -322,6 +382,8 @@ func _unprofiled_physics_process(delta: float) -> void:
 		_latched[side] = true
 		_touch_tip[side] = tip_world(side)
 		boop()
+	finger_near = near
+	_advance_press(delta)
 	_advance_blush(delta)
 
 
@@ -338,7 +400,7 @@ func _advance_scratching(delta: float) -> void:
 		active=_scratches[side].advance(delta,contact,hand.global_position,frame,SKULL_LOCAL) or active
 		head_scratches+=_scratches[side].reactions-before
 	if active:
-		sustain_blush()
+		if not mare.has_meta("spa_client"): sustain_blush()   # spa care never blushes
 		mare.expressions.touch("scratch",.7,.45)
 		mare.begin_touch(Vector3.ZERO,.35)
 	else:mare.expressions.release_touch("scratch")
@@ -350,6 +412,14 @@ func _unprofiled_process(delta: float) -> void:
 
 ## The reaction; the gates above or a desktop pet on the head call it.
 func boop() -> void:
+	# A spa client is not booped: no count, blush, hearts or "boop" for her AI
+	# (SPA_PLAN_2026_10_29.md section 3).
+	# Her eyes still squeeze shut and she squeaks (dev 2026-10-29: "they keep their eyes open"):
+	# that face is not romance; blush, hearts, the count and the AI's "boop" stay off.
+	if mare.has_meta("spa_client"):
+		mare.expressions.boop()
+		_play_squee()
+		return
 	wake_tick()
 	boops += 1
 	if mare.has_method("on_booped"): mare.on_booped()
@@ -558,6 +628,11 @@ func _heart_image() -> Texture2D:
 	_heart_texture = ImageTexture.create_from_image(image)
 	return _heart_texture
 
+
+## A relationship level-up (relationship_runtime.gd): the boop's hearts, with no boop counted.
+func celebrate() -> void:
+	if head_skeleton == null or _head_bone < 0: return
+	_spawn_hearts()
 
 func _spawn_hearts() -> void:
 	var head := head_skeleton.global_transform * head_skeleton.get_bone_global_pose(_head_bone)

@@ -104,6 +104,7 @@ static func prepare(tree: Node3D) -> Dictionary:
 	tree.add_child(frame)
 	_build_room(frame)
 	WINDOWS.build(frame)
+	_build_crown_fill(frame)
 	var door: Node3D = _build_door(frame, tree, leaf)
 	var layout := {"radius": 5.0, "floor_y": 0.0, "loft_y": 3.4, "ceiling_y": 7.2,
 		"door_position": Vector3(.16 * EXTERIOR_WIDTH, 0, 9.04 * EXTERIOR_WIDTH), "door_width": 3.2 * EXTERIOR_WIDTH,
@@ -326,6 +327,41 @@ static func _build_arch_infill(frame: Node3D, material: Material) -> void:
 static func _quad(surface: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	for point: Vector3 in [a, b, c, a, c, d]:
 		surface.add_vertex(point)
+
+## Player bug board (2026-10-29): climbing in from outside left a player stuck inside the tree.
+## Above the library ceiling the shell is a hollow crown, open at the top, with gaps in the bark
+## a capsule slides through onto the ceiling slab. Convex wedges, measured just inside the bark
+## (crown_fill.json, tools/golden_oak/measure_crown_fill.gd), make the crown solid. No mesh.
+const CROWN_FILL := "res://world/buildings/golden_oak/crown_fill.json"
+## A few sectors look out through a branch fork to far bark; past this the wedge would stick out.
+const CROWN_FILL_MAX := 6.0
+
+static func _build_crown_fill(frame: Node3D) -> void:
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(CROWN_FILL))
+	if not data is Dictionary: return
+	var sectors := int(data.sectors)
+	var body := StaticBody3D.new()
+	body.name = "CrownFill"
+	body.collision_layer = 1
+	body.collision_mask = 0
+	for band: Dictionary in data.bands:
+		var radii: Array = band.radii
+		for sector in sectors:
+			var radius := minf(float(radii[sector]), CROWN_FILL_MAX)
+			if radius <= 0.0: continue
+			var points := PackedVector3Array()
+			for height: float in [float(band.bottom), float(band.top)]:
+				points.append(Vector3(0, height, 0))
+				for step in 4:
+					var angle := TAU * (sector + step / 3.0) / sectors
+					points.append(Vector3(sin(angle) * radius, height, cos(angle) * radius))
+			var shape := ConvexPolygonShape3D.new()
+			shape.points = points
+			var collision := CollisionShape3D.new()
+			collision.shape = shape
+			body.add_child(collision)
+	frame.add_child(body)
+
 
 static func _solid(parent: Node3D, label: String, mesh: PrimitiveMesh, at: Vector3, material: Material) -> MeshInstance3D:
 	var view := MeshInstance3D.new()

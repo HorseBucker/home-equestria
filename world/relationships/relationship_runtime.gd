@@ -2,6 +2,7 @@ extends Node
 ## Bridge between persistent bonds, completed dialogue, activities and physical actors.
 const INTENT := preload("res://world/relationships/relationship_intent.gd")
 const HOUSE := preload("res://world/buildings/house_interior.gd")
+const LADDER := preload("res://world/relationships/bond_ladder.gd")
 const ACTION_HELP := "Relationship actions: relationship_offer(kind,activity,location_id) proposes an eligible offer to Anon; activity is walk/fishing/orchard/meal/visit, or place for time together at a mapped place (then give its location_id, e.g. a lake; omit location_id otherwise). For a named destination use go_to and the mapped location; each agreeing companion travels there independently and stops on arrival. Follow Anon only for a walk without a named destination; it ends when he stays beyond walking range. If he takes his balloon during a shared activity, you can board it with him. relationship_answer(offer_id,accept) answers ONLY an existing player offer. Use a boolean accept. State your actual offer or answer in speech. These changes commit only when your spoken line finishes. Never answer your own offer or fabricate player acceptance. request_space() withdraws physical permission for three minutes; say that you want space. buck_player() kicks Anon back with your hind legs when your spoken line ends; only for real, lasting anger at unwelcome contact, never for boops or petting you secretly enjoy. cuddle() walks over and rests with Anon on the bed, couch, supported grass or deployed blanket he is lying on, only if you want to. Actual friendship chooses beside or shoulder company; an established romantic relationship permits a closer snuggle, subject to current boundaries. kiss_player() walks up and initiates a kiss; your relationship line says whether that is natural yet. Adults only. A short spoken line is optional; Anon can end it with the kiss button."
 ## Added to the relationship prompt only while the player is a young AnonPony (world/life/player_form.gd), so a
 ## human's prompt is unchanged.
@@ -33,6 +34,84 @@ func setup(host: Node) -> void:
 	# Princess Celestia's replies to Spike's letters (player thread report 2026-10-29).
 	var replies := preload("res://world/ai/celestia_reply.gd").new()
 	replies.name = "CelestiaReply"; add_child(replies); replies.setup(host)
+	# Letters, Derpy's mail and appointments (docs/LETTERS_PLAN_2026_10_29.md).
+	for row: Array in [["LetterPost", "res://world/letters/letter_post.gd"], ["LetterPaper", "res://world/letters/paper/letter_paper.gd"],
+			["LetterCourier", "res://world/letters/courier/letter_courier.gd"], ["Appointments", "res://world/life/appointments/appointments.gd"]]:
+		if not ResourceLoader.exists(str(row[1])): continue
+		var node: Node = (load(str(row[1])) as GDScript).new()
+		node.name = str(row[0]); add_child(node); node.call("setup", host)
+	# Relationship levels (world/relationships/bond_ladder.gd): named in her prompt, shown in the
+	# profile, and a level-up is celebrated where she stands.
+	var impressions: Node = host.world_context.impressions
+	impressions.ladder_provider = ladder
+	if not impressions.changed.is_connected(_level_check): impressions.changed.connect(_level_check)
+	if not bonds.changed.is_connected(_level_check): bonds.changed.connect(_level_check)
+
+## Both level rows for one pony (bond_ladder.gd compute()).
+func ladder(id: String) -> Dictionary:
+	var context: Node = game.world_context if is_instance_valid(game) else null
+	if context == null or not is_instance_valid(context.impressions): return {}
+	var r: Dictionary = bonds.record_for(id)
+	var gained: Dictionary = context.impressions.xp_for(id)
+	var actor: Node = actors.get(id)
+	var identity: Resource = actor.get("identity") if is_instance_valid(actor) else null
+	return LADDER.compute({"met": bool(bonds.knowledge(id).get("met", false)), "stage": str(r.stage),
+		"familiarity": float(r.familiarity), "trust": float(r.trust),
+		"friend_xp": int(gained.friendship), "love_xp": int(gained.romance),
+		"romance": bonds.adults.has(id) and bonds.eligible_for_romance(id),
+		"stallion": identity != null and bool(identity.get("stallion")),
+		"turned_down": bonds.offer_on_cooldown(id, "dating") and str(r.stage) in ["friend", "close_friend"],
+		"together_s": float(r.get("together_s", 0.0)), "ready_s": bonds.READY_TOGETHER_S})
+
+## A level reached is announced once: she learns it as a world event, and if she is loaded, hearts
+## and the new level's name rise over her head. The first look at a pony (and every drop, such as
+## a break-up) is only remembered.
+func _level_check(id: String) -> void:
+	var context: Node = game.world_context if is_instance_valid(game) else null
+	if context == null or context._read_only or not context.valid_id(id): return
+	var levels := ladder(id)
+	if levels.is_empty(): return
+	if not context.state.get("bond_levels") is Dictionary: context.state["bond_levels"] = {}
+	var known: Dictionary = context.state.bond_levels
+	var now := {"friendship": int(levels.friendship.level), "love": int((levels.love as Dictionary).get("level", -1)) if not (levels.love as Dictionary).is_empty() else -1}
+	var before: Variant = known.get(id)
+	known[id] = now
+	if not before is Dictionary or before == now: 
+		if not before is Dictionary: context._changed()
+		return
+	context._changed()
+	for row: String in ["love", "friendship"]:
+		if int(now[row]) <= int((before as Dictionary).get(row, -1)): continue
+		var name := str((levels[row] as Dictionary).name)
+		var line := ("You and Anon reached a new %s level: %s." % [row, name])
+		context.record("bond_level", line, [id, "player"], [id, "player"], "bond-level:%s:%s:%s" % [id, row, name])
+		_celebrate(id, name)
+		return
+
+func _celebrate(id: String, name: String) -> void:
+	var actor: Node3D = actors.get(id) as Node3D
+	if not is_instance_valid(actor) or not actor.is_inside_tree(): return
+	var boop: Node = actor.get("boop_node")
+	if is_instance_valid(boop) and boop.has_method("celebrate"): boop.call("celebrate")
+	var top: Vector3 = actor.call("listen_point") + Vector3.UP * 0.45 if actor.has_method("listen_point") else actor.global_position + Vector3.UP * 1.6
+	var label := Label3D.new()
+	var identity: Resource = actor.get("identity")
+	label.text = "%s\n%s!" % [str(identity.get("display_name")) if identity != null else id.capitalize(), name]
+	label.font_size = 56; label.pixel_size = 0.0014; label.outline_size = 12
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED; label.no_depth_test = true
+	label.modulate = Color(1.0, 0.62, 0.82); label.outline_modulate = Color(0.32, 0.12, 0.3)
+	game.add_child(label)
+	label.global_position = top
+	var tween := label.create_tween()
+	tween.tween_property(label, "global_position", top + Vector3.UP * 0.5, 3.0)
+	tween.parallel().tween_property(label, "modulate:a", 0.0, 3.0).set_delay(1.5)
+	tween.tween_callback(label.queue_free)
+	if identity != null and not bool(identity.get("stallion")):
+		var squee := AudioStreamPlayer3D.new()
+		squee.stream = load("res://world/audio/pony/squee_%d.ogg" % (1 + randi() % 2))
+		squee.volume_db = -6.0
+		actor.add_child(squee); squee.play()
+		squee.finished.connect(squee.queue_free)
 
 func register_actor(actor: Node3D) -> void:
 	var identity: Resource = actor.get("identity")
@@ -216,7 +295,8 @@ func _process(delta: float) -> void:
 		bonds.expire_plan(id)
 		_apply_household(id)
 		# Time together counts toward her asking him out (player_bonds.gd courtship).
-		if camera != null and actor.global_position.distance_to(camera.global_position) < 5.0 and not bool(actor.get("sleeping")): bonds.add_together(id, 1.0)
+		# A spa visit is not time together (SPA_PLAN_2026_10_29.md section 3).
+		if camera != null and actor.global_position.distance_to(camera.global_position) < 5.0 and not bool(actor.get("sleeping")) and not actor.has_meta("spa_client"): bonds.add_together(id, 1.0)
 		_plan_step(id,actor,camera)
 		if _offer_after <= 0.0 and camera != null and actor.global_position.distance_to(camera.global_position) < 4.0 and _free(actor) and bonds.pending(id).is_empty():
 			var row: Dictionary = bonds.record_for(id)

@@ -113,10 +113,12 @@ func _on_beat() -> void:
 		_petted = 0.0; _until = 0.0; _shown = false   # the flight (or sleep) has her
 		_calm()
 		return
+	# A spa client's care never excites her (SPA_PLAN_2026_10_29.md section 3); her AI tags still can.
+	var spa := mare.has_meta("spa_client")
 	var affection: Node = mare.get_node_or_null("Affection")
-	if affection != null and str(affection.get("kind")) == "kiss": _until = maxf(_until, KISS_AFTER)
+	if not spa and affection != null and str(affection.get("kind")) == "kiss": _until = maxf(_until, KISS_AFTER)
 	var touch: Variant = mare.get("touch_body")
-	var petted: bool = touch is Node and bool(touch.get("petting")) and str(touch.get("pet_region")) in EXCITING
+	var petted: bool = not spa and touch is Node and bool(touch.get("petting")) and str(touch.get("pet_region")) in EXCITING
 	_petted = _petted + dt if petted else 0.0
 	if _petted >= PET_SECONDS: _until = maxf(_until, AFTERGLOW)
 	_until = maxf(0.0, _until - dt)

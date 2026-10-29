@@ -522,6 +522,14 @@
 			"text": "[buck_player] buck Anon away (only real, lasting anger at unwelcome contact)"
 		},
 		{
+			"id": "pony_action_schema.73742b15",
+			"group": "Dialogue rules",
+			"label": "[meet: LOCATION, DAY, HH:MM] agree to meet Anon at a place on a day (t",
+			"file": "world/ai/pony_action_schema.gd",
+			"placeholders": 0,
+			"text": "[meet: LOCATION, DAY, HH:MM] agree to meet Anon at a place on a day (today, tomorrow or a number of days ahead) and time, e.g. [meet: landmark:town_hall, tomorrow, 15:00]; you will go there a bit early and wait; replaces your earlier meeting with him"
+		},
+		{
 			"id": "pony_action_schema.7c9418de",
 			"group": "Dialogue rules",
 			"label": "[give_house] officially make a free Ponyville house Anon's own home, f",
@@ -840,6 +848,150 @@
 			"file": "world/characters/locomotion/cradle_rest.gd",
 			"placeholders": 0,
 			"text": "- It is past your bedtime and you are growing sleepy in Anon's arms: your eyelids are heavy and your head keeps settling against his chest. You may let yourself drift off; nothing needs saying."
+		},
+		{
+			"id": "letter_fallback.19d64523",
+			"group": "Dialogue rules",
+			"label": "Your letter was so sweet that I kept it on my desk. Thank you for writ",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "Your letter was so sweet that I kept it on my desk. Thank you for writing to me. I can't wait to see you again!"
+		},
+		{
+			"id": "letter_fallback.205600a1",
+			"group": "Dialogue rules",
+			"label": "Things have been a bit grey lately. A letter from you would cheer me u",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "Things have been a bit grey lately. A letter from you would cheer me up."
+		},
+		{
+			"id": "letter_fallback.394ccea7",
+			"group": "Dialogue rules",
+			"label": "Derpy brought your letter, and it was good to hear from you. Take care",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "Derpy brought your letter, and it was good to hear from you. Take care, and say hello next time you pass by."
+		},
+		{
+			"id": "letter_fallback.39c91cd0",
+			"group": "Dialogue rules",
+			"label": "I got your letter. I am not quite sure what to make of it, to be hones",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "I got your letter. I am not quite sure what to make of it, to be honest. Maybe we can talk in person instead."
+		},
+		{
+			"id": "letter_fallback.414ab5e8",
+			"group": "Dialogue rules",
+			"label": "I was there at the time we agreed and waited, but you didn't show up.",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "I was there at the time we agreed and waited, but you didn't show up. That wasn't very nice. I'd like to hear why."
+		},
+		{
+			"id": "letter_fallback.451f8f20",
+			"group": "Dialogue rules",
+			"label": "I read your letter. It was a bit hard to follow. If there is something",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "I read your letter. It was a bit hard to follow. If there is something you want to tell me, just come and say it."
+		},
+		{
+			"id": "letter_fallback.4ac41d7a",
+			"group": "Dialogue rules",
+			"label": "I just wanted to write and say I am glad you are here. Have a wonderfu",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "I just wanted to write and say I am glad you are here. Have a wonderful day!"
+		},
+		{
+			"id": "letter_fallback.57bc1be3",
+			"group": "Dialogue rules",
+			"label": "Thank you so much for your letter! It really made my day, and I have r",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "Thank you so much for your letter! It really made my day, and I have read it twice already. It means a lot that you thought of me. Write again soon, and come and say hello when you are near."
+		},
+		{
+			"id": "letter_fallback.5937bc27",
+			"group": "Dialogue rules",
+			"label": "I got your letter this morning. Thanks for thinking of me! Let's talk",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "I got your letter this morning. Thanks for thinking of me! Let's talk more when we see each other."
+		},
+		{
+			"id": "letter_fallback.84a1c596",
+			"group": "Dialogue rules",
+			"label": "I was a little sad today and thought of you. I hope you are well.",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "I was a little sad today and thought of you. I hope you are well."
+		},
+		{
+			"id": "letter_fallback.8566186a",
+			"group": "Dialogue rules",
+			"label": "What a lovely surprise when Derpy brought your letter! I smiled the wh",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "What a lovely surprise when Derpy brought your letter! I smiled the whole morning. You are a wonderful friend, and I am so glad you are here in Ponyville."
+		},
+		{
+			"id": "letter_fallback.c11c9aae",
+			"group": "Dialogue rules",
+			"label": "I was thinking about you today and it made me smile. See you soon!",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "I was thinking about you today and it made me smile. See you soon!"
+		},
+		{
+			"id": "letter_fallback.d51006dc",
+			"group": "Dialogue rules",
+			"label": "I waited for you like we agreed, and you never came. I hope you had a",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "I waited for you like we agreed, and you never came. I hope you had a good reason. Next time, please tell me if you can't make it."
+		},
+		{
+			"id": "letter_fallback.d747ada7",
+			"group": "Dialogue rules",
+			"label": "Thank you for writing, I suppose. Next time, maybe put a little more t",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "Thank you for writing, I suppose. Next time, maybe put a little more thought into it."
+		},
+		{
+			"id": "letter_fallback.d86aec00",
+			"group": "Dialogue rules",
+			"label": "Thank you for your letter. It was nice to hear from you. I hope things",
+			"file": "world/letters/letter_fallback.gd",
+			"placeholders": 0,
+			"text": "Thank you for your letter. It was nice to hear from you. I hope things are going well for you in Ponyville."
+		},
+		{
+			"id": "letter_post.9b9c6dd1",
+			"group": "Dialogue rules",
+			"label": "Anon's open offer to you: %s (%s), id %s; answer with [relationship_an",
+			"file": "world/letters/letter_post.gd",
+			"placeholders": 4,
+			"text": "Anon's open offer to you: %s (%s), id %s; answer with [relationship_answer: %s, yes|no] only if the letter answers it."
+		},
+		{
+			"id": "letter_post.ask_again",
+			"group": "Dialogue rules",
+			"label": "ASK_AGAIN",
+			"file": "world/letters/letter_post.gd",
+			"placeholders": 0,
+			"text": "Which place and time did you mean? Write back and tell me, and I'll be there."
+		},
+		{
+			"id": "letter_reader_prompt.task",
+			"group": "Dialogue rules",
+			"label": "TASK",
+			"file": "world/letters/letter_reader_prompt.gd",
+			"placeholders": 0,
+			"text": "Anon sent you this letter by Derpy's post. Read it as yourself, decide, and write back.\nStart with tags only, one per line:\n[heart: 0-100] how much it touched you: kind, personal, about your interests and what you two shared = high; careless or rude = low\n[gist: one line saying what he wrote or asked]\nOptional: [romance: -2..2] [mood: NAME] [thought: short private thought] [gift] (tuck a small gift in)\nOnly if the letter asks for it: [meet: PLACE_ID, today|tomorrow|N, HH:MM] agree to meet him (or name another time you prefer),\n[meet_cancel] call off your meeting, [relationship_answer: OFFER_ID, yes|no]\nThen a line with --- and your reply letter, 40-160 words, in your own voice, starting \"Dear Anon,\" and signed with your name.\nIf you agree to meet, say where and when in the letter; he reads it tomorrow morning (right away if you meet before then), so name the day clearly. Never mention scores or tags."
 		},
 		{
 			"id": "chatter_topics.idle_guidance",
@@ -1408,6 +1560,70 @@
 			"file": "world/events/trixie_show/show_runtime.gd",
 			"placeholders": 0,
 			"text": "Perform your show with flair; react to the audience; stay on stage until it is over."
+		},
+		{
+			"id": "appointments.1c722ae8",
+			"group": "Story and events",
+			"label": "Anon did not come to meet you at %s on day %d at %s as agreed. You wai",
+			"file": "world/life/appointments/appointments.gd",
+			"placeholders": 4,
+			"text": "Anon did not come to meet you at %s on day %d at %s as agreed. You waited until %s."
+		},
+		{
+			"id": "appointments.4f988ddc",
+			"group": "Story and events",
+			"label": "Anon came to meet you at %s on day %d at %s, as you two agreed.",
+			"file": "world/life/appointments/appointments.gd",
+			"placeholders": 3,
+			"text": "Anon came to meet you at %s on day %d at %s, as you two agreed."
+		},
+		{
+			"id": "appointments.6da03e41",
+			"group": "Story and events",
+			"label": "Anon never came to %s on day %d at %s; your letter about it may not ha",
+			"file": "world/life/appointments/appointments.gd",
+			"placeholders": 3,
+			"text": "Anon never came to %s on day %d at %s; your letter about it may not have reached him in time."
+		},
+		{
+			"id": "appointments.b2bd13c5",
+			"group": "Story and events",
+			"label": "You could not make it to meet Anon at %s on day %d at %s as agreed.",
+			"file": "world/life/appointments/appointments.gd",
+			"placeholders": 3,
+			"text": "You could not make it to meet Anon at %s on day %d at %s as agreed."
+		},
+		{
+			"id": "appointments.ba9d6654",
+			"group": "Story and events",
+			"label": "[Observed situation, not player speech] Anon has come to meet you at %",
+			"file": "world/life/appointments/appointments.gd",
+			"placeholders": 2,
+			"text": "[Observed situation, not player speech] Anon has come to meet you at %s as you two agreed (%s). Greet him and start what you planned. One or two short sentences."
+		},
+		{
+			"id": "appointments.bdea7462",
+			"group": "Story and events",
+			"label": "Your meeting with Anon at %s on day %d at %s is called off%s.",
+			"file": "world/life/appointments/appointments.gd",
+			"placeholders": 4,
+			"text": "Your meeting with Anon at %s on day %d at %s is called off%s."
+		},
+		{
+			"id": "appointments.d88bf7fb",
+			"group": "Story and events",
+			"label": "- You agreed to meet Anon at %s %s at %s%s. [meet: ...] moves it, [mee",
+			"file": "world/life/appointments/appointments.gd",
+			"placeholders": 4,
+			"text": "- You agreed to meet Anon at %s %s at %s%s. [meet: ...] moves it, [meet_cancel] calls it off."
+		},
+		{
+			"id": "appointments.ea42606d",
+			"group": "Story and events",
+			"label": "Anon came by %s around the time you agreed (day %d, %s), but you two m",
+			"file": "world/life/appointments/appointments.gd",
+			"placeholders": 3,
+			"text": "Anon came by %s around the time you agreed (day %d, %s), but you two missed each other."
 		},
 		{
 			"id": "arrival_story.0a1fc566",

@@ -22,6 +22,8 @@ func eligible(node: Node3D, player: Node3D, radius: float) -> bool:
 	if node.has_method("action_interruption_reason") and node.action_interruption_reason() != "": return false
 	if on_errand(node): return false
 	if hushed(node): return false
+	# A spa client chats only while she waits her turn (spa_customers.gd CHAT_PHASES).
+	if node.has_meta("spa_client") and not node.has_meta("spa_company"): return false
 	return node.global_position.distance_squared_to(player.global_position) <= radius*radius
 
 ## Inside a hush zone (a node in group "hush_zones" whose hushes(position) is true): Trixie's
@@ -97,8 +99,12 @@ func choose(characters: Dictionary, player: Node3D, awareness: RefCounted, now: 
 	statistics.attempts += 1
 	return result
 
-## Members of the living-world outing this pony is on (meta "social_group"), else [].
+## Members of the living-world outing this pony is on (meta "social_group"), or the spa clients
+## waiting with her (meta "spa_company"), else [].
 static func _company(node: Node) -> Array:
+	if is_instance_valid(node) and node.has_meta("spa_company"):
+		var waiting: Variant = node.get_meta("spa_company")
+		if waiting is Array: return waiting
 	if not is_instance_valid(node) or not node.has_meta("social_group"): return []
 	var company: Variant = node.get_meta("social_group")
 	return company.get("members", []) if company is Dictionary else []

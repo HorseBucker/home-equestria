@@ -29,7 +29,17 @@ const GOODS := {
 	"easel": ["Folding easel", 1.55, 60, "Unfold it on flat ground to paint. Brush, pencil, scraper and paints come with it."],
 	# The photo camera (world/items/photo_camera.gd, dev 2026-10-25; the price is a proposal for dev).
 	"camera": ["Photo camera", 0.145, 80, "Hold the eyepiece to your eye to frame a shot (right click on desktop). Trigger or click takes the photo, and it prints."],
+	# Letter writing (world/letters/, docs/LETTERS_PLAN_2026_10_29.md; prices are proposals for dev and
+	# match world/letters/stationery.gd PRICES). Fancier paper makes a letter a little nicer.
+	"paper-plain": ["Plain writing paper", 0.22, 2, "A sheet for a letter. Click or trigger to start writing; start with Dear and her name."],
+	"paper-cream": ["Cream writing paper", 0.22, 4, "Soft cream paper for a letter. Click or trigger to start writing."],
+	"paper-floral": ["Floral writing paper", 0.22, 8, "Paper with flowers in the margin. A letter on it is a little nicer."],
+	"paper-hearts": ["Writing paper with hearts", 0.22, 10, "Paper with little hearts in the margin, for a letter that means a lot."],
+	# A stand-in model (the painting brush) until a quill is modelled through the Blender MCP.
+	"quill": ["Quill", 0.27, 15, "In VR, hold the quill to the open paper and speak: your words are written down. Say \"scratch that\" to cross out the last sentence."],
 }
+## Goods that stack in one briefcase slot (the rest stack 1).
+const GOODS_STACKS := {"paper-plain": 10, "paper-cream": 10, "paper-floral": 10, "paper-hearts": 10}
 ## Reuse installed authored models; their in-hand size is also their placed size.
 const GOODS_MODELS := {
 	"table-lamp": "res://world/props/lamps/kit/table_lamp.glb",
@@ -37,6 +47,11 @@ const GOODS_MODELS := {
 	"potted-plant": "res://world/props/rnl/rnl_plantpot/prefab.scn",
 	"easel": "res://world/painting/models/easel_folded.glb",
 	"camera": "res://world/inventory/assets/camera/camera.glb",
+	"paper-plain": "res://world/props/ponyville_kit/activity/letter.scn",
+	"paper-cream": "res://world/props/ponyville_kit/activity/letter.scn",
+	"paper-floral": "res://world/props/ponyville_kit/activity/letter.scn",
+	"paper-hearts": "res://world/props/ponyville_kit/activity/letter.scn",
+	"quill": "res://world/painting/models/brush.glb",
 }
 ## Clothing profile values: part -> [colour index, pattern index, scale index]
 ## (world/customization/clothing_profile.gd PALETTES/PATTERNS/SCALES).
@@ -111,7 +126,7 @@ static func definition(id: String) -> Dictionary:
 		return {"name": "Hercules wing sandals", "description": "Kept in Anon's wardrobe once bought: choose them as footwear there. F takes off; hold Space to flap, release to glide, S to brake; left/right mouse banks left/right. In VR use A to take off and flap, B to land. Wingbeats use stamina; gliding restores it.", "stack": 1, "price_bits": 200, "shop": true}
 	if id.begins_with("goods:") and GOODS.has(id.substr(6)):
 		var row: Array = GOODS[id.substr(6)]
-		return {"name": row[0], "description": row[3], "stack": 1, "price_bits": row[2], "size_m": row[1], "shop": true}
+		return {"name": row[0], "description": row[3], "stack": int(GOODS_STACKS.get(id.substr(6), 1)), "price_bits": row[2], "size_m": row[1], "shop": true}
 	if id.begins_with("wear:") and has(id):
 		var parts := id.split(":")
 		var noun: String = WEAR[parts[1]][0]

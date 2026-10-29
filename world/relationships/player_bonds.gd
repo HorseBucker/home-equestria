@@ -371,6 +371,28 @@ func expire_plan(id: String) -> void:
 	_save(id,r)
 	context.record("missed_plan", "Your agreed outing with Anon did not happen in time. You do not know why.",[id,"player"],[id,"player"])
 
+## Agreed meetings (world/life/appointments/appointments.gd). Standing her up costs trust like a
+## missed outing; keeping one earns a kept plan's trust. Each meeting counts once; the promise list
+## records it as a "place" promise. Appointments records the world event itself.
+func stood_up(id: String, appointment_id: String) -> void:
+	_appointment_promise(id, appointment_id, "missed", -3.0)
+
+func kept_appointment(id: String, appointment_id: String) -> void:
+	_appointment_promise(id, appointment_id, "kept", PERSONALITY.kept_plan_trust(id))
+
+func _appointment_promise(id: String, appointment_id: String, status: String, trust: float) -> void:
+	if context == null or context._read_only or id.is_empty() or appointment_id.is_empty(): return
+	var key := id + ":appt:" + appointment_id
+	if data.seen.has(key): return
+	data.seen[key] = true
+	while data.seen.size() > 512: data.seen.erase(data.seen.keys()[0])
+	var r := record_for(id)
+	r.trust = clampf(float(r.trust) + trust, 0.0, 100.0)
+	if status == "kept": r.last_met = now()
+	r.promises.append({"id": appointment_id, "activity": "place", "status": status})
+	while r.promises.size() > 16: r.promises.pop_front()
+	_save(id, r)
+
 ## Bucking is a last resort (dev 2026-09-28): the first refused kiss or smack gets only her
 ## reaction; doing it again within half a minute of being refused is what earns the buck.
 func refused_again(id: String, kind: String) -> bool:

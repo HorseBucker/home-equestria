@@ -160,11 +160,17 @@ func support() -> bool:
 			return true
 	# Local slope from whatever the nine probes find; missing or uneven samples fall back
 	# to level. Never a refusal any more (dev: sit anywhere).
+	# A sample further above or below her centre than a 25 degree slope allows is a ledge (the
+	# spa's massage table end, a bench edge), not ground she lies on: counted as missing, so one
+	# probe off a table's end no longer tilts her lying box and lifts her (dev 2026-10-29).
 	var heights: Array[Vector3]=[]
+	var middle:float=(pony.global_transform.affine_inverse()*Vector3(center.position)).y/pony.body_scale if not center.is_empty() else 0.0
 	for z in [-.75,0.0,.75]:
 		for x in [-.5,0.0,.5]:
 			var hit: Dictionary=center if x==0.0 and z==0.0 else pony._probe(pony.global_transform*(Vector3(x,0,z) * pony.body_scale))
-			heights.append((pony.global_transform.affine_inverse()*Vector3(hit.position)) / pony.body_scale if not hit.is_empty() else Vector3(x,0,z))
+			var at:Vector3=(pony.global_transform.affine_inverse()*Vector3(hit.position)) / pony.body_scale if not hit.is_empty() else Vector3(x,0,z)
+			if absf(at.y-middle)>tan(deg_to_rad(25.0))*Vector2(x,z).length()+.01:at=Vector3(x,0,z)
+			heights.append(at)
 	var dz: float=(heights[7].y-heights[1].y)/1.5
 	var dx: float=(heights[5].y-heights[3].y)
 	var normal:=Vector3(-dx,1,-dz).normalized()
@@ -339,14 +345,16 @@ func activate_limits(clip:String) -> void:
 ## Sleep styles on top of the settled lie-down, blended into hand-authored poses
 ## (tools/sleep_poses/author.gd): "head_down" curls up with the head on the ground by the
 ## forehooves; "side" rolls over (halfway pose first) onto the right side, legs out.
+## Lie styles use the same blend for an awake pony: meta "lie_style" = "stretch" lies flat like a
+## lifesize plush, forelegs forward and hind legs straight back (the spa's massage table).
 const SLEEP_POSES:=preload("res://world/characters/hybrid_mare/sleep_poses.res")
 var _sleep_blend:=0.0
 var _sleep_style:=""
 var _sleep_targets:={}   # pose name -> Array[Transform3D] for every bone
 ## One key per style, blended in while the lie-down itself plays, so lying down and settling
 ## into the sleep pose are one short motion instead of two.
-const SLEEP_SEQUENCES:={"head_down":[["curl",1.0]],"side":[["side",1.0]]}
-const SLEEP_SECONDS:={"head_down":1.3,"side":1.3}
+const SLEEP_SEQUENCES:={"head_down":[["curl",1.0]],"side":[["side",1.0]],"stretch":[["stretch",1.0]]}
+const SLEEP_SECONDS:={"head_down":1.3,"side":1.3,"stretch":1.3}
 func _sleep_target(name:String) -> Array:
 	if _sleep_targets.has(name):return _sleep_targets[name]
 	var sk:Skeleton3D=pony.skeleton
@@ -365,6 +373,7 @@ func _sleep_target(name:String) -> Array:
 func advance_sleep(step: float) -> String:
 	var style:=str(pony.get("sleep_style")) if pony.get("sleeping")==true and kind=="lie_down" and requested=="lie_down" else ""
 	if style.is_empty() and kind=="lie_down" and requested=="lie_down" and pony.get_meta("couch_cuddle",false): style="head_down"
+	if style.is_empty() and kind=="lie_down" and requested=="lie_down" and pony.has_meta("lie_style"): style=str(pony.get_meta("lie_style"))
 	# Switching style while asleep: unwind the old pose first, then settle into the new one.
 	if style!="" and _sleep_style!="" and style!=_sleep_style and _sleep_blend>0.0:style=""
 	if style!="":_sleep_style=style

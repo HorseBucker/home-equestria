@@ -9,25 +9,45 @@ const SCENE := "res://world/characters/body_shapes/mare_wings.scn"
 const TUCK := "res://world/characters/hybrid_mare/wing_tuck.json"
 const UNFOLD_SECONDS := 0.35
 const FOLD_SECONDS := 0.3
+## Held half open (spa wing service, 2026-10-29): a relaxed spread posed on the same open-wing
+## bones in Blender (art-source/spa-2026-10-29/wing_half_open/), same offset format as
+## TUCK. Blending the tuck halfway drooped the wings below folded, so it is a pose of its own.
+## Only hold_at()/release_hold() use it; without a hold `half` stays 0 and nothing changes.
+const HALF := "res://world/characters/hybrid_mare/wing_half_open.json"
+const HOLD_SECONDS := 0.5
 static var _tuck_offsets: Dictionary = {}
+static var _half_offsets: Dictionary = {}
 var meshes: Array[MeshInstance3D] = []
 var folded: Array[MeshInstance3D] = []
 var opened := false
 var bind_error := 0.0
 ## 1 = fully tucked, 0 = the pose set by flight or excitement.
 var tuck := 1.0
+## Who holds the wings (hold_at), or "". While held, set_open() only records its request.
+var hold_owner := ""
+## Held blend toward the half-open pose: 1 = half open, 0 = fully open. 0 without a hold.
+var hold_goal := 0.0
+## Current blend toward the half-open pose (eases to hold_goal).
+var half := 0.0
+## The last set_open() request (flight, excitement); the wings return to it on release_hold().
+var _asked_open := false
 var _modifier: SkeletonModifier3D
 
 class TuckModifier extends SkeletonModifier3D:
 	var wings: Node
 	var bones: Array[int] = []
 	var poses: Array[Quaternion] = []
+	var half_poses: Array[Quaternion] = []
 	func _process_modification_with_delta(_delta: float) -> void:
 		var weight := smoothstep(0.0, 1.0, float(wings.tuck))
-		if weight <= 0.0: return
+		var spread := smoothstep(0.0, 1.0, float(wings.half)) if half_poses.size() == bones.size() else 0.0
+		if weight <= 0.0 and spread <= 0.0: return
 		var skeleton := get_skeleton()
 		for i in bones.size():
-			skeleton.set_bone_pose_rotation(bones[i], skeleton.get_bone_pose_rotation(bones[i]).slerp(poses[i], weight))
+			var rotation := skeleton.get_bone_pose_rotation(bones[i])
+			if spread > 0.0: rotation = rotation.slerp(half_poses[i], spread)
+			if weight > 0.0: rotation = rotation.slerp(poses[i], weight)
+			skeleton.set_bone_pose_rotation(bones[i], rotation)
 
 func bind(pony: CharacterBody3D) -> bool:
 	if not meshes.is_empty() or not pony.identity.has_wings(): return false
@@ -71,6 +91,9 @@ func _add_tuck(target: Skeleton3D) -> void:
 		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(TUCK))
 		if parsed is Dictionary and parsed.get("rest_offsets") is Dictionary: _tuck_offsets = parsed.rest_offsets
 	if _tuck_offsets.is_empty(): return
+	if _half_offsets.is_empty() and FileAccess.file_exists(HALF):
+		var half_parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(HALF))
+		if half_parsed is Dictionary and half_parsed.get("rest_offsets") is Dictionary: _half_offsets = half_parsed.rest_offsets
 	var modifier := TuckModifier.new()
 	modifier.name = "WingTuck"
 	modifier.wings = self
@@ -78,13 +101,18 @@ func _add_tuck(target: Skeleton3D) -> void:
 		var b := target.find_bone(bone)
 		if b < 0: modifier.free(); return
 		var offset: Array = _tuck_offsets[bone]
+		var rest := target.get_bone_rest(b).basis.get_rotation_quaternion()
 		modifier.bones.append(b)
-		modifier.poses.append(target.get_bone_rest(b).basis.get_rotation_quaternion() * Quaternion(offset[0], offset[1], offset[2], offset[3]))
+		modifier.poses.append(rest * Quaternion(offset[0], offset[1], offset[2], offset[3]))
+		var half_offset: Array = _half_offsets.get(bone, [])
+		if half_offset.size() == 4: modifier.half_poses.append(rest * Quaternion(half_offset[0], half_offset[1], half_offset[2], half_offset[3]))
 	# Last child: it runs after every other modifier, on top of the flight pose.
 	target.add_child(modifier)
 	_modifier = modifier
 
 func set_open(value: bool) -> void:
+	_asked_open = value
+	if not hold_owner.is_empty(): return
 	opened = value
 	if _modifier == null or not is_inside_tree():
 		tuck = 0.0 if value else 1.0
@@ -93,10 +121,39 @@ func set_open(value: bool) -> void:
 	if value: _show(true)
 	set_process(true)
 
+## Holds the wings open toward the half-open pose for `owner` (1 = half open, lower = wider, 0 =
+## fully open), unfolding from folded if needed. While held, set_open() from flight or excitement
+## is only remembered and the wings stay put. Calling again with the same owner changes the value.
+## False without the half-open pose or when someone else holds them.
+func hold_at(owner: String, value := 1.0) -> bool:
+	if owner.is_empty() or _modifier == null or (_modifier as TuckModifier).half_poses.is_empty(): return false
+	if not hold_owner.is_empty() and hold_owner != owner: return false
+	var unfolding := hold_owner.is_empty() and tuck >= 1.0
+	hold_owner = owner
+	hold_goal = clampf(value, 0.0, 1.0)
+	# From fully folded, unfold straight into the held spread rather than via fully open.
+	if unfolding: half = hold_goal
+	opened = true
+	_show(true)
+	if not is_inside_tree():
+		tuck = 0.0; half = hold_goal
+		return true
+	set_process(true)
+	return true
+
+## Ends `owner`'s hold: the wings ease back to whatever set_open() last asked for.
+func release_hold(owner: String) -> void:
+	if owner.is_empty() or hold_owner != owner: return
+	hold_owner = ""
+	hold_goal = 0.0
+	set_open(_asked_open)
+	if not is_inside_tree(): half = 0.0
+
 func _process(delta: float) -> void:
 	var goal := 0.0 if opened else 1.0
 	tuck = move_toward(tuck, goal, delta / (UNFOLD_SECONDS if opened else FOLD_SECONDS))
-	if tuck != goal: return
+	half = move_toward(half, hold_goal, delta / (HOLD_SECONDS if opened else FOLD_SECONDS))
+	if tuck != goal or half != hold_goal: return
 	set_process(false)
 	if not opened: _show(false)
 

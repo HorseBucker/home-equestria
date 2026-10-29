@@ -19,6 +19,9 @@ const SHOP_PURCHASE := preload("res://world/shop/shop_purchase.gd")
 ## Loaded only when a folding easel is used (world/painting/).
 const EASEL_FOLD := "res://world/painting/easel_fold.gd"
 const PHOTO_CAMERA := preload("res://world/items/photo_camera.gd")
+## Writing paper, letters and the quill (world/letters/, docs/LETTERS_PLAN_2026_10_29.md).
+const LETTER_TOOL := preload("res://world/letters/paper/letter_tool.gd")
+const QUILL_TOOL := preload("res://world/letters/paper/quill_tool.gd")
 ## AnonPony (docs/ANONPONY_DESIGN_2026_10_01.md section 9): things sit at her muzzle, a unicorn
 ## floats them in her magic, and she wears no clothes.
 const PLAYER_FORM := preload("res://world/life/player_form.gd")
@@ -814,6 +817,16 @@ func _input(event: InputEvent):
 			if event.button_index == MOUSE_BUTTON_RIGHT: photo_camera.set_looking(event.pressed, camera)
 			elif event.pressed: photo_camera.snap(self, camera)
 			get_viewport().set_input_as_handled(); return
+		# Paper and letters: a click starts, opens or reads; a click held a second sends a draft
+		# with Derpy (world/letters/paper/letter_tool.gd).
+		if use_click and LETTER_TOOL.handles(held.desktop):
+			LETTER_TOOL.on(held.desktop).press(self, "desktop", event.pressed)
+			get_viewport().set_input_as_handled(); return
+		# The quill writes by voice in VR; on desktop letters are typed, so its click does nothing.
+		if use_click and held.desktop.get_meta("item_id", "") == "goods:quill":
+			get_viewport().set_input_as_handled(); return
+		# The spa's hoof file: a click files a raised hoof (world/minigames/spa/spa_hands.gd), never an offer.
+		if use_click and held.desktop.get_meta("item_id", "") == "hoof-file": return
 		if held.desktop.get_meta("item_id", "") == "spray-bottle" and use_click:
 			if event.pressed: held.desktop.get_node("SprayBottle").spray()
 			get_viewport().set_input_as_handled(); return
@@ -1008,6 +1021,14 @@ func interaction_hint() -> Dictionary:
 			return {"target": item, "text": "Click · Take photo   Hold right click · Look through" if side == "desktop" else "Eyepiece to your eye · Look through   Trigger · Take photo", "point": item.global_position + Vector3.UP * .12}
 		if is_instance_valid(item) and item.get_meta("item_id", "") == "goods:easel":
 			return {"target": item, "text": "Click · Unfold easel on flat ground" if side == "desktop" else "Trigger · Unfold easel on flat ground", "point": item.global_position + Vector3.UP * .15}
+		if LETTER_TOOL.handles(item):
+			return LETTER_TOOL.on(item).hint(side)
+	# The quill writes on paper held in the other hand (VR; world/letters/paper/quill_tool.gd).
+	for side: String in held:
+		var item: Node3D = held[side]
+		if is_instance_valid(item) and item.get_meta("item_id", "") == "goods:quill":
+			var quill_text := "Quill to an open letter · Speak to write" if side != "desktop" else "Hold writing paper and click it to type a letter   Q · Throw"
+			return {"target": item, "text": quill_text, "point": item.global_position + Vector3.UP * .1, "outline": null}
 	return {}
 
 func _pony() -> bool:

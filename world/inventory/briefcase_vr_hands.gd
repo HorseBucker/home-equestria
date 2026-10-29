@@ -283,6 +283,14 @@ func _update_hand_step(side: String, sample: Dictionary, _delta: float):
 			var shutter: bool = float(sample.trigger) > .7
 			if shutter and not host._pressed.get(side + "_shutter", false): photo_camera.snap(host, null)
 			host._pressed[side + "_shutter"] = shutter
+		# Paper and letters: trigger starts, opens, folds or reads; held a second it sends a draft
+		# with Derpy. The quill writes by voice over open paper in the other hand (world/letters/paper/).
+		if host.LETTER_TOOL.handles(item):
+			host.LETTER_TOOL.on(item).vr_step(host, side, sample)
+			if not is_instance_valid(item) or item.is_queued_for_deletion():
+				host._pressed[side] = grip; return
+		elif item.get_meta("item_id", "") == "goods:quill":
+			host.QUILL_TOOL.on(item).vr_step(host, side)
 		if item.get_meta("item_id", "") == "spray-bottle" and float(sample.trigger) > .7:
 			item.get_node("SprayBottle").spray()
 		if CATALOG.is_book(String(item.get_meta("item_id",""))):
@@ -294,8 +302,9 @@ func _update_hand_step(side: String, sample: Dictionary, _delta: float):
 			item.remove_meta("ray_hold")
 			item.remove_meta("stash_rejected")
 		var let_go:bool=not grip and not item.has_meta("ray_hold") and not item.has_meta("stash_rejected")
-		if host.inventory.loans.get(str(item.get_meta("token")), {}).get("equipped", false) or CATALOG.is_book(String(item.get_meta("item_id",""))):
-			# dev 2026-09-26: books are held by toggle so the hand can rest while reading.
+		if host.inventory.loans.get(str(item.get_meta("token")), {}).get("equipped", false) or CATALOG.is_book(String(item.get_meta("item_id",""))) or CATALOG.is_letter(String(item.get_meta("item_id",""))):
+			# dev 2026-09-26: books are held by toggle so the hand can rest while reading; letters
+			# too (world/letters/), while reading or writing with the quill in the other hand.
 			# Letting go of grip keeps the book; the next squeeze puts it down (or away).
 			if not grip:item.set_meta("toggle_armed",true)
 			let_go=grip and not host._pressed[side] and bool(item.get_meta("toggle_armed",false)) and _stash_target(side,sample).is_empty()

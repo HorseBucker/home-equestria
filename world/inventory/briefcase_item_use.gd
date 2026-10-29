@@ -124,9 +124,11 @@ static func _make_crunch()->AudioStreamWAV:
 
 
 ## Something in hand that a click uses: food and drink to eat, clothes to wear (the spray bottle
-## and books are handled before this). Anything else lets the click reach the world. Human
-## clothes are Anon's only and pony wear AnonPony's only (wearable).
+## and books are handled before this), writing paper, letters and the quill (world/letters/).
+## Anything else lets the click reach the world. Human clothes are Anon's only and pony wear
+## AnonPony's only (wearable).
 func held_usable(item: Node) -> bool:
 	if not is_instance_valid(item): return false
 	var id:=str(item.get_meta("item_id",""))
+	if id.begins_with("goods:paper-") or id == "goods:quill" or id.begins_with("letter:"): return true
 	return id == "goods:folded-blanket" or id == "goods:easel" or id in host.EDIBLE or FOOD.CATALOG.can_consume(id) or wearable(item)

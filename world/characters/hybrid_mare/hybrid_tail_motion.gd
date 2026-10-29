@@ -19,6 +19,13 @@ var _steps := 0
 ## measured (six rays every 50 ms per pony were two thirds of a clip pony's rays).
 var _ray_floor := Callable()
 var _plane_floor := Callable()
+## Swing the whole tail aside about her up axis (radians; + puts the tip toward her right), eased.
+## The spa table sets it so the player's hands reach the back hoof the tail lay over (dev
+## 2026-10-29: "her tail is in the way, it should move out of the way"). Applied after the springs,
+## so their own angles and floor contacts are unchanged; clamped inside mTail1's bend limit.
+var aside_goal := 0.0
+const ASIDE_SPEED := 1.2
+var _aside := 0.0
 
 func bind(owner_pony: Node3D) -> void:
 	pony = owner_pony
@@ -57,9 +64,11 @@ func _process_modification_with_delta(delta: float) -> void:
 	if springs == null or not is_instance_valid(pony) or not pony.is_inside_tree(): return
 	if not PROFILE.enabled:
 		_springs_tick(delta)
+		_apply_aside(delta)
 		return
 	var started := Time.get_ticks_usec()
 	var integrated := _springs_tick(delta)
+	_apply_aside(delta)
 	PROFILE.record("tail_springs", started)
 	# Integration ticks alone (includes the record above, about 1.5 us); the rest only interpolate.
 	if integrated: PROFILE.record("tail_springs_integrate", started)
@@ -130,6 +139,19 @@ func _springs_tick(delta: float) -> bool:
 	_steps = 0
 	_write_between(sk, 1.0 / divisor)
 	return true
+
+
+func _apply_aside(delta: float) -> void:
+	var limit: float = float(springs.angle_limits[0]) * .9 if not springs.angle_limits.is_empty() else .5
+	_aside = move_toward(_aside, clampf(aside_goal, -limit, limit), delta * ASIDE_SPEED)
+	if absf(_aside) < .0001 or springs.bones.is_empty(): return
+	var sk := get_skeleton()
+	var bone: int = springs.bones[0]
+	var parent := sk.get_bone_parent(bone)
+	var parent_rotation := sk.get_bone_global_pose(parent).basis.get_rotation_quaternion() if parent >= 0 else Quaternion.IDENTITY
+	var axis := (sk.global_basis.orthonormalized().inverse() * pony.global_basis.y.normalized()).normalized()
+	var global := parent_rotation * sk.get_bone_pose_rotation(bone)
+	sk.set_bone_pose_rotation(bone, parent_rotation.inverse() * Quaternion(axis, _aside) * global)
 
 
 ## Tail pose `t` of the way from the previous integration's result to the latest one.

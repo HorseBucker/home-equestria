@@ -415,6 +415,23 @@ func grant(id: String, count: int = 1) -> int:
 	next[target].count += count
 	return target if _commit(next, loans) else -1
 
+## Every briefcase unit of `id` that is not in a hand leaves the case (the spa's hoof file goes
+## back to its counter, world/minigames/spa/spa_hands.gd). True when nothing was left to remove.
+func discard(id: String) -> bool:
+	id = CATALOG.canonical(id)
+	var next: Array = slots.duplicate(true)
+	var changed := false
+	for i in SLOT_COUNT:
+		if next[i].is_empty() or CATALOG.canonical(str(next[i].id)) != id: continue
+		var keep := 0
+		for loan: Dictionary in loans.values():
+			if loan.get("equipped", false) and int(loan.slot) == i: keep += 1
+		if int(next[i].count) <= keep: continue
+		next[i].count = keep
+		if keep <= 0: next[i] = {}
+		changed = true
+	return not changed or _commit(next, loans)
+
 ## Eaten or otherwise used up: the loan ends without returning to its slot.
 func consume(token: String) -> bool:
 	if not loans.has(token): return false

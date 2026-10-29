@@ -358,6 +358,11 @@ func snapshot_state()->Dictionary:
 static func _write(destination:String,snapshot:Dictionary)->Error:
 	return SAVE_FILE.write(destination,snapshot,MAX_BYTES)
 
+## The next save poll (within a second) writes in the background instead of waiting out the ten
+## second interval: for changes another file already saved its side of (letters leaving the briefcase).
+func save_soon()->void:
+	_elapsed=maxf(_elapsed,10.)
+
 func flush()->Error:
 	if _task>=0:
 		WorkerThreadPool.wait_for_task_completion(_task);_task=-1

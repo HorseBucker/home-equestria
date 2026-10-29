@@ -31,6 +31,17 @@ func _configure_speech(stt: Dictionary) -> void:
 
 
 func _on_utterance(wav: PackedByteArray, seconds: float, is_feedback := false) -> void:
+	# Dictating a letter (the quill over the paper, world/letters/paper/letter_paper.gd): his words
+	# go onto the paper. Nopony hears them and a pony who is talking is not cut off.
+	if not is_feedback and dictating():
+		# A pony was talking during it: the open mic may have caught her voice from the speakers,
+		# and her words must not end up in his letter. He says it again after her line.
+		if _dictation_overlap or host.state == "speaking":
+			_dictation_overlap = false
+			_capture("dictation_dropped", {"seconds": seconds, "reason": "pony speaking"})
+			return
+		_dictate(wav, seconds)
+		return
 	# A firm line (Trixie on stage) is not cut off: his words wait for its end.
 	if host.floor_held() and not is_feedback:
 		host._held_utterance = [wav, seconds, is_feedback]
@@ -126,14 +137,87 @@ func handle_feedback(text: String) -> void:
 	host.feedback_input.submit(text)
 
 func _on_speech_state(value: String) -> void:
-	if value == "hearing" and (host.state != "idle" or host.group.active()) and not host.floor_held(): host.interrupt()
+	if value == "hearing": _dictation_overlap = host.state == "speaking"
+	if value == "hearing" and (host.state != "idle" or host.group.active()) and not host.floor_held() and not dictating(): host.interrupt()
 	if host.state == "idle":
 		host.hud.set_state("feedback" if value == "hearing" and host.speech.feedback_mode else value, host.hud.detail if value == "listening" else "")
 
 
 ## Button down takes the floor immediately, before any microphone samples arrive.
 func _on_talk_pressed() -> void:
-	if not host.floor_held(): host.interrupt()
+	if not host.floor_held() and not dictating(): host.interrupt()
+
+
+## Letter dictation (docs/LETTERS_PLAN_2026_10_29.md section 7): while a `letter_dictation` node
+## (letter_paper.gd) says the quill is over the paper, each utterance is transcribed on its own
+## channel, one at a time in the order spoken, and its words go to take_words. It never touches
+## the conversation state, the conversation's speech-to-text request or handle_text, so no pony
+## hears it and a reply in flight carries on. The mic stays open for the next sentence.
+var _dictation_queue: Array[PackedByteArray] = []
+var _dictation_busy := false
+## A pony's line was playing when the current utterance began (dropped if it is dictation).
+var _dictation_overlap := false
+var _dictation_http: HTTPRequest
+
+func _dictation_node() -> Node:
+	if not is_instance_valid(host) or not host.is_inside_tree(): return null
+	return host.get_tree().get_first_node_in_group("letter_dictation")
+
+func dictating() -> bool:
+	var node := _dictation_node()
+	return node != null and node.has_method("is_dictating") and bool(node.call("is_dictating"))
+
+func _dictate(wav: PackedByteArray, seconds: float) -> void:
+	_capture("dictation", {"audio_bytes": wav.size(), "seconds": seconds})
+	_dictation_queue.append(wav)
+	_next_dictation()
+
+func _next_dictation() -> void:
+	if _dictation_busy or _dictation_queue.is_empty(): return
+	var stt: Dictionary = host.config.section("stt")
+	var provider := str(stt.get("provider", "local"))
+	if provider == "off":
+		_dictation_queue.clear(); return
+	var wav: PackedByteArray = _dictation_queue.pop_front()
+	_dictation_busy = true
+	var vocabulary: String = VOCABULARY.prompt(host.characters, host.player_head, str(host.config.get_value("player_name", "")))
+	if provider == "builtin":
+		var error: String = host._builtin_stt.transcribe(wav, func(words: String, failure: String): _dictation_done(words, failure), vocabulary)
+		if not error.is_empty(): _dictation_done("", error)
+		return
+	if not is_instance_valid(_dictation_http):
+		_dictation_http = HTTPRequest.new()
+		_dictation_http.name = "DictationSTT"
+		_dictation_http.timeout = 60.0
+		host.add_child(_dictation_http)
+		_dictation_http.request_completed.connect(_on_dictation_completed)
+	var err := OK
+	if provider == "openai":
+		var request := transcription_request(stt, wav, vocabulary)
+		err = _dictation_http.request_raw(request.url, request.headers, HTTPClient.METHOD_POST, request.body)
+	else:
+		err = _dictation_http.request_raw(String(stt.get("url", "")),
+			PackedStringArray(["Content-Type: audio/wav", "X-Stt-Prompt: " + vocabulary.uri_encode()]), HTTPClient.METHOD_POST, wav)
+	if err != OK: _dictation_done("", "request error %d" % err)
+
+func _on_dictation_completed(result: int, code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	if result != HTTPRequest.RESULT_SUCCESS or code != 200:
+		_dictation_done("", "speech-to-text failed (%d/%d)" % [result, code]); return
+	var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+	_dictation_done(String(parsed.get("text", "")) if parsed is Dictionary else "", "")
+
+func _dictation_done(text: String, failure: String) -> void:
+	_dictation_busy = false
+	if not failure.is_empty():
+		_capture("dictation_error", {"error": failure})
+		push_warning("[letters] dictation: " + failure)
+	elif not text.strip_edges().is_empty():
+		# The same respelling as conversation: "Minuet" -> "Minuette".
+		var respelled: String = VOCABULARY.correct(text)
+		if host.debug: print("[letters] dictated: ", respelled.left(120))
+		var node := _dictation_node()
+		if node != null and node.has_method("take_words"): node.call("take_words", respelled)
+	_next_dictation()
 
 
 func _capture(event: String, details: Dictionary) -> void:

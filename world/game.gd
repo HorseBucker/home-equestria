@@ -298,6 +298,7 @@ func _ready() -> void:
 	forest_soundscape.name = "EverfreeSoundscape"; add_child(forest_soundscape)
 	forest_soundscape.camera_source = timberwolves.camera_source
 	if is_instance_valid(hayburger): hayburger.setup(self)
+	for spa_venue: Node in get_tree().get_nodes_in_group("spa_venue"): spa_venue.setup(self)
 	fishing.setup()
 	if is_instance_valid(balloon):balloon.setup(self)
 	food_world.setup(self)

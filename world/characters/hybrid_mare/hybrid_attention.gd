@@ -24,6 +24,9 @@ var interest := 0.0            # 0..1, eased; how much she is "with" the player 
 ## Nearer than this to her listen point a target is ignored. A booping finger at her muzzle sets
 ## it lower (hybrid_mare.gd) so her eyes stay on it.
 var min_distance := 0.05
+## A finger coming to her nose (hybrid_mare.gd sets it): her head holds the turn it already had
+## and only her eyes follow, so the nose stays where the finger is aimed (dev 2026-10-29).
+var head_hold := false
 var eye_target := Vector3.ZERO # world point for OpenPonyEyeMotion.target_world
 var last_angles := Vector3.ZERO
 var idle_looks := 0            # counter for tests
@@ -38,6 +41,8 @@ var _idle_duration := 0.0
 var _yaw := 0.0
 ## Horizontal distance from her listen point under which the turn toward him holds still.
 const FLAT_DEAD_ZONE := 0.25
+var _holding := false
+var _held_angles := Vector3.ZERO
 
 
 func _init() -> void:
@@ -49,6 +54,17 @@ func _init() -> void:
 ## `mare` is the locomotion body (for its frame and profile), `target` the player's head
 ## (camera) or null, `resting` whether she is standing still and quiet.
 func advance(delta: float, mare: Node3D, target: Node3D, resting: bool, conversation := false) -> void:
+	if head_hold:
+		# Where her head is now, not where it was still turning to: that target could be a
+		# glance away, and easing to it moved the nose 12 cm under the finger (lab 2026-10-29).
+		if not _holding: _held_angles = mare.secondary.gaze_angles
+		_holding = true
+		if target != null and is_instance_valid(target): eye_target = target.global_position
+		engaged = true
+		interest = move_toward(interest, 1.0, delta / 0.6)
+		mare.secondary.look_toward(_held_angles, 0.4)
+		return
+	_holding = false
 	var visible := false
 	var angles := Vector3.ZERO
 	var closeness := 0.0

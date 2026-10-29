@@ -25,7 +25,7 @@ func process(_delta:float)->void:
 			if not candidate.is_empty():winner=pony;hit=candidate;distance=hit.distance
 		if winner!=null and winner.hoof_hold.begin(hit,hand.global_position):
 			held[side]=winner
-			if winner.has_signal("physical_reaction"):winner.physical_reaction.emit("hoofhold")
+			if winner.has_signal("physical_reaction") and not winner.has_meta("spa_client"):winner.physical_reaction.emit("hoofhold")
 func transform(side:String)->Transform3D:return held[side].hoof_hold.grip()
 func release_all()->void:
 	for pony in held.values():

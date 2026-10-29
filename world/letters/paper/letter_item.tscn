@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://world/letters/paper/letter_sheet.gd" id="1_sheet"]
+[ext_resource type="PackedScene" path="res://world/props/ponyville_kit/activity/letter.scn" id="2_letter"]
+
+[node name="LetterSheet" type="Node3D"]
+script = ExtResource("1_sheet")
+
+[node name="Folded" parent="." instance=ExtResource("2_letter")]

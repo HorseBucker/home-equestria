@@ -63,6 +63,11 @@ func situation_block(id: String) -> String:
 	if outcomes != "": lines.append("Your action outcomes (not dialogue):\n" + outcomes)
 	if node.has_meta("hayburger_order_context"): lines.append(str(node.get_meta("hayburger_order_context")))
 	if node.has_meta("show_watching"): lines.append(str(node.get_meta("show_watching")))
+	# Pinned letters and agreed meetings (docs/LETTERS_PLAN_2026_10_29.md); "" costs nothing.
+	for provider: Node in host.get_tree().get_nodes_in_group("pony_prompt_notes"):
+		if provider.has_method("prompt_note"):
+			var note: String = str(provider.call("prompt_note", id))
+			if not note.is_empty(): lines.append(note)
 	if node.has_meta("relationship_runtime"):
 		lines.append(node.get_meta("relationship_runtime").prompt_for(id))
 	if entry.has("chat_since") and host._now() - float(entry.get("chat_last", -1e9)) < 120.0 and host._now() - float(entry.chat_since) > 150.0 \

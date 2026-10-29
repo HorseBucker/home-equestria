@@ -33,6 +33,11 @@ const PLACEMENTS: Array[Dictionary] = [
 	# blanket and a pillow. The rest of the old stock is listed in world/shop/archived_stock.json.
 	{"id": "ponyville:market:goods", "anchor": "RNLScenery/Town/Market/tent_friagram_lightbrown_01", "at": Vector3(-0.8, 0.95, 6.45), "counter": true, "columns": 1,
 		"items": ["goods:folded-blanket", "goods:pillow", "goods:camera"], "spacing": Vector2(0.7, 0.62)},
+	# Writing paper and the quill (world/letters/, docs/LETTERS_PLAN_2026_10_29.md): a narrow column on
+	# the same goods counter, between the goods above and the cooking stall's food (x 0.35 and up).
+	# Placed from the layout numbers only; it still wants a look in a render.
+	{"id": "ponyville:market:stationery", "anchor": "RNLScenery/Town/Market/tent_friagram_lightbrown_01", "at": Vector3(-0.15, 0.95, 6.35), "counter": true, "columns": 1,
+		"items": ["goods:paper-plain", "goods:paper-cream", "goods:paper-floral", "goods:paper-hearts", "goods:quill"], "spacing": Vector2(0.4, 0.3)},
 	{"id": "ponyville:market:furniture", "anchor": "RNLScenery/Town/Market/tent_friagram_pinkish_01", "at": Vector3(0, 0.95, 6.3), "counter": true, "columns": 3,
 		"items": ["goods:footstool", "goods:bedside-table", "goods:rug-round", "goods:curtains", "goods:table-lamp", "goods:picture", "goods:potted-plant", "goods:easel"], "spacing": Vector2(0.7, 0.5),
 		# Full-sized goods use distinct counter surfaces. The rug hangs behind the plants;

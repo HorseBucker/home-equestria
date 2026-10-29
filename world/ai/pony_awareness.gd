@@ -340,6 +340,9 @@ func footing(observer: Node3D, position: Vector3) -> String:
 			break
 		if node.has_meta("ai_label"):
 			what = str(node.get_meta("ai_label")); break
+		# The floor of a walk-in venue up its own steps (the spa, 1.7 m above the street) is not
+		# its roof: ponies inside said they were stuck "on the spa roof" (game log 2026-10-29).
+		if node.has_method("is_inside") and node.is_inside(position): return ""
 		if str(node.name) in PLACES.TOWN_BUILDINGS:
 			what = "the roof of " + str(PLACES.TOWN_BUILDINGS[str(node.name)]); break
 		node = node.get_parent()

@@ -43,14 +43,17 @@ func candidate(point:Vector3,reach:float=.09)->Dictionary:
 			if d<distance:
 				distance=d;best={"leg":i,"bone":chain[k-1],"anchor":fk[chain[k-1]].affine_inverse()*point,"distance":d}
 	return best
-func begin(hit:Dictionary,point:Vector3)->bool:
+## `counted` false: her own lift (raise, door push, kick), never "the player held your hoof". A spa
+## client's holds are never counted either (SPA_PLAN_2026_10_29.md section 3).
+func begin(hit:Dictionary,point:Vector3,counted:=true)->bool:
 	if hit.is_empty() or leg_index>=0 or not pony.grounded() or pony._held:return false
 	if pony.posture!=null and pony.posture.active():pony.request_posture("stand");return false
 	leg_index=hit.leg;bone=hit.bone;anchor=hit.anchor;target=point;softened=point;spring_velocity=Vector3.ZERO
 	neutral=pony.global_transform.affine_inverse()*point;release_weight=0.0;pose.clear()
 	for index:int in pony.profile.legs[leg_index].chain:pose[index]=pony.corrected_pose[index]
 	pony.feet[leg_index].planted=false;pony.feet[leg_index].valid=false
-	pony.set_sim_tier(pony.SimTier.HERO);pony.stop();grab_count+=1
+	pony.set_sim_tier(pony.SimTier.HERO);pony.stop()
+	if counted and not pony.get_meta("spa_client",false):grab_count+=1
 	return true
 ## [hoofraise]: lift a forehoof like the show's raised, curled foreleg. side 0 = left, 1 = right.
 func raise(side:int,seconds:=1.8)->bool:
@@ -77,7 +80,7 @@ func kick(side:int,seconds:=.6)->bool:
 	var hoof:Vector3=fk[leg.end].origin
 	var s:float=pony.get("body_scale") if pony.get("body_scale")!=null else 1.0
 	var goal:=hoof+(frame().basis.z).normalized()*KICK_BACK*s+Vector3.UP*KICK_UP*s
-	if not begin({"leg":i,"bone":leg.leaf,"anchor":fk[leg.leaf].affine_inverse()*hoof},goal):return false
+	if not begin({"leg":i,"bone":leg.leaf,"anchor":fk[leg.leaf].affine_inverse()*hoof},goal,false):return false
 	gesture_left=seconds
 	_gesture_local=pony.global_transform.affine_inverse()*goal
 	return true
@@ -106,8 +109,9 @@ func _lift(side:int,seconds:float,toward:Vector3)->bool:
 		goal=elbow+forward*elbow.distance_to(knee)
 		fold=DOOR_FOLD_DEG
 	var hit:={"leg":i,"bone":leg.middle,"anchor":fk[leg.middle].affine_inverse()*knee}
-	if not begin(hit,goal):return false
+	if not begin(hit,goal,false):return false
 	curl=deg_to_rad(fold);curl_bone=knee_bone;gesture_left=seconds
+	_curl_from=pose[knee_bone] if pose.has(knee_bone) else pony.corrected_pose[knee_bone]
 	# A talking raise is held in her own frame, so turning to face him carries the hoof along.
 	_gesture_local=pony.global_transform.affine_inverse()*goal if not toward.is_finite() else Vector3.INF
 	return true
@@ -119,8 +123,10 @@ func release()->void:
 	release_weight=1.0;pony.stop()
 ## Body-frame goal of a talking raise (INF otherwise).
 var _gesture_local:=Vector3.INF
+## The carpus as it was when the lift began; the fold is applied to this every frame.
+var _curl_from:=Transform3D.IDENTITY
 func reset()->void:
-	leg_index=-1;pose.clear();release_weight=0.0;residual=0.0;gesture_left=0.0;curl=0.0;curl_bone=-1;_gesture_local=Vector3.INF
+	leg_index=-1;pose.clear();release_weight=0.0;residual=0.0;gesture_left=0.0;curl=0.0;curl_bone=-1;_gesture_local=Vector3.INF;_curl_from=Transform3D.IDENTITY
 func grip()->Transform3D:
 	if leg_index<0:return Transform3D.IDENTITY
 	var fk:=globals();var result:=fk[bone];result.origin=result*anchor;return result
@@ -185,9 +191,13 @@ func solve(local:Array[Transform3D])->void:
 			var angle:=old.angle_to(new)
 			if angle>2.8*_delta:local[index]=before[index].interpolate_with(local[index],2.8*_delta/angle)
 	if curl!=0.0 and curl_bone>=0:
-		# Fold the cannon back at the carpus, eased in, inside the joint's own range.
-		var fold:=FK.forward_kinematics(pony.profile.parents,local,frame())
+		# Fold the cannon back at the carpus, eased in, inside the joint's own range. The fold starts
+		# from the carpus as it was at the lift, not from last frame's already folded carpus: folding
+		# the folded joint again every frame and clamping it at the limit shook the hoof about 1 cm
+		# per frame (dev 2026-10-29: "her hoof is shaking"; tools/spa/hoof_jitter_lab.gd).
 		var wanted:=local[curl_bone]
+		local[curl_bone]=_curl_from
+		var fold:=FK.forward_kinematics(pony.profile.parents,local,frame())
 		FK.rotate_world(local,fold,pony.profile.parents,frame(),curl_bone,Quaternion(frame().basis.x.normalized(),curl))
 		local[curl_bone].basis=pony.joint_limits.constrain(curl_bone,local[curl_bone].basis)
 		var old_q:Quaternion=(pose[curl_bone] if pose.has(curl_bone) else wanted).basis.orthonormalized().get_rotation_quaternion()

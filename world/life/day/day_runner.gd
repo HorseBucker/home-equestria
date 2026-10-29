@@ -14,6 +14,8 @@ extends Node
 
 const CPU_PROFILE := preload("res://tools/crowd_cpu_profile.gd") # Timed only while an F9 trace records.
 const PLANNER := preload("res://world/life/day/day_planner.gd")
+## Agreed meetings with Anon become fixed steps (world/life/appointments/, docs/LETTERS_PLAN_2026_10_29.md).
+const APPOINTMENT_STEPS := preload("res://world/life/appointments/appointment_steps.gd")
 const ACTION := preload("res://world/life/day/day_action.gd")
 const ESSENCE := preload("res://world/life/essence.gd")
 const ACTION_DIR := "res://world/life/day/actions/"
@@ -77,7 +79,7 @@ func _physics_step(delta: float) -> void:
 		var card: Dictionary = cards.get(id, {})
 		if card.is_empty() or card.get("day", -1) != day:
 			_end_card(id, card)
-			card = {"day": day, "steps": PLANNER.roll(id, day, _info(id, actor if alive else null, day)), "index": 0,
+			card = {"day": day, "steps": APPOINTMENT_STEPS.merge(id, day, PLANNER.roll(id, day, _info(id, actor if alive else null, day)), _appointments()), "index": 0,
 				"action": null, "ctx": {}, "sidetracked": false, "essence": {}, "shown_on": null}
 			card.index = mini(_resumed_index(id, day), card.steps.size())
 			cards[id] = card
@@ -120,6 +122,20 @@ func _resumed_index(id: String, day: int) -> int:
 	var row: Dictionary = plans[id]
 	(plans as Dictionary).erase(id)
 	return int(row.index) if int(row.day) == day else 0
+
+## Today's card again after a meeting was agreed, moved or called off (appointments.gd): the steps
+## from card.index on are merged anew; done steps and a running one are never touched.
+func refresh_appointments(id: String) -> void:
+	var card: Dictionary = cards.get(id, {})
+	if card.is_empty() or clock == null or int(card.get("day", -1)) != _day_key(): return
+	var keep := mini(int(card.index) + (1 if card.get("action") != null or not (card.get("essence", {}) as Dictionary).is_empty() else 0), card.steps.size())
+	var steps: Array = card.steps
+	card.steps = steps.slice(0, keep) + APPOINTMENT_STEPS.merge(id, int(card.day), steps.slice(keep), _appointments())
+	var actor: Node3D = population.live.get(id, {}).get("actor") if population != null else null
+	if is_instance_valid(actor) and actor.is_inside_tree(): _publish(id, actor, card)
+
+func _appointments() -> Node:
+	return get_tree().get_first_node_in_group("appointments") if is_inside_tree() else null
 
 ## A covered overnight move starts a fresh local day without retaining an old-town action.
 func changed_residence(id: String) -> void:
@@ -234,7 +250,7 @@ func _step(id: String, actor: Node3D, card: Dictionary, hours: float) -> void:
 	# Out with friends when the next thing comes up: sometimes she stays with them.
 	var group: Dictionary = actor.get_meta("social_group", {})
 	if group.get("members", []).size() > 1 and _sidetracked(id, card, step): return
-	if str(step.handler) != "joyride" and not _in_home_town(id, _step_point(id, step)):
+	if str(step.handler) != "joyride" and not bool(step.get("fixed", false)) and not _in_home_town(id, _step_point(id, step)):
 		card.index += 1
 		_publish(id, actor, card)
 		return
@@ -258,7 +274,7 @@ func _step(id: String, actor: Node3D, card: Dictionary, hours: float) -> void:
 
 ## Handlers whose "stay" phase is only standing (or sitting) about at a place: she may fidget
 ## there (pony_fidgets.gd). Any other step works her body, or travels.
-const IDLE_STAYS := ["go_to", "visit"]
+const IDLE_STAYS := ["go_to", "visit", "appointment"]
 
 ## Free for idle fidgets: no step, or a step that is just spending time; never while the arrival
 ## story or a visit elsewhere holds her (population.visiting).
@@ -273,7 +289,7 @@ func _idle_ok(id: String, card: Dictionary) -> bool:
 ## Rolled once per step: true when she stays with her friends for now (the step waits 45 game
 ## minutes, up to its deadline).
 func _sidetracked(id: String, card: Dictionary, step: Dictionary) -> bool:
-	if card.sidetracked: return false
+	if card.sidetracked or bool(step.get("fixed", false)): return false   # an agreed meeting is kept
 	card.sidetracked = true
 	var roll := float(absi(hash("%s:%d:%d:side" % [id, card.day, card.index])) % 1000) / 1000.0
 	if roll < float(PLANNER.tables().get("day", {}).get("sidetrack_chance", 0.35)):
@@ -327,7 +343,7 @@ func _step_essence(id: String, card: Dictionary, hours: float) -> void:
 	var outing: Dictionary = life().core.state.activities.get(resident.activity, {}) if life() != null else {}
 	if outing.get("members", []).size() > 1 and _sidetracked(id, card, step): return
 	var run := _essence_run(id, resident, step)
-	if run.is_empty() or (str(step.handler) != "joyride" and not _in_home_town(id, run.to)):
+	if run.is_empty() or (str(step.handler) != "joyride" and not bool(step.get("fixed", false)) and not _in_home_town(id, run.to)):
 		card.index += 1   # nowhere known to go (its zone was never loaded), or out of her town
 		return
 	ESSENCE.leave_outing(population, id, "Off to " + _text(step))

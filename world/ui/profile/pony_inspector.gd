@@ -84,6 +84,8 @@ func _facts(id: String) -> Dictionary:
 	var info := {"bond":record, "impression":impression, "thought":str(note.get("thought", "")),
 		"romance_available":not identity.filly and not bonds._young_player()}
 	info.space = float(record.cooldowns.get("boundary", 0.0)) > now
+	var relationships: Node = get_tree().get_first_node_in_group("player_relationships")
+	info.ladder = relationships.ladder(id) if relationships != null and relationships.has_method("ladder") else {}
 	var welcome := PackedStringArray()
 	if bonds.welcomes(id, "hug"): welcome.append("hugs")
 	if identity.filly: welcome.append("forehead kisses only")

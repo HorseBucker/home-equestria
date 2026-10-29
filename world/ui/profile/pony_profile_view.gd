@@ -100,13 +100,40 @@ func _add_meter(parent: VBoxContainer, key: String, caption: String, icon: Textu
 	var style := preload("res://world/ui/menu_style.gd")
 	bar.add_theme_stylebox_override("background", style.rounded(track)); bar.add_theme_stylebox_override("fill", style.rounded(fill))
 	column.add_child(bar)
-	meters[key] = {"row":row, "label":label, "bar":bar, "caption":caption}
+	# Level rows: how far to the next level by name, and the whole path as dots.
+	var detail := Label.new(); detail.add_theme_font_size_override("font_size", 23)
+	detail.add_theme_color_override("font_color", Color(PLUM, 0.8)); detail.visible = false; column.add_child(detail)
+	meters[key] = {"row":row, "label":label, "bar":bar, "caption":caption, "detail":detail}
 
 func _set_meter(key: String, value: int, description: String, enabled := true) -> void:
 	var meter: Dictionary = meters[key]
 	meter.row.visible = enabled
 	meter.bar.value = clampi(value, 0, 100)
 	meter.label.text = "%s  %d / 100 · %s" % [meter.caption, clampi(value, 0, 100), description]
+	meter.detail.visible = false
+
+## One bond_ladder.gd row: the level's name is the headline, the bar fills toward the next level
+## and starts over after each level-up, and the dots show the whole path.
+func _set_level(key: String, row: Dictionary, enabled := true) -> void:
+	var meter: Dictionary = meters[key]
+	meter.row.visible = enabled and not row.is_empty()
+	if row.is_empty(): return
+	var names: Array = row.names
+	var level := int(row.level)
+	meter.bar.value = roundf(float(row.fill) * 100.0)
+	if level < 0: meter.label.text = "%s  ·  %s" % [meter.caption, str(row.name)]
+	else: meter.label.text = "%s  ·  %s  ·  level %d of %d" % [meter.caption, str(row.name), level + 1, names.size()]
+	var dots := PackedStringArray()
+	for i in names.size(): dots.append("●" if i <= level else "○")
+	var waiting := str(row.waiting)
+	var unit := (" " + str(row.unit)) if row.has("unit") else ""
+	var line := "%d / %d%s to %s" % [int(row.have), int(row.need), unit, str(row.next)]
+	if bool(row.max): line = "Highest level"
+	elif not waiting.is_empty() and (float(row.fill) >= 1.0 or int(row.need) <= 1):
+		line = waiting if waiting.contains(str(row.next)) else "%s → %s" % [waiting, str(row.next)]
+	elif not waiting.is_empty(): line += " · " + waiting
+	meter.detail.text = line + "      " + " ".join(dots)
+	meter.detail.visible = true
 
 static func _style(fill: Color, border: Color) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new(); style.bg_color = fill; style.border_color = border
@@ -160,13 +187,18 @@ func show_profile(id: String, identity: Resource, info: Dictionary) -> void:
 	var body := "\n\n".join(lines)
 	var purse_bits := int(info.get("purse", 0)); var player_bits := int(info.get("player_bits", 0))
 	var show_price := int(info.get("show_price", 0)); var show_ready := bool(info.get("show_ready", false))
-	var next_text := JSON.stringify([id, title, stage, body, love, friendship, love_label, standing, romance_visible, purse_bits, player_bits, show_price, show_ready])
+	var next_text := JSON.stringify([id, title, stage, body, love, friendship, love_label, standing, romance_visible, purse_bits, player_bits, show_price, show_ready, info.get("ladder", {})])
 	if next_text == _last_text: return
 	_last_text = next_text
 	var changed_pony := heading.text != title
 	heading.text = title; subline.text = "Relationship: " + stage; summary.text = body
-	_set_meter("love", love, love_label, romance_visible)
-	_set_meter("friendship", friendship, standing)
+	var ladder: Dictionary = info.get("ladder", {})
+	if ladder.is_empty():
+		_set_meter("love", love, love_label, romance_visible)
+		_set_meter("friendship", friendship, standing)
+	else:
+		_set_level("love", ladder.get("love", {}), romance_visible)
+		_set_level("friendship", ladder.get("friendship", {}))
 	purse.text = "%s's purse: %d bits    Yours: %d bits" % [title, purse_bits, player_bits]
 	for amount: int in pay_buttons: (pay_buttons[amount] as Button).disabled = player_bits < amount
 	hire_button.visible = show_price > 0

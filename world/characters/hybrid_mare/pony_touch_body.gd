@@ -592,8 +592,12 @@ func _advance_petting(delta: float, touching: Dictionary) -> void:
 	pet_region = region
 	var w: Vector3 = REACTIONS.get(region, Vector3(.5, .3, .4))
 	mare.expressions.touch("pet", w.x, w.y)
-	mare.boop_node.sustain_blush(w.z)
+	# A spa client's care is not affection: no blush, no petting session (nor its quiet gap), no
+	# "petted" for her AI (SPA_PLAN_2026_10_29.md section 3). The relaxed face and the stop stay.
+	var spa: bool = mare.get_meta("spa_client", false)
+	if not spa: mare.boop_node.sustain_blush(w.z)
 	if not mare.is_held(): mare.begin_touch(Vector3.ZERO, .5)
+	if spa: return
 	if _pet_quiet > SESSION_GAP:
 		pets += 1
 		var now := Time.get_ticks_msec() / 1000.0

@@ -104,6 +104,9 @@ var idle_twitches: RefCounted = IDLE_TWITCHES.new()
 var idle_body: IDLE_BODY
 var conversation_target: Node3D
 var action_gaze_target: Node3D
+## Eased eye point while a boop finger comes in; BOOP_EYE_EASE is its time constant (s).
+var _boop_eye := Vector3.INF
+const BOOP_EYE_EASE := .16
 var _action_gaze_point: Node3D
 var _conversation_gaze_point: Node3D
 var boop_node: Node
@@ -498,10 +501,11 @@ func _hybrid_physics(delta: float) -> void:
 	var listener := _conversation_gaze_point if is_instance_valid(conversation_target) else (_action_gaze_point if is_instance_valid(action_gaze_target) else _attention_target())
 	var booping: bool = listener == _action_gaze_point and is_instance_valid(action_gaze_target) and action_gaze_target.has_meta("boop_finger")
 	attention.min_distance = .015 if booping else .05
+	attention.head_hold = (booping or boop_node.finger_near) and not _held
 	attention.advance(delta, self, listener if conversing or not _held else null, resting, conversing)
 	if hoof_hold.active() and hoof_hold.gesture_left <= 0.0:
 		expressions.touch("hoof",.6,.42)
-		boop_node.sustain_blush()
+		if not has_meta("spa_client"): boop_node.sustain_blush()   # spa care never blushes
 	else:expressions.release_touch("hoof")
 	_boop_asleep = maxf(0.0, _boop_asleep - delta)
 	# Booped in her sleep, her eyes stay shut even while a boop reaction plays (dev 2026-10-22).
@@ -535,7 +539,11 @@ func _hybrid_physics(delta: float) -> void:
 		eye_motion.target_world = carry.look_target
 		eye_motion.target_weight = carry.blend
 	else:
-		eye_motion.target_world = attention.eye_target
+		# A booping finger is followed smoothly, from where she was looking to the hand and in to
+		# her nose (dev 2026-10-29: her eyes "instantly teleported" to it). Other looks unchanged.
+		if booping and _boop_eye.is_finite(): _boop_eye = _boop_eye.lerp(attention.eye_target, 1.0 - exp(-delta / BOOP_EYE_EASE))
+		else: _boop_eye = attention.eye_target
+		eye_motion.target_world = _boop_eye
 		eye_motion.target_weight = 0.0 if sleeping and not conversing else attention.interest
 
 ## A settled clip-tier sleep freezes the head and hair rigs with the body.
@@ -1114,8 +1122,10 @@ func boop_count() -> int:
 	return boop_node.boops if boop_node != null else 0
 
 
+## A hand on her hoof (her AI's "the player is holding your hoof"). Her own lifts set gesture_left;
+## a spa client's hoof care is not reported (SPA_PLAN_2026_10_29.md section 3).
 func is_hoof_held() -> bool:
-	return hoof_hold.active()
+	return hoof_hold.active() and hoof_hold.gesture_left <= 0.0 and not has_meta("spa_client")
 
 ## Petting sessions so far (pony_touch_body.gd), for the awareness events.
 func pet_count() -> int:
@@ -1208,7 +1218,8 @@ func on_booped() -> void:
 	# the boop reaction (dev 2026-10-22).
 	expressions.fluster(1.4, not sleeping)
 	if sleeping: _boop_asleep = BOOP_ASLEEP_SECONDS
-	secondary.look_toward(Vector3(deg_to_rad(9.0), attention.last_angles.y * 0.5, 0.0), 0.45)
+	# The flinch waits for the finger to go: it would pull her nose off it (dev 2026-10-29).
+	if not attention.head_hold: secondary.look_toward(Vector3(deg_to_rad(9.0), attention.last_angles.y * 0.5, 0.0), 0.45)
 
 
 ## Contact rules (dev, headset round 7): the player's body and head never collide with her;

@@ -1,8 +1,9 @@
 extends RefCounted
 const CONTROLS := preload("res://world/ai/speech_controls.gd")
 const PLACES := preload("res://world/navigation/place_directory.gd")
+const MEET_TIME := preload("res://world/life/appointments/meet_time.gd")
 ## Data only. Never turn model text into method names, code, paths or coordinates.
-const TYPES := ["look_at", "approach", "call_pony", "send_pony", "follow", "go_to", "step", "lead", "stay", "cancel", "resume_routine", "sit", "stand", "lie_down", "fly_to", "hover", "land", "loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "sit_on_seat", "go_home", "air_show", "relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "kiss_player", "wake_up", "teleport_to_ponyville", "send_letter", "give_house", "magic_show", "take_off", "put_on"]
+const TYPES := ["look_at", "approach", "call_pony", "send_pony", "follow", "go_to", "step", "lead", "stay", "cancel", "resume_routine", "sit", "stand", "lie_down", "fly_to", "hover", "land", "loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "sit_on_seat", "go_home", "air_show", "relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "kiss_player", "wake_up", "teleport_to_ponyville", "send_letter", "give_house", "magic_show", "take_off", "put_on", "meet", "meet_cancel"]
 const SPEECH_LIMIT := 2880
 const STEP_DIRECTIONS := ["forward", "back", "left", "right", "away", "aside"]
 const STEP_SPELLINGS := {"forwards": "forward", "ahead": "forward", "backward": "back", "backwards": "back", "backward_s": "back",
@@ -10,6 +11,7 @@ const STEP_SPELLINGS := {"forwards": "forward", "ahead": "forward", "backward": 
 	"side": "aside", "away_from_player": "away", "away_from_you": "away"}
 const FIELDS := {
 	"teleport_to_ponyville": [], "give_house": [], "magic_show": [], "take_off": ["kind"], "put_on": ["kind"],
+	"meet": ["location_id", "day", "time"], "meet_cancel": [],
 	"call_pony": ["pony_id"], "send_pony": ["pony_id", "target_id"],
 	"request_space": [], "buck_player": [], "cuddle": [], "kiss_player": [], "wake_up": [], "send_letter": [], "relationship_offer": ["kind", "activity", "location_id"], "relationship_answer": ["offer_id", "accept"],
 	"look_at": ["target_id", "duration_s"], "approach": ["target_id", "distance_m"],
@@ -46,7 +48,8 @@ const SIGNATURES := {
 	"lead": [["target_id", null], ["location_id", null], ["wait_distance_m", 6.0]], "cancel": [["action_id", "current"]],
 	"fly_to": [["location_id", null]], "hover": [["duration_s", 10.0]], "circle_over": [["target_id", "player"]],
 	"relationship_offer": [["kind", null], ["activity", "walk"], ["location_id", ""]], "relationship_answer": [["offer_id", null], ["accept", null]],
-	"take_off": [["kind", null]], "put_on": [["kind", null]]}
+	"take_off": [["kind", null]], "put_on": [["kind", null]],
+	"meet": [["location_id", null], ["day", "today"], ["time", null]]}
 const PLAYER_NAMES := ["me", "you", "anon", "him", "the player", "anonymous"]
 const RANGES := {"duration_s": [0.2, 600.0], "distance_m": [1.0, 6.0], "wait_distance_m": [3.0, 15.0]}
 const ALIASES := {"lookat": "look_at", "look": "look_at", "goto": "go_to", "walk_to": "go_to", "go": "go_to", "flyto": "fly_to",
@@ -65,7 +68,9 @@ const ALIASES := {"lookat": "look_at", "look": "look_at", "goto": "go_to", "walk
 	"put_on_show": "magic_show", "put_on_a_show": "magic_show", "great_and_powerful_show": "magic_show", "perform": "magic_show",
 	"remove": "take_off", "takeoff": "take_off", "undress": "take_off", "unequip": "take_off", "remove_clothing": "take_off",
 	"wear": "put_on", "puton": "put_on", "dress": "put_on", "equip": "put_on",
-	"move": "step", "step_aside": "step", "move_aside": "step", "make_way": "step", "scoot": "step", "shift": "step"}
+	"move": "step", "step_aside": "step", "move_aside": "step", "make_way": "step", "scoot": "step", "shift": "step",
+	"meet_up": "meet", "meet_anon": "meet", "appointment": "meet", "make_appointment": "meet", "schedule_meeting": "meet",
+	"cancel_meet": "meet_cancel", "cancel_meeting": "meet_cancel", "call_off_meeting": "meet_cancel"}
 ## One line per command for the prompt: the exact tag and what it does.
 const TAG_HELP := {
 	"teleport_to_ponyville": "[teleport_to_ponyville] Twilight takes you both out of the Everfree to Ponyville for shelter at Golden Oak; only available during the active forest rescue; finish explaining first, then regroup beside the newcomer before casting if separated",
@@ -98,7 +103,9 @@ const TAG_HELP := {
 	"give_house": "[give_house] officially make a free Ponyville house Anon's own home, for good (the empty one he is in or beside, else the nearest free one); only when you give it, never just to talk about houses; works alongside one other action",
 	"magic_show": "[magic_show] start your Great and Powerful stage show at the schoolhouse stage: fireworks call the town, the curtain rises in about three minutes; only when Anon paid for one or you truly want an audience; works alongside one other action",
 	"take_off": "[take_off: ITEM] take off something you are wearing (e.g. socks, scarf, hat, glasses), when asked or when you want to; you keep it and can [put_on] it again; works alongside one other action",
-	"put_on": "[put_on: ITEM] put back on something you took off earlier; works alongside one other action"}
+	"put_on": "[put_on: ITEM] put back on something you took off earlier; works alongside one other action",
+	"meet": "[meet: LOCATION, DAY, HH:MM] agree to meet Anon at a place on a day (today, tomorrow or a number of days ahead) and time, e.g. [meet: landmark:town_hall, tomorrow, 15:00]; you will go there a bit early and wait; replaces your earlier meeting with him",
+	"meet_cancel": "[meet_cancel] call off your agreed meeting with Anon"}
 
 ## Turns a model's tag name into a TYPES entry ("" when it is not an action).
 static func action_type(raw: String) -> String:
@@ -173,7 +180,8 @@ static func decode_tags(text: String, actor: String, turn: int, context: Diction
 			dropped.append("teleport_to_ponyville takes no arguments"); continue
 		var action := _tag_action(type, value, turn, actions.size())
 		# A house grant or Trixie's stage show moves nopony now: either may come with her walk or follow.
-		var channel := "gaze" if type == "look_at" else ("grant" if type in ["give_house", "magic_show"] else "wardrobe" if type in ["take_off", "put_on"] else "movement")
+		# An agreed meeting (appointments.gd) moves nopony now: it may come with a walk and a look.
+		var channel := "gaze" if type == "look_at" else ("grant" if type in ["give_house", "magic_show"] else "wardrobe" if type in ["take_off", "put_on"] else "plan" if type in ["meet", "meet_cancel"] else "movement")
 		var error := validate(action, context)
 		if error == "" and channel in channels: error = "Only one %s per reply" % ("look_at" if channel == "gaze" else "movement")
 		if error == "" and actions.size() >= 2: error = "At most two actions per reply"
@@ -184,7 +192,7 @@ static func decode_tags(text: String, actor: String, turn: int, context: Diction
 	speech = speech.replace("  ", " ").strip_edges()
 	if speech.length() > SPEECH_LIMIT: return {"error": "Speech exceeds 2880 characters; use complete sentences within the limit"}
 	for action: Dictionary in actions:
-		if action.type in ["relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "teleport_to_ponyville", "give_house"] and CONTROLS.sanitize(speech).is_empty():
+		if action.type in ["relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "teleport_to_ponyville", "give_house", "meet", "meet_cancel"] and CONTROLS.sanitize(speech).is_empty():
 			return {"error": "This action requires spoken words before it can finish"}
 	return {"speech": speech, "actions": actions, "impression": preload("res://world/ai/impressions/pony_impressions.gd").sanitize(impression),
 		"dropped": dropped, "tags": true, "control_only": not silent and actions.is_empty() and CONTROLS.sanitize(speech).is_empty() and not text.strip_edges().is_empty()}
@@ -204,6 +212,11 @@ static func _tag_action(type: String, value: String, turn: int, index: int) -> D
 	var lone_place: bool = type == "lead" and args.size() == 1 and str(args[0]).to_lower() not in PLAYER_NAMES + ["player"]
 	if type in ["follow", "lead"] and (args.is_empty() or lone_place): args.push_front("player")
 	if type in ["follow", "lead", "approach", "look_at", "circle_over"] and not args.is_empty() and str(args[0]).to_lower() in PLAYER_NAMES: args[0] = "player"
+	# [meet: town hall, tomorrow at 3pm]: day and time written as one argument.
+	if type == "meet" and args.size() == 2 and not MEET_TIME.find_time(str(args[1])).is_empty():
+		var said := str(args[1])
+		var day_word := MEET_TIME.find_day(said)
+		args = [args[0], day_word if not day_word.is_empty() else "today", MEET_TIME.find_time(said)]
 	var fields: Array = SIGNATURES.get(type, [])
 	for i in fields.size():
 		var field: String = fields[i][0]
@@ -282,9 +295,9 @@ static func decode(text: String, actor: String, turn: int, context: Dictionary, 
 		var error := validate(action, context)
 		if error != "": return {"error": error}
 		if action.id in ids: return {"error": "Duplicate action IDs in reply"}
-		if action.type in ["relationship_offer","relationship_answer","request_space","buck_player","cuddle","teleport_to_ponyville","give_house"] and CONTROLS.sanitize(value.speech).is_empty():return {"error":"This action requires spoken words before it can finish"}
+		if action.type in ["relationship_offer","relationship_answer","request_space","buck_player","cuddle","teleport_to_ponyville","give_house","meet","meet_cancel"] and CONTROLS.sanitize(value.speech).is_empty():return {"error":"This action requires spoken words before it can finish"}
 		ids.append(action.id)
-		var channel := "gaze" if action.type == "look_at" else ("grant" if action.type in ["give_house", "magic_show"] else "wardrobe" if action.type in ["take_off", "put_on"] else "movement")
+		var channel := "gaze" if action.type == "look_at" else ("grant" if action.type in ["give_house", "magic_show"] else "wardrobe" if action.type in ["take_off", "put_on"] else "plan" if action.type in ["meet", "meet_cancel"] else "movement")
 		if channel in channels: return {"error": "One intention per channel per reply"}
 		channels.append(channel)
 	return {"speech": value.speech, "actions": value.actions.duplicate(true), "impression":preload("res://world/ai/impressions/pony_impressions.gd").sanitize(value.get("impression")),
@@ -324,6 +337,12 @@ static func validate(action: Variant, context: Dictionary) -> String:
 			var pending: Dictionary=context.get("relationship",{}).get("pending",{})
 			if pending.is_empty() or pending.get("by")!="player" or pending.get("id")!=action.get("offer_id"): return "No matching player invitation"
 			if not action.get("accept") is bool: return "Invitation answer must be boolean"
+		"meet":
+			var clock := _clock(context)
+			var when := MEET_TIME.parse(str(action.get("day", "today")), str(action.get("time", "")), int(clock.day), float(clock.hours))
+			if not bool(when.ok): return str(when.error)
+			# Normalized, so a second validation (and the appointment store) reads the same meeting.
+			action.day = str(when.day_text); action.time = str(when.time_text)
 		"take_off", "put_on":
 			if not action.get("kind") is String or str(action.kind).is_empty() or str(action.kind).length() > 40: return "Name the item of clothing"
 		"hover":
@@ -349,6 +368,14 @@ static func validate(action: Variant, context: Dictionary) -> String:
 		"cancel":
 			if not _id(action.get("action_id")): return "Invalid cancellation target"
 	return ""
+
+## The game clock for meeting times: context "clock" ({"day", "hours"}, tests and letters) or TimeOfDay.
+static func _clock(context: Dictionary) -> Dictionary:
+	var given: Variant = context.get("clock")
+	if given is Dictionary: return {"day": int((given as Dictionary).get("day", 0)), "hours": float((given as Dictionary).get("hours", 12.0))}
+	var loop := Engine.get_main_loop() as SceneTree
+	var clock: Node = loop.root.get_node_or_null("TimeOfDay") if loop != null else null
+	return {"day": int(clock.get("day")), "hours": float(clock.get("hours"))} if clock != null else {"day": 0, "hours": 12.0}
 
 static func _keys(value: Dictionary, allowed: Array) -> bool:
 	for key in value:

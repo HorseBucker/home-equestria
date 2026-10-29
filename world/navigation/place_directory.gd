@@ -52,7 +52,10 @@ static func entries(tree: SceneTree) -> Array:
 		var label := str(node.get_meta("ai_label", ""))
 		if id.is_empty() or label.is_empty(): continue
 		seen[label] = int(seen.get(label, 0)) + 1
-		out.append({"id": "landmark:" + id, "label": label, "kind": "landmark", "position": (node as Node3D).global_position, "node": node})
+		# A walk-in building (the Day Spa) names where to meet with a NavigationAnchor child.
+		var anchor := node.get_node_or_null("NavigationAnchor") as Node3D
+		var at: Vector3 = anchor.global_position if anchor != null and anchor.is_inside_tree() else (node as Node3D).global_position
+		out.append({"id": "landmark:" + id, "label": label, "kind": "landmark", "position": at, "node": node})
 	# Generic repeated labels (benches, lamps, fair tents) are not destinations.
 	out = out.filter(func(e): return e.kind != "landmark" or int(seen.get(e.label, 0)) <= 2)
 	for town: Node in tree.get_nodes_in_group("town_roots"):

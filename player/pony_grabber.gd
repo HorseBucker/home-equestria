@@ -246,6 +246,7 @@ func _retarget(only_side: String = "") -> void:
 ## The closest chest grip within reach that the other hand does not hold.
 func _nearest_free_grip(side: String, hand: Node3D) -> String:
 	if pony.get_meta("cuddle_active",false):return ""
+	if pony.has_meta("spa_client"):return ""   # no chest pickup at the spa (SPA_PLAN_2026_10_29.md section 3)
 	if pony.get("hoof_hold")!=null and pony.hoof_hold.leg_index>=0:return ""
 	if not pony.has_method("get_grip_transform"):
 		return ""

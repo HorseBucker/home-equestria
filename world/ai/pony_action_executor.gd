@@ -12,6 +12,7 @@ const COMPANION_RANGE := 14.0
 ## ground nearer to her, before she gives up and says so.
 const ROUTE_RETRIES := 3
 const NO_RETRY := ["Bakery is busy", "cannot fit", "needs a flight", "not finite"]
+const MEET_TIME := preload("res://world/life/appointments/meet_time.gd")
 signal outcome(event: Dictionary)
 var actor: Node3D
 var navigator: Node
@@ -65,6 +66,12 @@ func _wake_actor() -> bool:
 	actor.request_posture("stand")
 	return true
 
+func _appointments() -> Node:
+	return get_tree().get_first_node_in_group("appointments") if is_inside_tree() else null
+
+func _pony_id() -> String:
+	return character_id if not character_id.is_empty() else str(actor.get_meta("relationship_id", ""))
+
 func _wardrobe() -> Node:
 	return actor.get_tree().get_first_node_in_group("pony_wardrobe") if is_instance_valid(actor) and actor.is_inside_tree() else null
 
@@ -95,6 +102,11 @@ func capabilities() -> Array:
 	if actor.has_meta("relationship_runtime"):
 		var runtime: Node = actor.get_meta("relationship_runtime")
 		if runtime.can_kiss_player(str(actor.get_meta("relationship_id", ""))): result.append("kiss_player")
+		# Agreed meetings with Anon (world/life/appointments/appointments.gd).
+		var appointments := _appointments()
+		if appointments != null:
+			result.append("meet")
+			if not appointments.open_for(_pony_id()).is_empty(): result.append("meet_cancel")
 	return result
 
 ## ai_origin: requested by the model (pony_action_coordinator.gd commit), not a story script.
@@ -156,6 +168,18 @@ func submit(actions: Array, targets: Dictionary, turn: int, ai_origin := false) 
 				# [cancel] in a tag reply names no action: it stops whatever she is doing.
 				if movement.get("id") == action.action_id or (action.action_id == "current" and not movement.is_empty()): _end_move("cancelled", "Cancelled by request"); found = true
 				_report(action, "completed" if found else "failed", "Cancellation applied" if found else "That action is not active")
+			"meet", "meet_cancel":
+				# Commits at once and moves nopony: her day plan walks her there on the day.
+				var appointments := _appointments()
+				if appointments == null: _report(action, "failed", "Meetings unavailable"); continue
+				if action.type == "meet":
+					var made: Dictionary = appointments.propose(_pony_id(), str(action.get("location_id", "")), str(action.get("day", "today")), str(action.get("time", "")), "speech:%d" % turn)
+					var row: Dictionary = made.get("row", {})
+					_report(action, "completed" if bool(made.get("ok", false)) else "failed",
+						"Meeting agreed: %s, day %d at %s" % [str(row.get("place_label", "")), int(row.get("day", 0)), MEET_TIME.clock_text(float(row.get("hour", 0.0)))] if bool(made.get("ok", false)) else str(made.get("error", "Meeting not possible")))
+				else:
+					var called_off: bool = appointments.cancel(_pony_id(), "speech:%d" % turn)
+					_report(action, "completed" if called_off else "failed", "Meeting called off" if called_off else "You have no meeting with Anon to call off")
 			"send_letter":
 				var sent: bool = actor.send_letter()
 				_report(action, "completed" if sent else "failed", "Letter written and sent to Princess Celestia" if sent else "Busy; cannot write a letter right now")
@@ -321,7 +345,11 @@ func _physics_step(delta: float) -> void:
 		else: _report(movement,"running","Flight: " + actor.flight.state)
 		return
 	if actor.get("flight") != null and actor.flight.active():
-		actor.flight.land()
+		# Ask once. land() re-plans from her current heading each call, so asking every tick kept
+		# moving the touchdown spot ahead of her: she flew low loops and never landed (dev 2026-10-29).
+		if not movement.get("land_asked", false):
+			movement.land_asked = true
+			actor.flight.land()
 		_report(movement,"blocked","Landing before ground movement")
 		return
 	if movement.type == "sit_on_seat":

@@ -185,9 +185,7 @@ func _contacts(pose:Array[Transform3D],mount:Transform3D,anchor:Vector3)->void:
 		if floor_is_plane:_share_floor_plane(anchor)
 		else:
 			for i in bones.size():
-				var point:Vector3=frames[i]*_tips[i]
-				point.y=maxf(anchor.y,point.y)
-				var plane:Dictionary=floor_probe.call(point)
+				var plane:Dictionary=_floor_at(frames[i]*_tips[i],anchor.y)
 				# A different ray hit X/Z on the same plane is not moving ground.
 				if sleeping and (plane.is_empty()!=_floor_planes[i].is_empty() or (not plane.is_empty() and (absf((Vector3(plane.position)-Vector3(_floor_planes[i].position)).dot(plane.normal))>.001 or Vector3(plane.normal).distance_to(_floor_planes[i].normal)>.001))):
 					sleeping=false;_quiet_frames=0
@@ -216,9 +214,7 @@ func _contacts_native(pose:Array[Transform3D],mount:Transform3D,anchor:Vector3)-
 		else:
 			var tips:PackedVector3Array=native.tail_tip_points(PackedVector3Array(angles),_base_pose,mount)
 			for i in bones.size():
-				var point:Vector3=tips[i]
-				point.y=maxf(anchor.y,point.y)
-				var plane:Dictionary=floor_probe.call(point)
+				var plane:Dictionary=_floor_at(tips[i],anchor.y)
 				# A different ray hit X/Z on the same plane is not moving ground.
 				if sleeping and (plane.is_empty()!=_floor_planes[i].is_empty() or (not plane.is_empty() and (absf((Vector3(plane.position)-Vector3(_floor_planes[i].position)).dot(plane.normal))>.001 or Vector3(plane.normal).distance_to(_floor_planes[i].normal)>.001))):
 					sleeping=false;_quiet_frames=0
@@ -231,6 +227,23 @@ func _contacts_native(pose:Array[Transform3D],mount:Transform3D,anchor:Vector3)-
 	max_penetration=(0. if result[3]<0. else maxf(0.,result[3]-SKIN_MARGIN)) if project else 0.
 	var locals:Array=result[4]
 	for i in bones.size():pose[bones[i]]=locals[i]
+
+## The floor under one tail tip. The ray starts at least at root height, so a tip pushed below
+## the ground can recover. But a tip hanging past a ledge (the spa's massage table, a step) is in
+## open air below that ledge's top: lifting it onto the top threw it up, it slid off, fell, swung
+## under the edge and was thrown up again, forever (dev 2026-10-29: "the tail falls, jumps back
+## up, falls again"). When the hit would lift the tip more than LEDGE_LIFT and a second ray from
+## just above the tip finds floor below it, that lower floor is the one.
+const LEDGE_LIFT:=.06
+func _floor_at(tip:Vector3,anchor_y:float)->Dictionary:
+	var plane:Dictionary=floor_probe.call(Vector3(tip.x,maxf(anchor_y,tip.y),tip.z))
+	if plane.is_empty() or Vector3(plane.position).y<=tip.y+LEDGE_LIFT or floor_probe.get_method()!=&"_probe":return plane
+	var body:Object=floor_probe.get_object()
+	var profile:Variant=body.get("profile") if body!=null else null
+	if profile==null:return plane
+	# _probe(point, rise) casts from point + up * (hip * 0.9 + rise): start 3 cm over the tip.
+	var below:Dictionary=floor_probe.call(tip,.03-float(profile.hip_height)*.9)
+	return below if not below.is_empty() and Vector3(below.position).y<=tip.y+.03 else plane
 
 ## A plane probe: one call for every joint (floor_is_plane). Same wake test as the per-tip probes.
 func _share_floor_plane(anchor:Vector3)->void:

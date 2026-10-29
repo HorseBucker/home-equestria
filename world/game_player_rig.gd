@@ -141,6 +141,9 @@ func _spawn_player() -> void:
 		if not host.xr_active:
 			var chat := preload("res://world/ui/chat_box.gd").new()
 			chat.name = "ChatBox"; host.add_child(chat); chat.setup(host.director, host.player, host.inventory)
+		var freeze: Node = preload("res://world/ai/talk_freeze.gd").new()
+		freeze.name = "TalkFreeze"; host.add_child(freeze)
+		freeze.setup(host.director, host.get_node_or_null("ChatBox"), cam)
 	if DEV.enabled():
 		var console: Node = load("res://world/debug/command_console.gd").new()
 		console.name = "CommandConsole"; host.add_child(console); console.setup(host)

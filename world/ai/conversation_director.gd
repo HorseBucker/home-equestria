@@ -310,7 +310,9 @@ func participant_busy(id: String) -> bool:
 ## if they want to leave they say bye first"): speaking or thinking now, a member of the
 ## running group exchange, or the player talked with her within CHAT_HOLD_SECONDS and is
 ## still in earshot. Released for a while after her goodbye.
-const CHAT_HOLD_SECONDS := 60.0
+## Longer than director_holds.gd QUIET_SECONDS (5 min), so a quiet chat ends in her goodbye, not a
+## silent drift back to her day (dev 2026-10-29).
+const CHAT_HOLD_SECONDS := 330.0
 var _released: Dictionary = {}      # id -> when she said goodbye (free until spoken to again)
 ## The player's words that came in during a firm line (floor_held), answered once it ends.
 var _held_text := ""
@@ -329,6 +331,9 @@ func request_farewell(id: String, reason: String) -> bool:
 	return _holds.request_farewell(id, reason)
 
 var _farewell_reason := ""
+## Ponies whose goodbye reply chose to stay instead ([stay], [follow: player], sit, cuddle...): the
+## goodbye is hers to decline, bedtime included (dev 2026-10-29).
+var _farewell_staying: Dictionary = {}
 ## The latest goodbye spoken aloud: the next mare's farewell prompt quotes it so she words hers
 ## differently (dev 2026-10-26: every mare left "with the same sentence structure").
 var _last_farewell := {"id": "", "text": "", "at": -1e9}
@@ -363,7 +368,7 @@ func _on_world_reopened(_world_id: String) -> void:
 	_resident_histories.clear()
 	_authored_lines.clear()
 	_pending_contacts.clear(); _contact_log.clear(); _contact_next.clear()
-	_farewell.clear(); _farewell_reason = ""
+	_farewell.clear(); _farewell_reason = ""; _farewell_staying.clear()
 	_sit_agreed.clear(); _group_request = ""
 	_player_text = ""; _physical_context = ""; _partner = {}
 	_held_text = ""; _held_utterance = []
@@ -976,6 +981,7 @@ func _commit_actions() -> bool:
 	situation_block(_current)
 	var immediate: Array = []
 	for action: Dictionary in _pending_actions:
+		if _farewell.has(_current) and _holds.stays(action): _farewell_staying[_current] = true
 		if action.type == "teleport_to_ponyville":
 			_after_speech_actions[_current] = {"action":action.duplicate(true), "turn":_turn_id, "epoch":_intent_epoch}
 		else: immediate.append(action)
@@ -1151,7 +1157,9 @@ func _on_speech_finished(id: String = "") -> void:
 	_pending_face = ""
 	_hide_indicator()
 	if characters.has(_current): characters[_current]["last_spoken_at"] = _now()
-	if _farewell.has(_current): _release(_current)
+	if _farewell.has(_current):
+		if _farewell_staying.has(_current): _holds.stay_on(_current)
+		else: _release(_current)
 	# A naturally delivered final sentence owns its receipt even when a previously
 	# requested stop ends the exchange now. Schedule before that early return.
 	var transport_ready := delivered and speaker_finished and _after_speech_actions.has(_current)

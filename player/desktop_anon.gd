@@ -5,6 +5,13 @@ const BODY := preload("res://player/anon_body.tscn")
 const PUNCH := preload("res://player/animations/desktop_punch.tres")
 const FORM := preload("res://world/life/player_form.gd")
 const CONTACT_TIME := .28
+## A boop is unhurried (dev 2026-10-29: "slower than an instant boop teleport"): the finger takes
+## BOOP_REACH to arrive, rests a moment and takes BOOP_RETURN to go back to his side.
+const BOOP_REACH := .55
+const BOOP_RETURN := .5
+## How far the boop finger tips up from level, so his hand comes from below and leaves her nose
+## in view (dev 2026-10-29).
+const BOOP_TILT := .45
 const MAX_REACH := 1.05
 signal action_contact(kind: String, target: Vector3, side: String)
 signal action_finished(kind: String)
@@ -82,7 +89,7 @@ func request_action(kind: String, target: Vector3, normal: Vector3 = Vector3.UP,
 	# finger follows the actual approach line into the nose, not that patch.
 	if kind == "boop": _normal = (camera.global_position - target).normalized()
 	_elapsed = 0.0
-	_duration = PUNCH.length if kind in ["punch", "slap"] else (.95 if kind == "pet" else .65)
+	_duration = PUNCH.length if kind in ["punch", "slap"] else (.95 if kind == "pet" else (BOOP_REACH + .35 + BOOP_RETURN if kind == "boop" else .65))
 	_contact_done = false
 	_start_eye = camera.global_position
 	_start_forward = -camera.global_basis.z
@@ -90,11 +97,14 @@ func request_action(kind: String, target: Vector3, normal: Vector3 = Vector3.UP,
 	return true
 
 ## Continued contextual petting follows the same touched surface without
-## restarting anticipation/contact. The input owner stops renewing on release.
+## restarting anticipation/contact. The input owner stops renewing on release. A boop
+## follows her nose the same way.
 func update_action_target(kind: String, target: Vector3, normal: Vector3 = Vector3.UP) -> bool:
-	if _kind != kind or kind != "pet" or not target.is_finite() or not normal.is_finite(): return false
+	if _kind != kind or kind not in ["pet", "boop"] or not target.is_finite() or not normal.is_finite(): return false
 	if not is_instance_valid(camera) or camera.global_position.distance_to(target) > MAX_REACH * avatar.model_scale: return false
 	_target = target
+	# A boop follows her live nose (pressed in after contact); its approach line stays.
+	if kind == "boop": return true
 	if normal.length_squared() > .0001: _normal = normal.normalized()
 	_duration = maxf(_duration, _elapsed + .25)
 	return true
@@ -165,7 +175,9 @@ func advance(delta: float) -> void:
 		_torso_yaw = float(PUNCH.value_track_interpolate(3, _elapsed)) * (1.0 if active_side == "right" else -1.0)
 		_torso_forward = float(PUNCH.value_track_interpolate(4, _elapsed)) * scale
 	elif busy:
-		contact_amount = smoothstep(0.0, .25, _elapsed) * (1.0 - smoothstep(_duration - .20, _duration, _elapsed))
+		var reach := BOOP_REACH if _kind == "boop" else .25
+		var back := BOOP_RETURN if _kind == "boop" else .20
+		contact_amount = smoothstep(0.0, reach, _elapsed) * (1.0 - smoothstep(_duration - back, _duration, _elapsed))
 		_torso_forward = contact_amount * .018 * scale
 	for side: String in ["left", "right"]:
 		var sign_side := 1.0 if side == "right" else -1.0
@@ -205,9 +217,9 @@ func advance(delta: float) -> void:
 				var surface := _target + _normal * clearance * scale
 				var boop_direction := Vector3.ZERO
 				if _kind == "boop":
-					# Point straight ahead and level into the nose, hand flat
-					# (dev 2026-10-14). Keep the original fingertip reach and arm lengths.
-					boop_direction = Vector3(-_normal.x, 0.0, -_normal.z).normalized()
+					# Point into the nose, hand flat (dev 2026-10-14), tipped up BOOP_TILT so the hand
+					# comes from below her nose. Keep the original fingertip reach and arm lengths.
+					boop_direction = (Vector3(-_normal.x, 0.0, -_normal.z).normalized() + Vector3.UP * BOOP_TILT).normalized()
 					surface = _target - boop_direction * clearance * scale
 				if _kind == "pet": surface += flat_right * sin((_elapsed - .25) * TAU * 2.0) * .045 * contact_amount * scale
 				var variation := Vector3(0, float((_sequence % 3) - 1) * .012, 0)
@@ -253,7 +265,8 @@ func advance(delta: float) -> void:
 			var held_frame: Transform3D = held.frame
 			palm = held_frame.origin
 			hand_basis = held_frame.basis.orthonormalized()
-			grip = .55
+			# A massaging hand (spa_hands.gd) lies open on her leg.
+			grip = .0 if held.kind == "rub" else .55
 		var marker: Node3D = _hands[side]
 		# Reading support is assigned after the loop below, so it is not
 		# accidentally overwritten by the helper's ordinary rest pose.
@@ -268,7 +281,7 @@ func advance(delta: float) -> void:
 			var helper: Node3D = _hands[helper_side]
 			helper.global_transform = Transform3D(held_frame.basis.orthonormalized(), held_frame.origin - held_frame.basis.x * (1.0 if side == "right" else -1.0) * .20 * scale)
 			avatar.set_grip(helper_side, .4)
-	if busy and not _contact_done and _elapsed >= CONTACT_TIME:
+	if busy and not _contact_done and _elapsed >= (BOOP_REACH if _kind == "boop" else CONTACT_TIME):
 		_contact_done = true
 		action_contact.emit(_kind, _target, active_side)
 	if busy and _elapsed >= _duration: cancel_action()

@@ -14,6 +14,11 @@ var context:Node
 var notes:Dictionary={}
 var sessions:Dictionary={}
 var applied:Dictionary={}
+## Level XP per pony, {"friendship": n, "romance": n}: every kept positive gain adds up with no
+## ceiling (world/relationships/bond_ladder.gd). Missing for a pony from an older save: seeded from
+## her 0..100 score the first time it is read, so nobody loses a level.
+var xp:Dictionary={}
+const LADDER:=preload("res://world/relationships/bond_ladder.gd")
 signal changed(id:String)
 func bind(store:Node):
 	if is_instance_valid(core):core.free()
@@ -22,6 +27,7 @@ func bind(store:Node):
 	if saved.get("core") is Dictionary:core.load_save_state(saved.core)
 	notes=saved.get("notes",{}).duplicate(true);sessions=saved.get("sessions",{}).duplicate(true)
 	applied=saved.get("applied",{}).duplicate(true)
+	xp=saved.get("xp",{}).duplicate(true) if saved.get("xp") is Dictionary else {}
 static func sanitize(raw:Variant)->Dictionary:
 	if not raw is Dictionary:return {}
 	var out:Dictionary={}
@@ -50,6 +56,12 @@ func commit(id:String,raw:Dictionary,event_id:String):
 	if now-float(sessions.get(id,0))>300.:core.reset_character_budget(id);sessions[id]=now
 	# Older saves carry the former caps; the current ones apply on every commit.
 	for axis:String in CAPS:core.axis_caps[axis]=CAPS[axis][0];core.scenario_budgets[axis]=CAPS[axis][1]
+	# Level XP: the same per-reply and per-sitting limits as the score, but no 100 ceiling.
+	var gained:Dictionary=xp_for(id)
+	for axis:String in ["friendship","romance"]:
+		var add:int=mini(int(data.get(axis,0)),mini(int(CAPS[axis][0]),core.get_scenario_remaining(id,axis)))
+		if add>0:gained[axis]=int(gained[axis])+add
+	xp[id]=gained
 	var token:int=core.stage_deltas({id:{"friendship":data.get("friendship",0),"romance":data.get("romance",0)}},[id])
 	core.commit_pending(token)
 	var note:Dictionary=notes.get(id,{})
@@ -57,8 +69,14 @@ func commit(id:String,raw:Dictionary,event_id:String):
 	if not str(data.get("thought","")).is_empty():note.thought=data.thought;note.thought_at=now
 	notes[id]=note;applied[event_id]=true
 	while applied.size()>512:applied.erase(applied.keys()[0])
-	context.state.player_impressions={"core":core.get_save_state(),"notes":notes.duplicate(true),"sessions":sessions.duplicate(true),"applied":applied.duplicate(true)}
+	context.state.player_impressions={"core":core.get_save_state(),"notes":notes.duplicate(true),"sessions":sessions.duplicate(true),"applied":applied.duplicate(true),"xp":xp.duplicate(true)}
 	context._changed();changed.emit(id)
+func xp_for(id:String)->Dictionary:
+	var row:Variant=xp.get(id)
+	if row is Dictionary and row.has("friendship") and row.has("romance"):return (row as Dictionary).duplicate()
+	return {"friendship":LADDER.seed_friendship(core.get_score(id,"friendship")),"romance":LADDER.seed_romance(core.get_score(id,"romance"))}
+## Set by relationship_runtime.gd: id -> bond_ladder levels, so prompts and the profile name levels.
+var ladder_provider:Callable
 func profile(id:String)->Dictionary:
 	var friendship:int=core.get_score(id,"friendship")
 	var romance:int=core.get_score(id,"romance")
@@ -73,12 +91,23 @@ func prompt_for(id:String)->String:
 ## The live part only; the rules above ride once in the dialogue prompt's fixed head.
 func standing_line(id:String)->String:
 	var p:=profile(id)
-	return "Your private standing toward Anon: "+p.standing+"; romance: "+p.love_label+". Current mood: "+p.mood+". Previous impression: "+p.thought
+	var levels:=""
+	if ladder_provider.is_valid():levels=LADDER.prompt_line(ladder_provider.call(id))
+	# The level names replace the old 0..100 tier words, which named different steps; hostility
+	# (a negative standing) has no level and keeps its word.
+	if levels!="" and int(p.enemy)==0:return levels+" Current mood: "+p.mood+". Previous impression: "+p.thought
+	return "Your private standing toward Anon: "+p.standing+"; romance: "+p.love_label+". "+(levels+" " if levels!="" else "")+"Current mood: "+p.mood+". Previous impression: "+p.thought
 
 static func valid_save(data:Variant)->bool:
 	if not data is Dictionary:return false
 	for key in ["core","notes","sessions","applied"]:
 		if not data.get(key) is Dictionary:return false
+	if data.has("xp"):
+		if not data.xp is Dictionary:return false
+		for row in data.xp.values():
+			if not row is Dictionary:return false
+			for value in row.values():
+				if not _finite(value):return false
 	for id in data.notes:
 		var n:Variant=data.notes[id]
 		if not n is Dictionary:return false

@@ -6,7 +6,7 @@ extends RefCounted
 
 var host: Node
 var _patience: Dictionary = {}      # id -> chat length (s) after which she wants to move on
-## Goodbyes the director decides itself: the player went quiet, the chat ran long, or bedtime.
+## Goodbyes the director decides itself: the player went quiet, or bedtime.
 ## Not when they are together at home (dev 2026-09-28: "we are together in our house. she
 ## shouldn't always literally leave"): there a lull just ends the chat and she stays.
 var _farewell_wait := 0.0
@@ -23,6 +23,8 @@ var _lull_next_at := -1e9
 const FAREWELL_GAP_SECONDS := 45.0
 ## Late at night a chat still runs at least this long before bedtime ends it.
 const LATE_MIN_CHAT_SECONDS := 75.0
+## Silence this long ends a chat (dev 2026-10-29: 50 s was far too short; 5 minutes).
+const QUIET_SECONDS := 300.0
 var _farewell_next_at := -1e9
 
 
@@ -77,8 +79,28 @@ func request_farewell(id: String, reason: String) -> bool:
 	return true
 
 
+## A goodbye reply that keeps her with him: a stay, following him, sitting or lying down nearby,
+## or a cuddle. Anything else (a goodbye line alone, go_to, go_home, resume_routine) lets her go.
+const STAYING := ["stay", "sit", "lie_down", "sit_on_seat", "cuddle"]
+func stays(action: Dictionary) -> bool:
+	var kind := str(action.get("type", ""))
+	return kind in STAYING or (kind == "follow" and str(action.get("target_id", "")) == "player")
+
+
+## She declined the goodbye: the chat goes on, and the director does not ask again for this chat
+## (bedtime included) until she or he ends it.
+func stay_on(id: String) -> void:
+	host._farewell.erase(id)
+	host._farewell_staying.erase(id)
+	if not host.characters.has(id): return
+	var entry: Dictionary = host.characters[id]
+	entry["chat_last"] = host._now()
+	entry["kept_on"] = entry.get("chat_since", entry.chat_last)
+
+
 func _release(id: String) -> void:
 	host._farewell.erase(id)
+	host._farewell_staying.erase(id)
 	_patience.erase(id)
 	host._released[id] = host._now()
 	if host.characters.has(id): host.characters[id].erase("chat_since")
@@ -93,7 +115,9 @@ func _leading_player(id: String) -> bool:
 	var executor: Variant = host.actions.executors.get(id)
 	if not is_instance_valid(executor): return false
 	var movement: Dictionary = executor.movement
-	return str(movement.get("type", "")) == "lead" and str(movement.get("target_id", "")) == "player"
+	# Following him is the same promise: Dash agreed "you lead the way", and the chat-length goodbye
+	# fired seconds later and sent her back to her day, flying off (dev 2026-10-29).
+	return str(movement.get("type", "")) in ["lead", "follow"] and str(movement.get("target_id", "")) == "player"
 
 
 func _together_at_home(id: String) -> bool:
@@ -125,13 +149,16 @@ func _check_farewells(delta: float) -> void:
 		var reason := ""
 		if _together_at_home(id):
 			# A partner, or anypony in the same house as him: a lull ends the chat, she stays put.
-			if quiet > 90.0 or length > float(_patience[id]) * 2.0: _release(id)
+			if quiet > QUIET_SECONDS: _release(id)
 			continue
 		# Late hours halve her patience instead of ending the chat on its first reply.
 		var late := hours >= 22.0 or hours < 5.0
-		if quiet > 50.0: reason = "The player has gone quiet for a while."
+		# She chose to stay after an earlier goodbye prompt in this chat: no second one.
+		if entry.has("kept_on") and entry.get("kept_on") == entry.get("chat_since", null): continue
+		if quiet > QUIET_SECONDS: reason = "The player has gone quiet for a while."
 		elif late and length > maxf(LATE_MIN_CHAT_SECONDS, float(_patience[id]) * .5): reason = "It is late; bedtime is coming."
-		elif length > float(_patience[id]): reason = "You have been chatting a good while and may have other things to do today."
+		# No goodbye just for a chat running long (dev 2026-10-29): friends don't walk off mid-talk
+		# for an errand, and long, deep conversations must stay possible. Silence or bedtime only.
 		if reason != "" and request_farewell(id, reason):
 			_farewell_next_at = host._now() + FAREWELL_GAP_SECONDS
 			return

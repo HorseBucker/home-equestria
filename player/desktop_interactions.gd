@@ -222,7 +222,7 @@ func _begin_hoof(offer: Dictionary) -> bool:
 	if not _begin("hoof_hold", offer):
 		hoof.release(); return false
 	_hoof_anchor = camera.to_local(offer.point)
-	_target.physical_reaction.emit("hoofhold")
+	if not _target.has_meta("spa_client"): _target.physical_reaction.emit("hoofhold")   # spa care is not a hoof-hold
 	return true
 
 
@@ -297,6 +297,10 @@ func _physics_process(delta: float) -> void:
 		if _used:
 			var touch: Node = _target.get("touch_body")
 			if is_instance_valid(touch): touch.desktop_pet(str(current.region))
+		return
+	# A boop ends when his arm is back at his side (desktop_anon.gd times it), not by snapping back.
+	if _action == "boop":
+		if not is_instance_valid(_avatar) or not _avatar.is_busy() or _time >= 2.5: _finish()
 		return
 	if (_used and _time >= .4) or _time >= 1.0: _finish()
 
@@ -396,6 +400,14 @@ func _watch_finger() -> void:
 		_finger = Node3D.new(); _finger.name = "BoopFinger"; _finger.set_meta("boop_finger", true); add_child(_finger)
 	_finger.global_position = tip
 	if _target.get("action_gaze_target") != _finger: _target.set_action_gaze(_finger)
+	# The finger goes to her nose where it is now, and after contact pushes it in a little
+	# (dev 2026-10-29).
+	var boop: Node = _target.get("boop_node")
+	if not is_instance_valid(boop): return
+	var nose: Vector3 = boop.nose_world()
+	if _used and tip.distance_to(nose + boop.press_offset) < .02:
+		boop.press(Vector3(nose.x - camera.global_position.x, 0.0, nose.z - camera.global_position.z))
+	_avatar.update_action_target("boop", nose + boop.press_offset)
 
 func _finish() -> void:
 	if is_instance_valid(_target) and is_instance_valid(_finger) and _target.get("action_gaze_target") == _finger:
