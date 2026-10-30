@@ -144,9 +144,10 @@ func _spawn_player() -> void:
 		var freeze: Node = preload("res://world/ai/talk_freeze.gd").new()
 		freeze.name = "TalkFreeze"; host.add_child(freeze)
 		freeze.setup(host.director, host.get_node_or_null("ChatBox"), cam)
-	if DEV.enabled():
-		var console: Node = load("res://world/debug/command_console.gd").new()
-		console.name = "CommandConsole"; host.add_child(console); console.setup(host)
+	# Always made: it answers ` and Settings > Debug only while the developer tools are on
+	# (world/dev_tools.gd), so unlocking them in a player build works at once.
+	var console: Node = load("res://world/debug/command_console.gd").new()
+	console.name = "CommandConsole"; host.add_child(console); console.setup(host)
 	# --spectator [1-4]: a second, smoothed/third-person window for recording.
 	var args := preload("res://world/dev_tools.gd").user_args()
 	if "--spectator" in args:

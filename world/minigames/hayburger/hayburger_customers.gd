@@ -99,7 +99,7 @@ func set_working(value: bool) -> void:
 			visit.order_id = ""
 			_withdraw(visit)
 			if not _visitors.has(id): continue
-			if not _owned(visit) or _interrupted(visit.actor):
+			if not _owned(visit) or _interrupted(visit.actor, true):
 				_release(id, "Interaction took priority")
 			elif visit.phase != "entry":
 				_route(visit, "service", "SelfServePoint")
@@ -141,7 +141,7 @@ func can_serve(order_id: Variant) -> bool:
 		var visit: Dictionary = _visitors[id]
 		if visit.phase != "counter" or visit.self_service or visit.order_id != key: continue
 		return _owned(visit) and population.live.get(id, {}).get("actor") == visit.actor \
-			and not _interrupted(visit.actor) and _at_goal(visit)
+			and not _interrupted(visit.actor, true) and _at_goal(visit)
 	return false
 
 func served(order_id: Variant) -> void:
@@ -208,17 +208,20 @@ func _schedule_self_service() -> void:
 func _population() -> Node:
 	return _game.get("population") as Node if is_instance_valid(_game) else null
 
-func _interrupted(actor: Node3D) -> bool:
+## `visiting`: a customer already in the shop may talk with Anon; only a new one must be free of
+## talk. Answering a customer used to release her and cancel her order (player report 2026-10-30).
+func _interrupted(actor: Node3D, visiting := false) -> bool:
 	if not is_instance_valid(actor) or not actor.is_inside_tree(): return true
 	if actor.get("sleeping") == true or actor.get("motion_paused") == true: return true
 	if actor.get_meta("active_follow", false) or actor.get_meta("seating", false): return true
 	if actor.has_method("is_held") and actor.is_held(): return true
 	if actor.has_method("action_interruption_reason") and not str(actor.action_interruption_reason()).is_empty(): return true
 	if not is_instance_valid(_game): return true
-	if _game.has_method("_population_busy") and _game._population_busy(actor): return true
-	if is_instance_valid(actor.get("conversation_target")): return true
+	# _population_busy is mostly "in a chat with Anon" (director engaged()).
+	if not visiting and _game.has_method("_population_busy") and _game._population_busy(actor): return true
+	if not visiting and is_instance_valid(actor.get("conversation_target")): return true
 	var nav := actor.get_node_or_null("Navigator")
-	return nav == null or is_instance_valid(nav.get("_follow_target")) or is_instance_valid(nav.get("_conversation_target"))
+	return nav == null or is_instance_valid(nav.get("_follow_target")) or (not visiting and is_instance_valid(nav.get("_conversation_target")))
 
 func _eligible(id: String, actor: Node3D) -> bool:
 	return _eligibility_reason(id, actor).is_empty()
@@ -466,7 +469,7 @@ func _advance(id: String) -> void:
 	var population := _population()
 	if not _owned(visit) or not is_instance_valid(population) or population.live.get(id, {}).get("actor") != visit.actor:
 		_release(id, "Resident or navigation ownership changed"); return
-	if _interrupted(visit.actor): _release(id, "Player interaction or sleep took priority"); return
+	if _interrupted(visit.actor, true): _release(id, "Player interaction or sleep took priority"); return
 	if _clock >= float(visit.deadline):
 		if visit.phase == "counter": _leave(visit, "Counter wait expired")
 		else: _release(id, "Visit timed out")
@@ -553,7 +556,7 @@ func _release(id: String, reason: String) -> void:
 		visit.nav.wander_enabled = visit.previous_wander
 		visit.nav.command_speed_limit = visit.previous_speed
 		visit.nav.command_pace_target = visit.previous_pace
-		if visit.sat and visit.actor.get("sleeping") != true and not _interrupted(visit.actor): visit.actor.request_posture("stand")
+		if visit.sat and visit.actor.get("sleeping") != true and not _interrupted(visit.actor, true): visit.actor.request_posture("stand")
 		# Invalidate the living-world cached goal even when acquired/released within
 		# its observation interval; it must reissue the paused outing's route.
 		_reissue_life_goal(id)

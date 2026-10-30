@@ -4,7 +4,8 @@ const CATALOGUE := preload("res://world/population/pony_population_config.gd")
 const PLACEMENT := preload("res://world/navigation/roster_placement.gd")
 const SHUTDOWN := preload("res://world/shutdown_waits.gd")
 const OWNER := preload("res://player/desktop_action_owner.gd")
-const HELP := "spawn <pony name> — bring that pony nearby\nbits — set balance to 999999\nponese [syllables|letters] — switch the pony voice style (no word toggles)\nshow [tomorrow] — Trixie puts on a stage show at the schoolhouse now (or tomorrow at 17:00)\nhelp — show commands\nclear — clear output\nclose — close console"
+const DEV := preload("res://world/dev_tools.gd")
+const HELP := "spawn <pony name> — bring that pony nearby\nbits [amount] — add that many bits (no amount: set balance to 999999)\nnoclip — fly through walls and ground (again: walk)\nfly — fly with collisions (again: walk)\nunstuck — stand on the ground where you are\nhome — back to the Ponyville spawn\ntime <hour> — set the clock (0–24, e.g. time 7.5)\nponese [syllables|letters] — switch the pony voice style (no word toggles)\nshow [tomorrow] — Trixie puts on a stage show at the schoolhouse now (or tomorrow at 17:00)\nhelp — show commands\nclear — clear output\nclose — close console"
 var game: Node
 var player_body: Node
 var field: LineEdit
@@ -42,12 +43,17 @@ func setup(host: Node) -> void:
 		panel.size = Vector2(760, 380)
 		spatial.hide()
 	visible = false; _write(HELP)
+	# Settings > Debug runs commands here (world/ui/settings_page.gd _build_debug).
+	var settings := get_node_or_null("/root/Settings")
+	if settings != null: settings.set("debug_console", self)
 
 func _input(event: InputEvent) -> void:
 	if not event is InputEventKey: return
 	if spatial != null and visible and event.physical_keycode not in [KEY_QUOTELEFT, KEY_ESCAPE]:
 		spatial.send_key(event); get_viewport().set_input_as_handled(); return
 	if not event.pressed or event.echo: return
+	# Made in every build; it answers only while the developer tools are on (world/dev_tools.gd).
+	if not visible and not DEV.enabled(): return
 	if event.physical_keycode == KEY_QUOTELEFT:
 		if visible: close()
 		else:
@@ -77,6 +83,8 @@ func close() -> void:
 	_lock_owned = false; Input.mouse_mode = _mouse_before
 
 func _exit_tree() -> void:
+	var settings := get_node_or_null("/root/Settings")
+	if settings != null and settings.get("debug_console") == self: settings.set("debug_console", null)
 	if visible: close()
 	if is_instance_valid(spatial): spatial.queue_free()
 	# Release the threaded request even if the world closes during a summon.
@@ -121,15 +129,37 @@ func execute(text: String) -> String:
 		"clear": output.clear(); return ""
 		"close", "exit": close(); return ""
 		"bits":
-			if not argument.is_empty(): return "Usage: bits"
+			if not argument.is_empty() and not argument.is_valid_int(): return "Usage: bits [amount]"
 			if not is_instance_valid(game.inventory): return "Inventory is not ready."
 			var wallet: RefCounted = game.inventory.inventory
 			if wallet == null: return "Inventory is not ready."
+			if not argument.is_empty():
+				var amount := argument.to_int()
+				var added: bool = amount == 0 or (wallet.credit_bits(amount) if amount > 0 else wallet.debit_bits(-amount))
+				return ("Balance: %d" % int(wallet.bits)) if added else "Could not update balance: " + str(wallet.last_error)
 			var difference: int = 999999 - int(wallet.bits)
 			var ok: bool = difference == 0 or (wallet.credit_bits(difference) if difference > 0 else wallet.debit_bits(-difference))
 			return "Balance: 999999" if ok else "Could not update balance: " + str(wallet.last_error)
 		"ponese":
 			return _ponese_style(argument.to_lower())
+		"noclip", "fly":
+			return _fly(command == "noclip")
+		"unstuck":
+			var at := _body_position()
+			if not at.is_finite(): return "No player body."
+			var ground := WorldTerrain.instance.height_at(at) if WorldTerrain.instance != null else NAN
+			if not is_finite(ground): return _place(game.spawn.global_position, "Back at the spawn (no ground found here).")
+			return _place(Vector3(at.x, ground + 0.5, at.z), "On the ground.")
+		"home":
+			return _place(game.spawn.global_position, "Back at the Ponyville spawn.")
+		"time":
+			if not argument.is_valid_float(): return "Usage: time <hour>, e.g. time 7.5"
+			var hour := float(argument)
+			if hour < 0.0 or hour > 24.0: return "Hours run from 0 to 24."
+			var clock := get_node_or_null("/root/TimeOfDay")
+			if clock == null: return "The clock is not running."
+			clock.set("hours", fmod(hour, 24.0))
+			return "Time: " + str(clock.call("time_string"))
 		"show":
 			var runtime: Node = game.get_node_or_null("TrixieShow")
 			if runtime == null: return "The show runtime is not loaded."
@@ -144,6 +174,34 @@ func execute(text: String) -> String:
 			_busy = false
 			return result
 	return "Unknown command. Type help."
+
+## Debug flight on the desktop rig (player/desktop_player.gd \\ and Shift+\\); VR flies without noclip.
+func _fly(through: bool) -> String:
+	if not is_instance_valid(player_body) or not "flying" in player_body: return "No player body."
+	if "noclip" in player_body:
+		var on: bool = not (player_body.flying and player_body.noclip == through)
+		player_body.flying = on; player_body.noclip = on and through
+	else:
+		if through: return "Noclip is desktop only; try fly."
+		player_body.flying = not player_body.flying
+	if not player_body.flying and "velocity" in player_body: player_body.velocity = Vector3.ZERO
+	if not player_body.flying: return "Walking."
+	return "Noclip on: Space up, Ctrl down, Shift faster." if through else "Flying: Space up, Ctrl down, Shift faster."
+
+
+func _body_position() -> Vector3:
+	return (player_body as Node3D).global_position if is_instance_valid(player_body) and player_body is Node3D else Vector3(NAN, NAN, NAN)
+
+
+func _place(at: Vector3, reply: String) -> String:
+	if not is_instance_valid(player_body) or not player_body is Node3D: return "No player body."
+	if player_body.has_method("teleport"): player_body.teleport(at)
+	else:
+		if player_body.get("seat") != null and is_instance_valid(player_body.get("seat")) and player_body.has_method("stand_up"): player_body.stand_up()
+		(player_body as Node3D).global_position = at
+		if "velocity" in player_body: player_body.velocity = Vector3.ZERO
+	return reply
+
 
 ## Ponese A/B (world/ai/chatter_voice.gd): same setting as Settings > Audio > Ponese style.
 func _ponese_style(choice: String) -> String:

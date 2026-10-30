@@ -94,6 +94,9 @@ const DEFAULTS := {
 	# A quiet check for a newer signed release when a world opens, every 6 hours at most
 	# (world/update/updater.gd, dev 2026-10-28).
 	"updates/check": true,
+	# Settings > Updates pressed five times shows the Debug tab and opens the developer tools in
+	# a player build too (world/dev_tools.gd, dev 2026-10-30).
+	"debug/unlocked": false,
 }
 ## Validation and display. choice: [value, label] pairs; int/float: min, max, step, fmt;
 ## bool: [off label, on label]. "note" is appended to the row label ("restart" etc.).
@@ -173,6 +176,7 @@ const SPECS := {
 	"reading/font": {"type": "choice", "options": [["literata", "Literata (book serif)"], ["atkinson", "Atkinson Hyperlegible"], ["dyslexic", "OpenDyslexic"], ["celestia", "Celestia (Equestrian)"]]},
 	"reading/size": {"type": "int", "min": 16, "max": 44, "step": 2, "fmt": "%d px"},
 	"updates/check": {"type": "bool", "labels": ["Off", "On"]},
+	"debug/unlocked": {"type": "bool", "labels": ["Off", "On"]},
 }
 ## Actions offered for rebinding (project.godot [input]); debug actions are left out.
 const BINDABLE := [["Move forward", "move_forward"], ["Move back", "move_back"], ["Move left", "move_left"],
@@ -205,6 +209,8 @@ const TABS := [
 	["Reading", [["Paper", "reading/paper"], ["Font", "reading/font"], ["Text size", "reading/size"]]],
 	["Mods", []],
 	["Updates", [["Check for new versions", "updates/check"]]],
+	# Hidden until unlocked (world/ui/settings_page.gd _build_debug).
+	["Debug", []],
 ]
 ## Shadow tiers the "Shadows" row selects on top of the quality preset (Quality.user_overrides).
 const SHADOW_TIERS := {
@@ -249,13 +255,16 @@ func _launch_mode() -> String:
 var _default_bindings: Dictionary = {}   # action -> physical keycode from project.godot
 ## Last message from a settings action (height measurement etc.), shown by the page.
 var message := ""
+## The world's command console (world/debug/command_console.gd) for Settings > Debug; null on the
+## title screen.
+var debug_console: Node
 
 
 ## The packs mount inside _init, after the engine read this script from the base pack, so a
 ## patch pack's copy of it would never run: Quality, created next, hands the node the mounted
 ## copy when it carries REVISION (autoload/quality.gd _adopt_patched_settings). That copy's
 ## _init must not mount the packs or boot the mods again (PACKS_MOUNTED).
-const REVISION := 5
+const REVISION := 6
 const PACKS_MOUNTED := &"home_equestria_packs_mounted"
 
 

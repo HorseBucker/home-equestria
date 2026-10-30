@@ -75,6 +75,11 @@ const HIND_REACH := 0.72
 ## Arc height over the straight line, x size: clears the pad's edge (0.62 m) halfway along.
 const HOP_ARC := 0.45
 const CLIMB_PAUSE := 0.6
+## Stalled this near the table's foot spot, she hops up from where she is.
+const CLIMB_REACH := 1.4
+## Stalled this near any other station for STALL_SECONDS, she takes it from there.
+const STALL_REACH := 1.2
+const STALL_SECONDS := 2.5
 ## Lying down or standing up on the table: settled within this, or she leaves.
 const SETTLE_TIMEOUT := 8.0
 ## Wings (plan 3.C).
@@ -389,12 +394,14 @@ func _hard_interrupt(actor: Node3D) -> String:
 
 
 ## Reasons that only pause her (she waits and resumes): talking, petting, a paused body.
-func _soft_busy(actor: Node3D) -> bool:
+## `talking` false: a client already visiting chats with Anon without her visit stopping; talk
+## used to freeze the bath, filing and massage until the chat ended (player report 2026-10-30).
+func _soft_busy(actor: Node3D, talking := true) -> bool:
 	if actor.get("motion_paused") == true: return true
-	if is_instance_valid(actor.get("conversation_target")): return true
-	if is_instance_valid(_game) and _game.has_method("_population_busy") and _game._population_busy(actor): return true
+	if talking and is_instance_valid(actor.get("conversation_target")): return true
+	if talking and is_instance_valid(_game) and _game.has_method("_population_busy") and _game._population_busy(actor): return true
 	var nav := actor.get_node_or_null("Navigator")
-	return nav != null and is_instance_valid(nav.get("_conversation_target"))
+	return talking and nav != null and is_instance_valid(nav.get("_conversation_target"))
 
 
 ## Hayburger's eligibility, copied: free, loaded, awake, not held/following/talking/in a group.
@@ -655,6 +662,14 @@ func _arrived(visit: Dictionary, precise: bool) -> bool:
 	return _clock >= float(visit.settle_until) and visit.nav.state != visit.nav.State.MOVING
 
 
+## Stopped short of a station (a grown mare where only a filly fits, a neighbour in the way) and
+## not moving for STALL_SECONDS: she takes it from there instead of waiting out TRAVEL_TIMEOUT and
+## leaving, which ended in the out-of-view placement players saw as ponies vanishing near the door
+## (player board #42).
+func _stalled_near(visit: Dictionary, reach := STALL_REACH) -> bool:
+	return _at_position(visit, visit.goal, reach) and _clock - float(visit.progress_at) > STALL_SECONDS
+
+
 func _face(visit: Dictionary, direction: Vector3) -> void:
 	visit.nav.stay()
 	if visit.nav.get("face_point") is Vector3: visit.nav.face_point = visit.actor.global_position + direction * 3.0
@@ -728,8 +743,8 @@ func _advance(id: String) -> void:
 		_release(id, "Resident or navigation ownership changed"); return
 	var hard := _hard_interrupt(visit.actor)
 	if not hard.is_empty(): _release(id, "Interrupted: " + hard); return
-	if _soft_busy(visit.actor):
-		# Talking or being petted pauses her; every clock waits with her.
+	if _soft_busy(visit.actor, false):
+		# Being petted pauses her; every clock waits with her.
 		for key: String in ["deadline", "patience", "progress_at", "until"]: visit[key] = float(visit[key]) + CHECK_SECONDS
 		return
 	var leaving: bool = visit.phase in ["to_door_in", "to_door_out"]
@@ -755,21 +770,25 @@ func _advance(id: String) -> void:
 		"lobby":
 			if _clock >= float(visit.until): _next_station(visit)
 		"to_bath":
-			if _arrived(visit, true):
+			if _arrived(visit, true) or _stalled_near(visit):
 				visit.phase = "bath"; visit.since = _clock
 				_face(visit, facing(marker("SPA_BATH_%d" % (int(visit.slot) + 1))))
 				_relax(visit, 0.2)
 		"bath":
 			_tick_filing(visit)
 		"to_line":
-			if _arrived(visit, true):
+			if _arrived(visit, true) or _stalled_near(visit):
 				visit.phase = "line"
 				if visit.seat != null: _sit_on_seat(visit)
 				else: _face(visit, facing(marker("SPA_RUB_LINE_%d" % (int(visit.line_index) + 1))))
 		"line":
 			_keep_sitting(visit)
 		"to_rub":
-			if _arrived(visit, true):
+			# A grown mare cannot squeeze onto the floor spot at the table's foot and stalled a metre
+			# short until she gave up (player board #42: fillies got on the table, grown ponies did
+			# not). Stopped close enough, she hops up from where she stands; the arc lands her on
+			# the pad all the same.
+			if _arrived(visit, true) or _stalled_near(visit, CLIMB_REACH):
 				visit.nav.stay()
 				_face(visit, facing(marker("SPA_RUB_SPOT")))
 				visit.phase = "rub_climb"; visit.since = _clock
@@ -789,7 +808,7 @@ func _advance(id: String) -> void:
 			else:
 				_wait_on_bench(visit, "lobby")
 		"to_wing":
-			if _arrived(visit, true):
+			if _arrived(visit, true) or _stalled_near(visit):
 				visit.phase = "wing_sit"; visit.since = _clock
 				_face(visit, facing(marker("SPA_WING_CUSHION")))
 		"wing_sit":
@@ -1056,7 +1075,21 @@ func _tick_filing(visit: Dictionary) -> void:
 	var player := _player_point()
 	var gap: Vector3 = player - (visit.actor as Node3D).global_position
 	if player.is_finite() and Vector2(gap.x, gap.z).length() <= PLAYER_NEAR:
-		_raise(visit, int(visit.file_side))
+		if _raise(visit, int(visit.file_side)):
+			visit.erase("raise_blocked")
+			return
+		# Player board #42: "Sometimes ponies won't raise their other hoof". A filed hoof going
+		# down finishes its release only on the solver tier; one left half-released holds the
+		# leg slot and every later raise() is refused. After a second of refusals the hold is
+		# cleared, so the next tick lifts the other hoof.
+		if not visit.has("raise_blocked"): visit.raise_blocked = _clock
+		var hold: Variant = visit.actor.get("hoof_hold")
+		if _clock - float(visit.raise_blocked) > 1.0 and hold != null and int(hold.leg_index) >= 0 and not hold.active():
+			var feet: Variant = visit.actor.get("feet")
+			if feet is Array and int(hold.leg_index) < (feet as Array).size():
+				feet[int(hold.leg_index)].planted = false; feet[int(hold.leg_index)].offset = Vector3.ZERO
+			hold.reset()
+			visit.raise_blocked = _clock
 
 
 ## Hooves ready for the file near `point`: a raised front hoof at the footbath, or the back hoof
@@ -1165,8 +1198,14 @@ func _tick_lying(visit: Dictionary) -> void:
 		visit.phase = "rub"; visit.since = _clock
 		visit.stage = "file"
 		_relax(visit, 0.3)
-	elif _clock - float(visit.since) > SETTLE_TIMEOUT:
-		_leave(visit, "Could not lie down on the table")
+		return
+	# The first request right after the hop can be refused (no floor contact yet on the pad, still
+	# settling): ask again until she is down. Asked only once, grown mares gave up on the table
+	# and left (player board #42: "Fillies are able to get on the table. But grown ponies aren't").
+	var status: Dictionary = visit.actor.posture_status()
+	if str(status.get("requested", "")) != "lie_down": visit.actor.request_posture("lie_down")
+	if _clock - float(visit.since) > SETTLE_TIMEOUT:
+		_leave(visit, "Could not lie down on the table (%s)" % str(visit.actor.posture_status().get("refusal", "")))
 
 
 ## Lying still; a chat or a pet that sat her up is followed by lying down again.

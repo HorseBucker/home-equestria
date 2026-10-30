@@ -57,6 +57,10 @@ var _tab_title: Label
 var _tab_icon: Control
 var _row_idle: StyleBoxFlat
 var _row_hover: StyleBoxFlat
+## Settings > Debug's sidebar button, hidden until the Updates tab is pressed five times in a row.
+var _debug_button: Button
+var _updates_presses := 0
+var _updates_pressed_at := -10.0
 
 
 ## `size` is the page's full size; `back_text` names the host's button ("" for none).
@@ -138,6 +142,7 @@ func _fill_list(t: int, list: VBoxContainer) -> void:
 		_lighting_controls.setup(font_size, _redraw)
 	if str(tab[0]) == "Mods": _build_mods(list)
 	if str(tab[0]) == "Updates": _build_updates.call_deferred(list)
+	if str(tab[0]) == "Debug": _build_debug(list)
 	if str(tab[0]) == "VR comfort":
 		_note(list, "A comfort vignette is not available yet.")
 	if str(tab[0]) == "Controls":
@@ -197,7 +202,7 @@ func _build_sidebar(body: HBoxContainer, width: float) -> void:
 		var known := false
 		for group: Array in GROUPS:
 			for entry: Array in group[1]: known = known or str(entry[0]) == name
-		if not known: rest.append([name, "sparkle"])
+		if not known: rest.append([name, "gear" if name == "Debug" else "sparkle"])
 	if not rest.is_empty(): groups.append(["More", rest])
 	for group: Array in groups:
 		var caption := STYLE.label(str(group[0]).to_upper(), "Faint", maxi(12, font_size - 7))
@@ -218,6 +223,9 @@ func _build_sidebar(body: HBoxContainer, width: float) -> void:
 			button.set_meta("icon_kind", str(entry[1]))
 			button.set_meta("no_sparkle", true)
 			_tabs[index] = button; _tab_order.append(button)
+			if str(entry[0]) == "Updates": button.pressed.connect(_on_updates_pressed)
+			if str(entry[0]) == "Debug":
+				_debug_button = button; button.visible = Settings.get_value("debug/unlocked") == true
 
 
 func _tab_index(title: String) -> int:
@@ -480,6 +488,62 @@ func _build_updates(list: VBoxContainer) -> void:
 	updater.attach(list, Callable(), font_size)
 	_button(list, "Check for updates now", func() -> void: updater.check()).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	updater.changed.connect(_redraw)
+
+
+## Five presses of the Updates tab, each within 1.5 s of the last, show the Debug tab and turn the
+## developer tools on at once (world/dev_tools.gd unlocked(), dev 2026-10-30).
+func _on_updates_pressed() -> void:
+	var now := Time.get_ticks_msec() * 0.001
+	_updates_presses = _updates_presses + 1 if now - _updates_pressed_at < 1.5 else 1
+	_updates_pressed_at = now
+	if _updates_presses < 5 or Settings.get_value("debug/unlocked") == true: return
+	Settings.set_value("debug/unlocked", true)
+	Settings.message = "Debug tab enabled."
+	if is_instance_valid(_debug_button): _debug_button.show()
+	show_tab.call_deferred("Debug")
+
+
+## Settings > Debug: buttons and a command line for the world's console (world/debug/command_console.gd).
+func _build_debug(list: VBoxContainer) -> void:
+	_note(list, "Developer tools. Also on: the ` console, debug fly (\\), noclip (Shift+\\) and the [ ] time skips. Commands act on the open world.")
+	var quick := [["Noclip on / off", "noclip"], ["Fly on / off", "fly"], ["Unstuck (stand on the ground here)", "unstuck"],
+		["Back to the Ponyville spawn", "home"], ["Add 1000 bits", "bits 1000"], ["Bits to 999999", "bits"],
+		["Morning (7:00)", "time 7"], ["Evening (19:00)", "time 19"], ["Night (23:00)", "time 23"]]
+	for entry: Array in quick:
+		var button := _button(list, str(entry[0]), _debug_run.bind(str(entry[1])))
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL; button.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_debug_field(list, "Pony name, e.g. rainbowdash", "Spawn pony", func(text: String) -> String: return "spawn " + text)
+	_debug_field(list, "Any command: help, show, ponese …", "Run", func(text: String) -> String: return text)
+	var hide_button := _button(list, "Hide the Debug tab", func() -> void:
+		Settings.set_value("debug/unlocked", false)
+		Settings.message = "Debug tab hidden. Press Updates five times to bring it back."
+		if is_instance_valid(_debug_button): _debug_button.hide()
+		show_tab("Updates"))
+	hide_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+
+func _debug_field(list: VBoxContainer, hint: String, caption: String, command: Callable) -> void:
+	var line := HBoxContainer.new(); line.add_theme_constant_override("separation", 6); list.add_child(line)
+	var field := LineEdit.new(); field.placeholder_text = hint; field.max_length = 160
+	field.size_flags_horizontal = Control.SIZE_EXPAND_FILL; field.add_theme_font_size_override("font_size", font_size - 1)
+	field.focus_entered.connect(_redraw); line.add_child(field)
+	var run := func() -> void:
+		var text := field.text.strip_edges()
+		if text.is_empty(): return
+		field.clear(); _debug_run(str(command.call(text)))
+	field.text_submitted.connect(func(_text: String) -> void: run.call())
+	_button(line, caption, run)
+
+
+func _debug_run(text: String) -> void:
+	var console: Node = Settings.debug_console
+	if not is_instance_valid(console): Settings.message = "Open a world first: commands act on it."; refresh(); return
+	if console.get("_busy") == true: Settings.message = "A spawn is still loading."; refresh(); return
+	Settings.message = "> " + text; refresh()
+	var reply := str(await console.execute(text))
+	if not is_inside_tree(): return
+	Settings.message = reply if not reply.is_empty() else "Done."
+	refresh()
 
 
 func _mod_text(pack: Dictionary, mods: Array) -> String:

@@ -153,7 +153,7 @@ func context_for(pony: String, present: Array, cue: String, skip_player_chat := 
 		var thought := str(threads[i].text)
 		if mind.size() < 4 and not mind.any(func(seen: String) -> bool: return STORE.similar(seen, thought)): mind.insert(0, thought)
 	if not mind.is_empty():
-		parts.append("ON YOUR MIND\n" + "\n".join(mind.map(func(thought: String) -> String: return "- " + thought)))
+		parts.append("ON YOUR MIND (anything Anon turned down is settled)\n" + "\n".join(mind.map(func(thought: String) -> String: return "- " + thought)))
 	var feelings: PackedStringArray = []
 	for other in present:
 		var id := str(other)
@@ -461,11 +461,28 @@ static func _block_finished(body: Array) -> bool:
 ## NEXT once said "make it happen in this reply or the next" and weak models invented off-screen
 ## events; DONE closes threads (player thread report 2026-10-29).
 const BRAIN_INSTRUCTION := """DIRECTOR NOTES (required this turn): start your reply with a private <brain>...</brain> block, plain text, at most 60 words, nobody hears it:
-WANT pony_id: what this pony wants right now, apart from Anon (one line per pony present)
+WANT pony_id: what this pony wants right now, apart from Anon, never something Anon turned down (one line per pony present)
 ELSEWHERE: one thing happening off-screen in town that ponies might hear about later
 NEXT: one likely thing that could happen soon, grounded in who and what is here now; never an event about a pony or thing not present
-DONE: what is settled, dropped or no longer matters (optional)
+DONE: what is settled, dropped, turned down by Anon or no longer matters (optional)
 Setbacks must be fair: foreshadowed or the result of earlier facts. After </brain>, write the normal reply."""
+
+## Anon turning down what she asked for settles it at once: her wants that share two or more words with
+## her last line plus his answer close. A want otherwise stays ON YOUR MIND for a day unless a notes
+## turn writes DONE, and Twilight asked him to draw a helicopter again after every no (player report
+## 2026-10-30). A wrong close only drops a want; the next notes turn can open it again.
+const DECLINE_RE := "(?i)\\b(no|nope|nah|refuse|won'?t|not (going to|gonna|doing)|stop (asking|it)|quit asking|forget (it|about)|drop it|enough|never)\\b"
+func declined(pony: String, asked: String, answer: String) -> int:
+	if not is_open() or asked.strip_edges().is_empty(): return 0
+	if RegEx.create_from_string(DECLINE_RE).search(answer) == null: return 0
+	var said := STORE.thread_words(asked + " " + answer)
+	var closed := 0
+	for thread: Dictionary in store.open_threads(pony, 12):
+		var shared := 0
+		for word: String in STORE.thread_words(str(thread.text)):
+			if said.has(word): shared += 1
+		if shared >= 2: store.close_thread(int(thread.id)); closed += 1
+	return closed
 
 ## Strips story notes from a reply, storing them. Returns the cleaned reply.
 func take_notes(text: String, speaker: String, present: Array) -> String:

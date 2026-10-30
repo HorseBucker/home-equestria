@@ -1064,7 +1064,8 @@ func _keep_partner_in_view(delta: float) -> void:
 	if not is_instance_valid(conversation_target) or posture == null or not posture.active(): return
 	# A requested rest or close contact is not permission to stand just to face a voice.
 	if posture.intentional_rest or not _interaction.is_empty() or get_meta("affection_active",false): return
-	if sleeping or _held or has_meta("seated") or velocity.length() > 0.12: return
+	# A spa client stays on the bath bench or massage table while Anon talks to her (player report 2026-10-30).
+	if sleeping or _held or has_meta("seated") or has_meta("spa_client") or velocity.length() > 0.12: return
 	var toward: Vector3 = conversation_target.global_position - global_position
 	toward.y = 0.0
 	var forward: Vector3 = -global_basis.z

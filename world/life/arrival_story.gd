@@ -829,8 +829,20 @@ func _to_library() -> void:
 	if not is_instance_valid(_twilight):
 		if not _spawning: _bring_twilight(_twilight_spawn_hint(Vector3(-4.0, 0.0, -4.0)))
 		return
-	if _recover_follower(): return
 	var home := _library()
+	# Walking off outdoors instead of following her home turns the escort down (player board
+	# #39: she would not stop following and reminding about the bed). The guest bed stays
+	# offered and the opening ends here, as it does inside the library.
+	if home != null and _flat(_twilight.global_position, _feet()) > 12.0 and HOUSE.at(get_tree(), _feet()) == null \
+			and not home.contains(_twilight.global_position):
+		if not bool(data.get("shelter_explained", false)):
+			data.shelter_explained = true
+			game.world_context.record("arrival", "Twilight teleported the newcomer out of the Everfree to Ponyville and offered her guest bed at Golden Oak Library for as long as they need. They chose to look around on their own first; the bed is theirs whenever they want it.", [TWILIGHT], [TWILIGHT])
+			_save()
+		if _encounters() != null: _encounters().complete(RESCUE)
+		_finish()
+		return
+	if _recover_follower(): return
 	if home == null: return
 	if home.contains(_feet()) and home.contains(_twilight.global_position):
 		var executor := _exec()

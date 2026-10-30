@@ -569,6 +569,12 @@ func handle_text(text: String) -> void:
 		chatting["chat_last"] = _now()
 	var entry: Dictionary = characters[id]
 	var history: Array = entry.history
+	var memory := story()
+	if memory != null and members.size() < 2:
+		var asked := ""
+		for i in range(history.size() - 1, -1, -1):
+			if str(history[i].get("role", "")) == "assistant": asked = str(history[i].get("content", "")); break
+		memory.declined(id, asked, text)
 	if members.size() < 2:
 		history.append({"role": "user", "content": gap_note + text})
 		# Multi-sentence replies play as beats; mark the line as already in her history

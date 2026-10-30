@@ -63,6 +63,11 @@ func run() -> void:
 	check(food.size() > 2, "merged data keeps the game's entries (%d)" % food.size())
 	var script := load(EXTENDED) as Script
 	check(script != null and script.get_script_constant_map().get("MODDED") == true and script.get_base_script() != null, "the game script path now loads the mod's extension")
+	# Player board #40: a script compiled after the extension that preload()s the game script.
+	var later_script := GDScript.new()
+	later_script.source_code = "extends RefCounted\nconst X := preload(\"%s\")\nfunc modded() -> bool:\n\tvar s: Script = X\n\treturn s.get_script_constant_map().get(\"MODDED\", false)\n" % EXTENDED
+	var compiled := later_script.reload()
+	check(compiled == OK and later_script.can_instantiate() and later_script.new().modded(), "a later preload() of the extended game script parses and gets the mod's subclass (%s)" % error_string(compiled))
 	check(LOADER.deep_merge([1], [2]) == [1, 2] and LOADER.deep_merge({"a": {"b": 1}}, {"a": {"c": 2}}) == {"a": {"b": 1, "c": 2}}, "lists append, objects merge")
 	LOADER.set_enabled("dinnerbone.pck", false)
 	check("dinnerbone.pck" in LOADER.disabled_files(), "a switch is saved")

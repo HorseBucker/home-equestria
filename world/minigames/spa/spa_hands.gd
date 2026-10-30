@@ -26,7 +26,8 @@ const BLADE_B := Vector3(0, 0, -0.20)
 const FILE_CONTACT := 0.04
 const FILE_ID := "hoof-file"
 const FILE_HOME_SECONDS := 1.0
-## A hand on her leg: contact this far past her leg radius; pressure from 0 to PRESS_DEPTH inside.
+## A hand on her leg: contact this far past her leg radius; pressure rises from 0 there to full
+## PRESS_DEPTH inside.
 const RUB_CONTACT := 0.03
 const PRESS_DEPTH := 0.04
 const WING_CONTACT := 0.06
@@ -47,6 +48,7 @@ const BUZZ_RATE := 8.0
 const SOUNDS := {
 	"rasp": ["res://world/audio/designed/foley/paper_01.wav", "res://world/audio/designed/foley/paper_02.wav", "res://world/audio/designed/foley/paper_03.wav"],
 	"cloth": ["res://world/audio/designed/foley/cloth_01.wav", "res://world/audio/designed/foley/cloth_02.wav", "res://world/audio/designed/foley/cloth_03.wav"],
+	"rub": [],
 	"coin": ["res://world/audio/designed/foley/coin_01.wav"],
 	"bell": ["res://world/inventory/assets/deposit.wav"],
 	"pluck": ["res://world/audio/designed/foley/select_01.wav"],
@@ -299,7 +301,9 @@ func _rub_contact(side: String, palm: Vector3, delta: float) -> float:
 		var closest: Vector3 = on.point
 		var gap := palm.distance_to(closest) - float(on.radius)
 		if gap > RUB_CONTACT: continue
-		var pressure := clampf(-gap / PRESS_DEPTH, 0.0, 1.0)
+		# Pressure builds from first contact, not only past her leg's surface: the palm point sits
+		# inside the hand, which stops at her skin, so the massage stayed at 0% in VR (player board #43).
+		var pressure := clampf((RUB_CONTACT - gap) / (RUB_CONTACT + PRESS_DEPTH), 0.0, 1.0)
 		# The detector measures the tracked palm, not the contact on her leg: a held hoof that shakes
 		# (a filly's flips at its joint limit, a rotation) is not the hand rubbing fast.
 		_rub_feed(side, target.id, palm, pressure, (closest - palm).normalized() * PRESS_DEPTH * pressure, delta, "rub")
@@ -335,8 +339,8 @@ func _rub_feed(side: String, id: String, point: Vector3, pressure: float, push: 
 		_buzz(side, 0.12 + 0.35 * pressure, 0.05)
 	_sound_clock[side] = float(_sound_clock.get(side, 0.0)) - delta
 	if detector.in_pass() and float(_sound_clock[side]) <= 0.0:
-		_sound_clock[side] = 1.3
-		_play("cloth", point, 0.8, -18.0 - 6.0 * detector.pass_ratio())
+		_sound_clock[side] = 0.85
+		_play("rub", point, 1.0, -20.0 - 4.0 * detector.pass_ratio())
 
 
 ## A hand on her open wing: slow massage (the same slow-rub rule) and base-to-tip preening.
@@ -691,6 +695,13 @@ func _buzz(side: String, amplitude: float, seconds: float) -> void:
 func _play(kind: String, at: Vector3, pitch: float, volume: float) -> void:
 	var player: AudioStreamPlayer3D = _players.get(kind)
 	if player == null: return
+	if kind == "rub":
+		player.stream = _rub_sound()
+		player.global_position = at
+		player.pitch_scale = pitch * randf_range(0.9, 1.1)
+		player.volume_db = volume
+		player.play()
+		return
 	var paths: Array = SOUNDS[kind]
 	var path: String = paths[randi() % paths.size()]
 	if not ResourceLoader.exists(path): return
@@ -699,6 +710,32 @@ func _play(kind: String, at: Vector3, pitch: float, volume: float) -> void:
 	player.pitch_scale = pitch * randf_range(0.95, 1.05)
 	player.volume_db = volume
 	player.play()
+
+
+## The massage: a soft, low brush of a palm over a coat, made once here. The crinkly cloth foley
+## with its sharp clicks sounded like crushing a plastic bottle (player board #42).
+static var _rub_stream: AudioStreamWAV
+static func _rub_sound() -> AudioStreamWAV:
+	if _rub_stream != null: return _rub_stream
+	var rate := 22050
+	var count := int(rate * 0.9)
+	var rng := RandomNumberGenerator.new(); rng.seed = 4242
+	var data := PackedByteArray(); data.resize(count * 2)
+	var low := 0.0
+	var lower := 0.0
+	for i in count:
+		# White noise through two one-pole low passes (a dull hush, no clicks), under a slow
+		# swell-and-fade envelope.
+		low += 0.03 * (rng.randf_range(-1.0, 1.0) - low)
+		lower += 0.12 * (low - lower)
+		var t := float(i) / float(count)
+		var envelope := pow(sin(PI * t), 1.5)
+		data.encode_s16(i * 2, int(clampf(lower * envelope * 5.0, -1.0, 1.0) * 26000.0))
+	_rub_stream = AudioStreamWAV.new()
+	_rub_stream.format = AudioStreamWAV.FORMAT_16_BITS
+	_rub_stream.mix_rate = rate
+	_rub_stream.data = data
+	return _rub_stream
 
 
 func _on_paid(_id: String, amount: int, at: Vector3, _what: String) -> void:

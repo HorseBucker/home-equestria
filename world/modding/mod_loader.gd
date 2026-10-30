@@ -214,7 +214,22 @@ static func deep_merge(base: Variant, patch: Variant) -> Variant:
 ## so everything that loads the game script afterwards gets the mod's subclass. Two mods extending
 ## one script chain in load order. Scripts already loaded before boot() (Settings' own preloads,
 ## XR tools) cannot be extended.
+##
+## A plain take_over_path() left the subclass named after the mod's file while the parser read
+## the game's file for that path, so every later `preload()` of the game script failed to parse
+## (player board #40). Instead the game script below is copied to BASES (its class_name line
+## blanked), the mod's source is compiled at the game path extending that copy, and preloads find
+## the class they expect. A mod script without source text, or a base with a global class_name
+## kept only as binary tokens, falls back to the plain take-over. Relative paths in an extending
+## script resolve against the game path.
+const BASES := "user://mods/.bases"
+## The resource cache does not own what it lists: an extension nothing references is freed and
+## the next load() reads the game script from disk again.
+static var extensions: Array[Script] = []
+
 static func apply_extensions(list: Array) -> void:
+	var standing := {}   # game path -> source text compiled there by an earlier extension
+	var count := 0
 	for mod: Dictionary in list:
 		for path: String in mod.extends:
 			var script := load(path) as Script
@@ -222,8 +237,66 @@ static func apply_extensions(list: Array) -> void:
 			if base == null or base.resource_path.is_empty():
 				push_warning("[mods] %s: %s does not extend a game script" % [mod.id, path]); continue
 			var target := base.resource_path
-			script.take_over_path(target)
+			var compiled := _compile_at(script, base, target, standing, count)
+			count += 1
+			if compiled.is_empty():
+				script.take_over_path(target)
+				extensions.append(script)
+			else:
+				standing[target] = compiled
+				extensions.append(load(target))
 			print("[mods] %s extends %s" % [mod.id, target])
+
+## The mod's source compiled at `target` over a copy of what stands there now; its source text,
+## or "" when this cannot be done (the caller takes the path over plainly).
+static func _compile_at(script: Script, base: Script, target: String, standing: Dictionary, index: int) -> String:
+	var text := script.source_code
+	if text.is_empty(): return ""
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(BASES))
+	var copy := ""
+	if standing.has(target):
+		copy = BASES.path_join("%d.gd" % index)
+		_write(copy, standing[target], PackedByteArray())
+	elif FileAccess.file_exists(target):
+		copy = BASES.path_join("%d.gd" % index)
+		_write(copy, FileAccess.get_file_as_string(target), PackedByteArray())
+	elif FileAccess.file_exists(target.get_basename() + ".gdc") and base.get_global_name() == &"":
+		# Exported game scripts are binary tokens; with no class_name the bytes copy as they are.
+		copy = BASES.path_join("%d.gdc" % index)
+		_write(copy, "", FileAccess.get_file_as_bytes(target.get_basename() + ".gdc"))
+	if copy.is_empty(): return ""
+	var head := RegEx.create_from_string("(?m)^extends\\s+[\"']" + _escape(target) + "[\"']")
+	if head.search(text) == null: return ""
+	text = head.sub(text, 'extends "%s"' % copy)
+	# Loaded from a file first so GDScript's own cache holds it; taking over the path then moves
+	# that cache entry onto the game path (a new GDScript() would leave the game script there),
+	# and the reload compiles it under the game path's class name.
+	var own := BASES.path_join("%d_extension.gd" % index)
+	_write(own, text, PackedByteArray(), false)
+	var sub := load(own) as GDScript
+	if sub == null: return ""
+	sub.take_over_path(target)
+	if sub.reload() != OK:
+		push_warning("[mods] %s did not compile over its game script; plain take-over instead" % script.resource_path)
+		return ""
+	return text
+
+static func _write(path: String, text: String, bytes: PackedByteArray, base := true) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file == null: return
+	if not base:
+		file.store_string(text)
+	elif bytes.is_empty():
+		# A copy must not claim the game script's global class name.
+		file.store_string(RegEx.create_from_string("(?m)^class_name\\s+\\w+\\s*").sub(text, "", true))
+	else:
+		file.store_buffer(bytes)
+	file.close()
+
+static func _escape(text: String) -> String:
+	var out := ""
+	for c in text: out += ("\\" + c) if c in ".^$*+?()[]{}|\\/" else c
+	return out
 
 static func _files_under(dir: String) -> PackedStringArray:
 	var out := PackedStringArray()

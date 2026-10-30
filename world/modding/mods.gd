@@ -110,10 +110,14 @@ func data_folder(id: String) -> String:
 
 
 func _on_node_added(node: Node) -> void:
+	# A node added, removed and added again before it is ready would be connected twice
+	# (player board #41: "Signal 'ready' is already connected").
 	if _is_game(node):
-		node.ready.connect(_on_game_ready.bind(node), CONNECT_ONE_SHOT)
+		var game_ready := _on_game_ready.bind(node)
+		if not node.ready.is_connected(game_ready): node.ready.connect(game_ready, CONNECT_ONE_SHOT)
 	if _watchers.is_empty(): return
-	node.ready.connect(_check_watchers.bind(node), CONNECT_ONE_SHOT)
+	var check := _check_watchers.bind(node)
+	if not node.ready.is_connected(check): node.ready.connect(check, CONNECT_ONE_SHOT)
 
 func _check_watchers(node: Node) -> void:
 	if not is_instance_valid(node): return

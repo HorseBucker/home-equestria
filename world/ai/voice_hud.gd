@@ -36,6 +36,9 @@ var _word_cues: Array = []
 var _revealed := 0
 var _dialogue: OVERHEAD
 var _viewer: WeakRef
+## Until when the "Speech off" hint shows after a talk press with speech turned off.
+var _off_hint_until := -1.0
+const OFF_HINT := "Speech off: Pause > AI & voice > Speech"
 
 func start_line(speaker:String,text:String,actor:Node,cues:Array=[]) -> void:
 	_clear_dialogue()
@@ -167,9 +170,8 @@ func set_state(value: String, text := "") -> void:
 		_line_text="";_word_cues=[];_clear_dialogue()
 	state = value
 	detail = text
-	# Speech turned off: say so instead of a mute grey mic (a 0.3.0 tester held push-to-talk at
-	# a grey icon for a while).
-	if value == "off" and text == "": text = "Speech off: Pause > AI & voice > Speech"
+	# Speech turned off: the hint only flashes when the talk button is pressed (_process); a
+	# text-only player's typing box sat under a standing "Speech off" line (player 2026-10-30).
 	# The shared presentation fills these same labels when looking away from the actor.
 	var status_text := "" if value == "speaking" else text
 	if _label != null:
@@ -200,6 +202,9 @@ func _process(delta: float) -> void:
 		color.a = 0.7 + 0.3 * (0.5 + 0.5 * sin(_time * 9.0))
 	# The mic glyph only while push-to-talk is held (dev 2026-09-23), desktop and VR.
 	var held: bool = speech != null and speech.has_method("_ptt_pressed") and speech._ptt_pressed()
+	if state == "off" and detail == "" and _label != null:
+		if held: _off_hint_until = _time + 2.0
+		_label.text = OFF_HINT if _time < _off_hint_until else ""
 	if _rect != null:
 		_rect.modulate = color
 		_rect.visible = held and state != "feedback"
