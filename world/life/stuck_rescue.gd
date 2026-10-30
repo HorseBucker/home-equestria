@@ -20,7 +20,7 @@ const GOAL_FAR := 2.0
 const RETRY_SECONDS := 30.0
 const SEEN_DISTANCE := 45.0
 ## How far above her a bridge deck counts as the one she fell under.
-const DECK_REACH := 5.0
+const DECK_REACH := 6.0
 const WALK_POINT_KEYS := ["ground_walk_points", "loft_walk_points", "upper_walk_points"]
 var population: Node
 var clock: Node
@@ -138,13 +138,14 @@ func _placeable(actor: CharacterBody3D) -> bool:
 
 ## The deck of the bridge right over her, or INF. A pony that slips under a deck (player report
 ## 2026-10-30: Rainbow Dash lost on the way back from fishing) has no route anywhere and nothing
-## else brings her back. A steep ramp refuses a standing spot, so the deck is measured again a
-## little further on; like the stall rescue, she never appears where the player is looking.
+## else brings her back. PLACEMENT.support refuses any sloped deck (its upright body volume cuts into
+## the slope), so the search goes on along the deck to its flat middle, measuring the height at each
+## spot; like the stall rescue, she never appears where the player is looking.
 func _bridge_deck_above(actor: CharacterBody3D, at: Vector3) -> Vector3:
 	var space := actor.get_world_3d().direct_space_state
 	var exclude: Array[RID] = [actor.get_rid()]
 	if not _bridge_over(space, at, exclude).has("position"): return Vector3.INF
-	for reach: float in [0.0, 1.5, 3.0]:
+	for reach: float in [0.0, 1.5, 3.0, 6.0, 10.0, 15.0]:
 		for i in (1 if reach == 0.0 else 8):
 			var top := _bridge_over(space, at + Vector3.FORWARD.rotated(Vector3.UP, TAU * i / 8.0) * reach, exclude)
 			if top.is_empty(): continue
