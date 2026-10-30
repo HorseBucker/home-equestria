@@ -239,7 +239,9 @@ func rank() -> void:
 			if pony.resting_hold() and not pony.needs_full_rate():
 				divisor = 2  # a settled sit or lie beside you: every other tick
 			pony.hero_divisor = divisor
-			pony.set_detail_divisor(1 if entry[1] <= MID_DISTANCE else pony.NEAR_DIVISOR, counts.hero % pony.NEAR_DIVISOR)
+			# Spike is a member with no NEAR_DIVISOR: reading it here would abort the whole ranking.
+			var near_divisor: int = pony.NEAR_DIVISOR if "NEAR_DIVISOR" in pony else 1
+			pony.set_detail_divisor(1 if entry[1] <= MID_DISTANCE else near_divisor, counts.hero % near_divisor)
 			pony.set_sim_tier(Tier.HERO, 0 if close else counts.hero % divisor)
 			counts.hero += 1
 		elif counts.near < near_budget and entry[1] <= near_limit:
