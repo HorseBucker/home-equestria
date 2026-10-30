@@ -305,6 +305,8 @@ var _clip_pitch_target := 0.0
 ## A stationary pony's floor refreshes skipped since the last rays (at most CLIP_FLOOR_KEEP), the
 ## yaw those rays were cast at, and whether the centre ray hit real collision.
 const CLIP_FLOOR_KEEP := 12
+## A floor ray this far under her is checked against the walk grid before she follows it down.
+const CLIP_DROP_CHECK := 0.5
 var _clip_floor_keep := 0
 var _clip_floor_yaw := 0.0
 var _clip_floor_from_ray := false
@@ -1211,6 +1213,18 @@ func grounded() -> bool:
 
 ## Re-seat the body on the ground beneath (or above, when she has sunk under it). With
 ## no collision at all here, hold the terrain heightmap height instead of falling.
+## How far above her the floor the last rays measured is by now, carried along its slope. She lags
+## a climb between rays (bridge ramps rise about 0.5 m per metre), and a ray cast from her height
+## alone then starts under the deck and finds what lies below it: she walked in under the bridge
+## and stayed there (player report 2026-10-30: Rainbow Dash lost on the way back from fishing).
+func _clip_floor_rise() -> float:
+	if not is_finite(_clip_floor): return 0.0
+	var forward := -global_basis.z
+	forward.y = 0.0
+	var expected := _clip_floor + (global_position - _clip_floor_at).dot(forward.normalized()) * tan(_clip_pitch_target)
+	return clampf(expected - global_position.y, 0.0, profile.hip_height)
+
+
 func _maintain_support(delta: float) -> void:
 	if is_on_floor() or _held:
 		_unsupported_seconds = 0.0
@@ -1366,7 +1380,7 @@ func _clip_logic(dt: float) -> void:
 		else:
 			var reach := 2.0 * travel + profile.hip_height
 			var point := here + ahead * reach
-			var hit := _probe(point)
+			var hit := _probe(point, _clip_floor_rise())
 			var floor_y: float = float(hit.position.y) if not hit.is_empty() else (_crowd.floor_y(point, here.y) if _crowd != null else NAN)
 			_clip_ahead_certified = true
 			_clip_ahead_skips = 0
@@ -1395,12 +1409,18 @@ func _clip_logic(dt: float) -> void:
 		_clip_floor_keep = 0
 		_clip_floor_yaw = rotation.y
 		var half: Vector3 = -global_basis.z.normalized() * 0.45
-		var centre := _probe(global_position)
+		var rise := _clip_floor_rise()
+		var centre := _probe(global_position, rise)
+		if not centre.is_empty() and float(centre.position.y) < global_position.y - CLIP_DROP_CHECK and _crowd != null:
+			# A big drop where the walk grid knows a floor level with her: the ray began under a
+			# deck she is stepping onto. Take the grid's floor, the branch below.
+			var known: float = _crowd.floor_y(global_position, global_position.y)
+			if is_finite(known) and known > float(centre.position.y) + CLIP_DROP_CHECK: centre = {}
 		_clip_floor_from_ray = not centre.is_empty()
 		if not centre.is_empty():
 			_clip_floor = float(centre.position.y)
-			var front := _probe(global_position + half)
-			var back := _probe(global_position - half)
+			var front := _probe(global_position + half, rise)
+			var back := _probe(global_position - half, rise)
 			if not front.is_empty() and not back.is_empty():
 				_clip_pitch_target = clampf(atan2(float(front.position.y) - float(back.position.y), 0.9), -0.4, 0.4)
 		else:

@@ -19,6 +19,8 @@ const PROGRESS := 1.0
 const GOAL_FAR := 2.0
 const RETRY_SECONDS := 30.0
 const SEEN_DISTANCE := 45.0
+## How far above her a bridge deck counts as the one she fell under.
+const DECK_REACH := 5.0
 const WALK_POINT_KEYS := ["ground_walk_points", "loft_walk_points", "upper_walk_points"]
 var population: Node
 var clock: Node
@@ -99,8 +101,22 @@ func _check_stalls() -> void:
 		var at := actor.global_position
 		var row: Dictionary = _stalls.get(id, {})
 		var far := goal.is_finite() and (Vector2(at.x - goal.x, at.z - goal.z).length() > GOAL_FAR or absf(at.y - goal.y) > 1.2)
-		if not far or row.is_empty() or int(row.actor) != actor.get_instance_id() or at.distance_to(row.at) >= PROGRESS:
-			_stalls[id] = {"actor": actor.get_instance_id(), "at": at, "since": _clock, "retry": float(row.get("retry", 0.0))}
+		if row.is_empty() or int(row.actor) != actor.get_instance_id() or at.distance_to(row.at) >= PROGRESS:
+			_stalls[id] = {"actor": actor.get_instance_id(), "at": at, "since": _clock, "still": _clock, "retry": float(row.get("retry", 0.0))}
+			continue
+		# Under a bridge a pony may well have given up or dozed off by now, so this asks for neither
+		# a goal nor that she is awake.
+		if _clock - float(row.still) >= STALL_SECONDS and _clock >= float(row.get("deck_retry", 0.0)) and _placeable(actor) and _unseen(actor, at):
+			var deck := _bridge_deck_above(actor, at)
+			if deck.is_finite():
+				if "sleeping" in actor: actor.set("sleeping", false)
+				_set_down(actor, nav, deck)
+				row.at = deck; row.since = _clock; row.still = _clock
+				print("[pony] %s was trapped under a bridge; set back on its deck at %s" % [actor.name, deck.round()])
+				continue
+			row.deck_retry = _clock + RETRY_SECONDS
+		if not far:
+			row.since = _clock
 			continue
 		if _clock - float(row.since) < STALL_SECONDS or _clock < float(row.retry) or not _unseen(actor, at): continue
 		row.retry = _clock + RETRY_SECONDS
@@ -110,14 +126,39 @@ func _check_stalls() -> void:
 		row.at = spot; row.since = _clock
 		print("[pony] %s made no progress for %.0f s out of sight; set down on a route point at %s" % [actor.name, STALL_SECONDS, spot.round()])
 
-## Trying to get somewhere on her own legs: a route, a follow, or a route that just failed.
-## Waiting at a door, for a pony to step aside or for ground support is progress of its own.
-func _trying(actor: CharacterBody3D, nav: Node) -> bool:
-	if actor.get("_held") == true or actor.get("motion_paused") == true or actor.get("sleeping") == true: return false
+## Nopony else's to place: not held, seated, flying or thrown.
+func _placeable(actor: CharacterBody3D) -> bool:
+	if actor.get("_held") == true or actor.get("motion_paused") == true: return false
 	if actor.has_meta("seated") or actor.has_meta("event_placed"): return false
 	if actor.get("flight") != null and actor.flight.active(): return false
 	var thrown: Variant = actor.get("thrown")
-	if thrown != null and thrown.active(): return false
+	return thrown == null or not thrown.active()
+
+## The deck of the bridge right over her, or INF. A pony that slips under a deck (player report
+## 2026-10-30: Rainbow Dash lost on the way back from fishing) has no route anywhere and nothing
+## else brings her back. A steep ramp refuses a standing spot; the deck goes on nearby.
+func _bridge_deck_above(actor: CharacterBody3D, at: Vector3) -> Vector3:
+	var space := actor.get_world_3d().direct_space_state
+	var exclude: Array[RID] = [actor.get_rid()]
+	var top := space.intersect_ray(PhysicsRayQueryParameters3D.create(at + Vector3.UP * DECK_REACH, at + Vector3.UP * .5, 1, exclude))
+	if top.is_empty() or not _on_bridge(top.collider): return Vector3.INF
+	var deck: Vector3 = top.position
+	for reach: float in [0.0, 1.5, 3.0]:
+		for i in (1 if reach == 0.0 else 8):
+			var spot := PLACEMENT.support(space, deck + Vector3.FORWARD.rotated(Vector3.UP, TAU * i / 8.0) * reach, actor.profile, null, exclude)
+			if spot.is_finite(): return spot
+	return Vector3.INF
+
+func _on_bridge(node: Variant) -> bool:
+	while node is Node:
+		if str((node as Node).name).to_lower().contains("bridge"): return true
+		node = (node as Node).get_parent()
+	return false
+
+## Trying to get somewhere on her own legs: a route, a follow, or a route that just failed.
+## Waiting at a door, for a pony to step aside or for ground support is progress of its own.
+func _trying(actor: CharacterBody3D, nav: Node) -> bool:
+	if not _placeable(actor) or actor.get("sleeping") == true: return false
 	if actor.has_method("posture_status") and str(actor.posture_status().get("kind", "stand")) != "stand": return false
 	# A story scene places her itself (placement_recovery.gd leaves reserved ponies alone too).
 	if str(nav.get("reserved_by")) != "": return false
