@@ -109,6 +109,8 @@ func _check_stalls() -> void:
 		if _clock - float(row.still) >= STALL_SECONDS and _clock >= float(row.get("deck_retry", 0.0)) and _placeable(actor) and _unseen(actor, at):
 			var deck := _bridge_deck_above(actor, at)
 			if deck.is_finite():
+				var night: Node = get_parent().get_node_or_null("NightRest")
+				if night != null: night.release_for_recovery(id, actor)
 				if "sleeping" in actor: actor.set("sleeping", false)
 				_set_down(actor, nav, deck)
 				row.at = deck; row.since = _clock; row.still = _clock
@@ -136,18 +138,23 @@ func _placeable(actor: CharacterBody3D) -> bool:
 
 ## The deck of the bridge right over her, or INF. A pony that slips under a deck (player report
 ## 2026-10-30: Rainbow Dash lost on the way back from fishing) has no route anywhere and nothing
-## else brings her back. A steep ramp refuses a standing spot; the deck goes on nearby.
+## else brings her back. A steep ramp refuses a standing spot, so the deck is measured again a
+## little further on; like the stall rescue, she never appears where the player is looking.
 func _bridge_deck_above(actor: CharacterBody3D, at: Vector3) -> Vector3:
 	var space := actor.get_world_3d().direct_space_state
 	var exclude: Array[RID] = [actor.get_rid()]
-	var top := space.intersect_ray(PhysicsRayQueryParameters3D.create(at + Vector3.UP * DECK_REACH, at + Vector3.UP * .5, 1, exclude))
-	if top.is_empty() or not _on_bridge(top.collider): return Vector3.INF
-	var deck: Vector3 = top.position
+	if not _bridge_over(space, at, exclude).has("position"): return Vector3.INF
 	for reach: float in [0.0, 1.5, 3.0]:
 		for i in (1 if reach == 0.0 else 8):
-			var spot := PLACEMENT.support(space, deck + Vector3.FORWARD.rotated(Vector3.UP, TAU * i / 8.0) * reach, actor.profile, null, exclude)
-			if spot.is_finite(): return spot
+			var top := _bridge_over(space, at + Vector3.FORWARD.rotated(Vector3.UP, TAU * i / 8.0) * reach, exclude)
+			if top.is_empty(): continue
+			var spot := PLACEMENT.support(space, top.position, actor.profile, null, exclude)
+			if spot.is_finite() and _unseen(actor, spot): return spot
 	return Vector3.INF
+
+func _bridge_over(space: PhysicsDirectSpaceState3D, point: Vector3, exclude: Array[RID]) -> Dictionary:
+	var top := space.intersect_ray(PhysicsRayQueryParameters3D.create(point + Vector3.UP * DECK_REACH, point + Vector3.UP * .5, 1, exclude))
+	return top if not top.is_empty() and _on_bridge(top.collider) else {}
 
 func _on_bridge(node: Variant) -> bool:
 	while node is Node:
