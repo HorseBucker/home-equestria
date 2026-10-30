@@ -1,6 +1,6 @@
 extends Node
-## In-game updater (dev 2026-10-28). A quiet check when a world opens (at most every 6 hours,
-## Settings > Updates turns it off) asks GitHub for the latest release of
+## In-game updater (dev 2026-10-28). A quiet check once every launch (dev 2026-10-30; it was at
+## most every 6 hours; Settings > Updates turns it off) asks GitHub for the latest release of
 ## homedevanon/home-equestria and reads its signed update_manifest.json (update_verify.gd holds
 ## the rules: dev's offline RSA key signs, the game carries only the public key, so a taken-over
 ## repo cannot ship an update). One shared node under the tree's root (shared()) serves the title
@@ -32,7 +32,6 @@ const MANIFEST := "update_manifest.json"
 const USER_AGENT := "HomeEquestria-updater"
 const STAGING := "user://update_staging"
 const STATE := "user://update_state.cfg"
-const CHECK_EVERY := 6 * 3600
 
 static var _told_no_key := false
 
@@ -84,8 +83,8 @@ func _ready() -> void:
 		state = "current"
 	_refresh()
 	var wanted: Variant = Settings.get_value("updates/check")
-	# Headless test fixtures never call out.
-	if wanted != false and DisplayServer.get_name() != "headless" and Time.get_unix_time_from_system() - float(saved.get_value("check", "last", 0.0)) >= CHECK_EVERY:
+	# Every launch: this node is made once per run (shared()). Headless test fixtures never call out.
+	if wanted != false and DisplayServer.get_name() != "headless":
 		check()
 
 
