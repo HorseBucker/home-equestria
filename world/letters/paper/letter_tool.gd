@@ -269,8 +269,20 @@ func _process(delta: float) -> void:
 		if courier == null or not bool(courier.call("busy")): _sending = false
 	var sheet := letter_sheet()
 	var open: bool = sheet != null and bool(sheet.opened)
+	# Out of the hand (thrown, set down, stashed, shelved) an open letter folds. Placing it before
+	# the eyes regardless left it stuck in his face with nothing in hand to fold it (dev 2026-10-30).
+	if open and not _in_hand():
+		var paper := _paper()
+		if paper != null and bool(paper.call("typing")): paper.call("end_typing")
+		sheet.fold(); open = false
 	if open and is_instance_valid(_inventory) and bool(_inventory.get("_desktop")): _place_sheet(null)
 	if not holding and not _sending and not open: set_process(false)
+
+## Whether a hand still holds this letter.
+func _in_hand() -> bool:
+	if not is_instance_valid(_inventory): return false
+	var held: Variant = _inventory.get("held")
+	return held is Dictionary and (held as Dictionary).values().has(item)
 
 ## The use button is still held: desktop either mouse button, VR a hand still reporting its
 ## trigger every physics tick (vr_step).
