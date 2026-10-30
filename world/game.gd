@@ -229,6 +229,7 @@ func _ready() -> void:
 	settings_menu=preload("res://world/ui/settings_menu.gd").new();add_child(settings_menu);settings_menu.setup(inventory,pause_menu)
 	add_child(pause_menu);pause_menu.setup(self,inventory,save_menu,settings_menu,player.get_node("Body") if xr_active else player)
 	if xr_active:settings_menu.bind_controller(player.find_child("XRControllerLeft",true,false))
+	add_child(preload("res://world/events/barbiepone/barbiepone.gd").new().setup(self))
 	if xr_active:world_map.saves_requested.connect(save_menu.toggle)
 	else:
 		var save_button:=Button.new();save_button.text="Saved games · F6"

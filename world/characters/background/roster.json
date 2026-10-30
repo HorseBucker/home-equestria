@@ -311,9 +311,10 @@
 			"cheerilee_Mane"
 		],
 		"tails": [
-			"cheerilee_Tail"
+			"nurseredheart_Tail"
 		],
-		"triangles": 13044,
+		"tail_entry": "redacted",
+		"triangles": 11234,
 		"runner_ups": [
 			"redacted",
 			"src_poninnahka_overhaul/cheerilee",
@@ -346,12 +347,13 @@
 				223
 			]
 		},
-		"status": "blocked: rig validation failed after bounded fitting; see validation.json",
+		"status": "built; rig PASS (borrowed Nurse Redheart tail; tail floor -0.100 equals the Apple Bumpkin baseline in the 2026-10-29 public tail test); dev visual review pending",
 		"voice_status": "character voice",
 		"fit_overrides": {
-			"tail_fit_scale": 0.82
+			"tail_fit_scale": 0.82,
+			"tail_entry": "redacted"
 		},
-		"fingerprint": "b961143b0ac508a3ad6f95c76727a0791ae3d26499663ec5426eb6446418a1f4"
+		"fingerprint": "f0fa63e0cda374b9bebe52c630169dd3d3a5ec66f8192dad8597db471c2fa6f4"
 	},
 	{
 		"id": "golden_harvest",
@@ -4072,5 +4074,35 @@
 		"filly": true,
 		"home": "ponyville",
 		"validation": "redacted"
+	},
+	{
+		"id": "sunset_shimmer",
+		"display_name": "Sunset Shimmer",
+		"race": "unicorn",
+		"entry": "redacted",
+		"manes": [
+			"sunsetshimmer_Mane"
+		],
+		"tails": [
+			"sunsetshimmer_Tail"
+		],
+		"triangles": 7000,
+		"runner_ups": [
+			"redacted",
+			"redacted",
+			"src_revamped_sourcefile_factory_2_0_sfw/sunsetshimmer"
+		],
+		"guide": "https://mlpvector.club/cg/pony/v/313",
+		"palette_method": "show colour guide",
+		"mark_source": {
+			"facing": "right",
+			"svg": "/cg/cutiemark/196.svg",
+			"source": "http://fav.me/dcefv8e",
+			"contributor": "redacted"
+		},
+		"status": "built; rig PASS; dev visual review pending",
+		"voice_status": "character voice",
+		"fit_overrides": {},
+		"fingerprint": "9da29ead13310c37326261f90f6edb0dedbff50cd2375c212859ef446f921a7e"
 	}
 ]

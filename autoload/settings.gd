@@ -200,7 +200,7 @@ const TABS := [
 		["Standing height (cm)", "player/height_cm"], ["Measure my height now", "action:measure_height"], ["Forget measured height", "action:forget_height"]]],
 	["Audio", [["Master volume", "audio/master"], ["Voice volume", "audio/voice"], ["Effects volume", "audio/sfx"], ["Ambience volume", "audio/ambience"], ["Flight wind volume", "audio/wind"], ["Music volume", "audio/music"], ["Pony voices", "voice/tts"], ["Ponese style", "voice/ponese_style"]]],
 	["World", [["Day length (time speed)", "world/day_length_minutes"], ["Season length", "world/season_days"], ["Title screen view", "title/view"], ["Rain & snow frequency", "world/weather_frequency"], ["Opening", "world/opening"], ["Pony size", "ponies/size"],
-		["Ponies freeze while I talk or type", "ai/freeze_while_talking"], ["A pony freezes while she thinks", "ai/freeze_while_thinking"], ["Time-stop look (vignette, slow sound)", "ai/freeze_effect"]]],
+		["Ponies freeze while I talk or type", "ai/freeze_while_talking"], ["A pony freezes while she thinks", "ai/freeze_while_thinking"], ["Time-stop look (vignette, slow sound)", "ai/freeze_effect"], ["Summon the Great Evil", "action:spawn_barbiepone"]]],
 	["Accessibility", [["Subtitles", "access/subtitles"], ["Subtitle size", "access/subtitle_scale"], ["Caption background", "access/caption_card"], ["Background opacity", "access/caption_opacity"], ["Pony speech text", "access/speech_text"], ["Menu text size", "access/ui_scale"], ["Reduced motion", "access/reduced_motion"]]],
 	["Reading", [["Paper", "reading/paper"], ["Font", "reading/font"], ["Text size", "reading/size"]]],
 	["Mods", []],
@@ -801,7 +801,21 @@ func run_action(id: String) -> void:
 			var calibration := "user://calibration.json"
 			if FileAccess.file_exists(calibration): DirAccess.remove_absolute(ProjectSettings.globalize_path(calibration))
 			message = "Measured height forgotten; it is estimated again while you stand."
+		"spawn_barbiepone":
+			# world/events/barbiepone/barbiepone.gd answers the signal below.
+			message = ""
 	changed.emit("action:" + id)
+
+
+## Live button text for an action row (the Great Evil button flips to "Exorcise the Evil" while
+## she is in the world). Providers are Callables returning "" for the default label.
+var action_labels: Dictionary = {}
+func action_label(id: String, fallback: String) -> String:
+	var provider: Variant = action_labels.get(id)
+	if provider is Callable and (provider as Callable).is_valid():
+		var text := str((provider as Callable).call())
+		if not text.is_empty(): return text
+	return fallback
 
 
 func _anon_body() -> Node:

@@ -16,5 +16,5 @@ iris_color = Color(0.67058825, 0.84313726, 0.6156863, 1)
 cutie_mark = ExtResource("2")
 hair_scene = "res://world/characters/background/cheerilee_hair.scn"
 hair_prefix = "Cheerilee"
-tail_terminal_length = 0.121503833
+tail_terminal_length = 0.120956763
 ai_profile = "res://world/characters/background/ai/cheerilee.json"

@@ -34,6 +34,7 @@ var _tab_order: Array[Button] = []     # as the sidebar shows them
 var _lists: Array[VBoxContainer] = []
 ## key -> keycap Button, switch CheckButton, slider value Label, pills HBox or picker.
 var _values: Dictionary = {}
+var _action_buttons: Dictionary = {}   # action -> [Button, default label]
 var _sliders: Dictionary = {}  # key -> HSlider
 var _row_cards: Dictionary = {}  # key -> the row's card (greyed out while it does not apply)
 ## Width a row's control may take beside its name.
@@ -234,10 +235,12 @@ func _row(list: VBoxContainer, label_text: String, key: String) -> void:
 		var action := key.get_slice(":", 1)
 		# The controls map is a page of its own, not a Settings action.
 		var run := (func(): show_tab("Controls map")) if action == "controls_map" else (func(): Settings.run_action(action))
-		var button := _button(list, label_text, run)
+		var button := _button(list, Settings.action_label(action, label_text), run)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		button.icon = _icon_texture("map" if action == "controls_map" else "sparkle")
+		# The Great Evil button wears no icon (dev 2026-10-30).
+		if action != "spawn_barbiepone": button.icon = _icon_texture("map" if action == "controls_map" else "sparkle")
+		_action_buttons[action] = [button, label_text]
 		return
 	var card := PanelContainer.new(); card.add_theme_stylebox_override("panel", _row_idle)
 	_row_cards[key] = card
@@ -580,6 +583,9 @@ func current_tab() -> String:
 
 func refresh() -> void:
 	if is_instance_valid(_lighting_controls): _lighting_controls.refresh()
+	for action: String in _action_buttons:
+		var entry: Array = _action_buttons[action]
+		if is_instance_valid(entry[0]): (entry[0] as Button).text = Settings.action_label(action, str(entry[1]))
 	for key: String in _values:
 		var node: Control = _values[key]
 		if not is_instance_valid(node): continue
