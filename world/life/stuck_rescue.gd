@@ -106,7 +106,7 @@ func _check_stalls() -> void:
 			continue
 		# Under a bridge a pony may well have given up or dozed off by now, so this asks for neither
 		# a goal nor that she is awake.
-		if _clock - float(row.still) >= STALL_SECONDS and _clock >= float(row.get("deck_retry", 0.0)) and _placeable(actor) and _unseen(actor, at):
+		if nav != null and "profile" in actor and _clock - float(row.still) >= STALL_SECONDS and _clock >= float(row.get("deck_retry", 0.0)) and _placeable(actor) and _unseen(actor, at):
 			var deck := _bridge_deck_above(actor, at)
 			if deck.is_finite():
 				var night: Node = get_parent().get_node_or_null("NightRest")

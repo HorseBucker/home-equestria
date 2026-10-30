@@ -1211,8 +1211,6 @@ func grounded() -> bool:
 	return (flight == null or not flight.active()) and (sim_tier != SimTier.HERO or is_on_floor() or _heightmap_supported)
 
 
-## Re-seat the body on the ground beneath (or above, when she has sunk under it). With
-## no collision at all here, hold the terrain heightmap height instead of falling.
 ## How far above her the floor the last rays measured is by now, carried along its slope. She lags
 ## a climb between rays (bridge ramps rise about 0.5 m per metre), and a ray cast from her height
 ## alone then starts under the deck and finds what lies below it: she walked in under the bridge
@@ -1225,6 +1223,8 @@ func _clip_floor_rise() -> float:
 	return clampf(expected - global_position.y, 0.0, profile.hip_height)
 
 
+## Re-seat the body on the ground beneath (or above, when she has sunk under it). With
+## no collision at all here, hold the terrain heightmap height instead of falling.
 func _maintain_support(delta: float) -> void:
 	if is_on_floor() or _held:
 		_unsupported_seconds = 0.0
