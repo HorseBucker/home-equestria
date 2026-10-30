@@ -3,6 +3,29 @@ extends RefCounted
 ## Unclosed tags end at a newline so valid dialogue on the next line can survive.
 const EMOTIONS := ["neutral", "happy", "sad", "angry", "annoyed", "fearful", "surprised", "calm", "disgusted", "whispering", "shouting"]
 
+## These are game director notes, never spoken dialogue. A missing opener was observed in
+## play: WANT/ELSEWHERE/NEXT/DONE text followed by </brain> reached the voice pipeline.
+## An orphan closer discards the ambiguous prefix; an unclosed opener discards its suffix.
+## Keep this independent of story storage and call it again at the final TTS boundary.
+static func without_private_notes(text: String) -> String:
+	if not "<" in text: return text.strip_edges()
+	var tags := RegEx.create_from_string("(?is)<\\s*(/?)\\s*(?:brain|story)\\b[^>]*(?:>|$)")
+	var out := ""
+	var cursor := 0
+	var depth := 0
+	for tag: RegExMatch in tags.search_all(text):
+		if tag.get_string(1).is_empty():
+			if depth == 0: out += text.substr(cursor, tag.get_start() - cursor)
+			if not tag.get_string().strip_edges().ends_with("/>"): depth += 1
+		elif depth > 0:
+			depth -= 1
+		else:
+			# With no opener there is no trustworthy boundary between notes and speech.
+			out = ""
+		cursor = tag.get_end()
+	if depth == 0: out += text.substr(cursor)
+	return out.strip_edges()
+
 static func spans(text: String) -> Array[Dictionary]:
 	var result: Array[Dictionary] = []
 	var i := 0
@@ -32,6 +55,7 @@ static func presentation_tag(tag: String) -> bool:
 	return false
 
 static func sanitize(text: String, keep_presentation := false) -> String:
+	text = without_private_notes(text)
 	var out := ""
 	var cursor := 0
 	for span: Dictionary in spans(text):
