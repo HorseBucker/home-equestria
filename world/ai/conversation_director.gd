@@ -1625,14 +1625,16 @@ func story() -> RefCounted:
 ## Removes <brain> director notes and [feel:] tags from a reply, storing them in the journal.
 func take_story_notes(text: String, group_reply: bool) -> String:
 	var memory := story()
-	if memory == null: return text
 	var present: Array = [_current]
 	for member in group.members:
 		if member not in present: present.append(member)
-	if "<brain>" in text or "<story>" in text:
+	if memory != null and ("<brain>" in text or "<story>" in text):
 		text = memory.take_notes(text, _current, present)
 		_brain_turns = BRAIN_EVERY
-	if not "[feel:" in text: return text
+	# Storage is optional; keeping private notes out of speech and action parsing is not.
+	# Handles malformed/missing openers and case/whitespace variants the journal parser skips.
+	text = CONTROLS.without_private_notes(text)
+	if memory == null or not "[feel:" in text: return text
 	if not group_reply: return memory.take_feelings(text, _current)
 	var lines: PackedStringArray = []
 	for line in text.split("\n"):
