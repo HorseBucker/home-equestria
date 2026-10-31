@@ -5,6 +5,8 @@ extends RefCounted
 ## second while she is unsupported. State (`_heightmap_supported`, ...) stays on the pony.
 
 const ROSTER_PLACEMENT := preload("res://world/navigation/roster_placement.gd")
+## A floor this far under her is checked against the walk grid before she is put on it.
+const DROP_CHECK := 0.5
 
 
 static func support_ray(pony: CharacterBody3D, above: float) -> Dictionary:
@@ -27,6 +29,13 @@ static func recover(pony: CharacterBody3D) -> void:
 	# start is only for a pony sunk under collision that arrived late, and there it
 	# may land on a building only when that surface is a house floor.
 	var hit: Dictionary = pony._support_ray(0.6)
+	# Sunk into a bridge deck the ray starts under it and finds what lies below (player report
+	# 2026-10-30). The walk grid knows the deck: look again from above it.
+	if not hit.is_empty() and float(hit.position.y) < pony.global_position.y - DROP_CHECK and pony._crowd != null:
+		var known: float = pony._crowd.floor_y(pony.global_position, pony.global_position.y)
+		if is_finite(known) and known > float(hit.position.y) + DROP_CHECK:
+			var deck: Dictionary = pony._support_ray(known - pony.global_position.y + 0.6)
+			if not deck.is_empty(): hit = deck
 	if hit.is_empty():
 		hit = pony._support_ray(3.0)
 		if not hit.is_empty() and ROSTER_PLACEMENT.building(hit.collider) and not pony._is_house_floor(hit.position):
