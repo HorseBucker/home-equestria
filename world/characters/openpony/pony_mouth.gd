@@ -100,6 +100,7 @@ func build(player: AnimationPlayer) -> int:
 		var clip: String = SHAPES[shape_name]["clip"]
 		clips.append(player.get_animation(clip) if player.has_animation(clip) else null)
 	var key := [names, rests, clips]
+	_mix_valid = false
 	if _built.has(key):
 		# Shared, never edited: build() replaces _shapes instead of clearing it.
 		_shapes = _built[key][0]
@@ -197,6 +198,7 @@ func _retarget(blend: float) -> void:
 	for k in _expression:
 		_targets[k] = minf(_targets.get(k, 0.0) + _expression[k] * expression_scale, 1.0)
 	if blend == 0.0:
+		_mix_valid = false
 		_weights = _targets.duplicate()
 		for k in _weights.keys():
 			if _weights[k] <= 0.0:
@@ -213,25 +215,66 @@ func _unprofiled_process_modification() -> void:
 			skel.set_bone_pose_rotation(_written_bones[k], _written_rotations[k])
 			skel.set_bone_pose_position(_written_bones[k], _written_positions[k])
 		return
-	_written_bones.resize(0)
-	_written_rotations.clear()
-	_written_positions.resize(0)
 	# Ease the weights toward their targets.
 	var step := 1.0 if blend_time <= 0.0 else get_process_delta_time() * rate_divisor / blend_time
+	var changed := false
 	for k in _targets:
-		_weights[k] = move_toward(_weights.get(k, 0.0), _targets[k], step)
+		var before: float = _weights.get(k, 0.0)
+		var w: float = move_toward(before, _targets[k], step)
+		if w != before or not _weights.has(k): changed = true
+		_weights[k] = w
 	for k in _weights.keys():
 		if not _targets.has(k):
 			var w: float = move_toward(_weights[k], 0.0, step)
+			changed = true
 			if w <= 0.0:
 				_weights.erase(k)
 			else:
 				_weights[k] = w
 	if _weights.is_empty():
+		_written_bones.resize(0)
+		_written_rotations.clear()
+		_written_positions.resize(0)
+		_mix_valid = false
 		return
+	if changed or not _mix_valid or influence != _mix_influence or not MIX_CACHE:
+		_build_mix()
+	var count := _mix_bones.size()
+	_written_bones = _mix_bones
+	_written_rotations.resize(count)
+	_written_positions.resize(count)
+	for k in count:
+		var idx := _mix_bones[k]
+		var q := (skel.get_bone_pose_rotation(idx) * _mix_rotations[k]).normalized()
+		var p := skel.get_bone_pose_position(idx) + _mix_offsets[k]
+		skel.set_bone_pose_rotation(idx, q)
+		skel.set_bone_pose_position(idx, p)
+		_written_rotations[k] = q
+		_written_positions[k] = p
+
+
+## Per touched bone, the shapes' rotations multiplied in weight order and their offsets summed at
+## the current weights (0.1.0 perf pass). A full run used to redo this slerp and dictionary walk
+## for every bone and shape at every run; the weights sit still between visemes and in the resting
+## smile, so it is rebuilt only when a weight or the influence changes. Applied as one rotation
+## and one offset on the bone's own pose: the same product as before, multiplied in another
+## grouping (float rounding only). Rollback: MIX_CACHE = false.
+const MIX_CACHE := true
+var _mix_bones := PackedInt32Array()
+var _mix_rotations: Array[Quaternion] = []
+var _mix_offsets := PackedVector3Array()
+var _mix_valid := false
+var _mix_influence := 1.0
+
+func _build_mix() -> void:
+	_mix_bones = PackedInt32Array()
+	_mix_rotations.clear()
+	_mix_offsets = PackedVector3Array()
+	_mix_influence = influence
+	_mix_valid = true
 	for idx in _bones:
-		var q := skel.get_bone_pose_rotation(idx)
-		var p := skel.get_bone_pose_position(idx)
+		var q := Quaternion.IDENTITY
+		var p := Vector3.ZERO
 		var touched := false
 		for shape_name in _weights:
 			var w: float = _weights[shape_name] * influence
@@ -244,12 +287,9 @@ func _unprofiled_process_modification() -> void:
 			p += (d["p"] as Vector3) * w
 			touched = true
 		if touched:
-			q = q.normalized()
-			skel.set_bone_pose_rotation(idx, q)
-			skel.set_bone_pose_position(idx, p)
-			_written_bones.append(idx)
-			_written_rotations.append(q)
-			_written_positions.append(p)
+			_mix_bones.append(idx)
+			_mix_rotations.append(q)
+			_mix_offsets.append(p)
 
 
 static func _matches(bone: String, prefixes: Array) -> bool:

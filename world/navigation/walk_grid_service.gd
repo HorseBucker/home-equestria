@@ -197,6 +197,8 @@ func _setup_geometry() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_cache_dir.path_join("derived")))
 	_derive_base = _derive_signature()
 
+var _quality_node: Node
+
 func _physics_process(delta: float) -> void:
 	_poll_io()
 	_paint_timer -= delta
@@ -206,7 +208,9 @@ func _physics_process(delta: float) -> void:
 		if stamp != _paint_stamp: _paint_stamp = stamp; reload_layers()
 	var start := Time.get_ticks_usec()
 	var count := 0
-	var quality_node := get_node_or_null("/root/Quality")
+	# The Quality autoload is looked up once (it lives as long as the tree), not every physics tick.
+	if not is_instance_valid(_quality_node): _quality_node = get_node_or_null("/root/Quality")
+	var quality_node := _quality_node
 	var base_budget: int = int(quality_node.get_value("nav_sample_budget_us", SAMPLE_BUDGET_US)) if quality_node != null else SAMPLE_BUDGET_US
 	# A route waiting on unsampled chunks gets those chunks first and a larger slice of
 	# the tick: a follower must not stand for seconds while fresh ground is measured.
@@ -253,8 +257,11 @@ func _physics_process(delta: float) -> void:
 	while not _paint_queue.is_empty() and Time.get_ticks_usec()-start < budget:
 		var coord := _paint_queue[0]
 		var chunk: WalkChunk = grid.chunks[coord]
-		_apply_paint(chunk,_paint_column)
-		_paint_column += 1
+		if PAINT_RUNS:
+			_paint_column += _apply_paint_run(chunk, _paint_column, start + budget)
+		else:
+			_apply_paint(chunk,_paint_column)
+			_paint_column += 1
 		if (layers.rasters.is_empty() and not chunk.painted and not is_instance_valid(_terrain_paths.data)) or _paint_column == WalkGrid.CHUNK_CELLS*WalkGrid.CHUNK_CELLS:
 			chunk.painted = not layers.rasters.is_empty()
 			chunk.state = WalkChunk.State.READY
@@ -501,6 +508,8 @@ func _requester_key(job: Dictionary) -> int:
 ## Starts every ready job the concurrency budget allows, in queue order (the same readiness and
 ## chunk-admission rules as the single search: only the oldest waiter admits missing chunks).
 func _dispatch_parallel() -> void:
+	# Nothing waits: nothing can start and the running count (the peak) only grows below.
+	if _jobs.is_empty(): return
 	var limit := NATIVE_BACKEND.search_concurrency()
 	var busy := {}
 	for entry: Dictionary in _running: busy[entry.key] = true
@@ -717,6 +726,62 @@ func _sample_column(chunk: WalkChunk, column: int) -> void:
 ## Trail weights of the chunk being painted (terrain_paths.chunk_weights).
 var _trail_chunk: WalkChunk
 var _trail_weights := PackedFloat64Array()
+
+## 0.1.0 perf: _apply_paint() over a run of columns in one call, with the chunk's arrays held in
+## locals and stored back once. `chunk.trail_weight[slot] = x` copied the whole 8 KB array on every
+## write (the property read shares it, the write copies it): two copies per column, 64 MB per chunk.
+## Same columns, same values, same per-column time check as the old loop. Rollback: PAINT_RUNS = false.
+const PAINT_RUNS := true
+
+## Columns from `first` until the chunk ends, its quick finish (nothing to paint) or `deadline`
+## (usec); at least one. Returns how many it painted.
+func _apply_paint_run(chunk: WalkChunk, first: int, deadline: int) -> int:
+	var total := WalkGrid.CHUNK_CELLS*WalkGrid.CHUNK_CELLS
+	var quick := layers.rasters.is_empty() and not chunk.painted and not is_instance_valid(_terrain_paths.data)
+	if first == 0:
+		chunk._cached_view = {}
+		if chunk.trail_weight.size() != chunk.flags.size(): chunk.trail_weight.resize(chunk.flags.size())
+	if first == 0 or _trail_chunk != chunk:
+		_trail_chunk = chunk
+		_trail_weights = _terrain_paths.chunk_weights(chunk.coord, WalkGrid.CELL, WalkGrid.CHUNK_CELLS)
+	var weights := _trail_weights
+	var trail := chunk.trail_weight
+	var floor_y := chunk.floor_y
+	var flags := chunk.flags
+	var paint_cost := chunk.paint_cost
+	var painting := not (layers.rasters.is_empty() and not chunk.painted)
+	var terrain: Node = WorldTerrain.instance if is_instance_valid(WorldTerrain.instance) else null
+	var base := chunk.coord*WalkGrid.CHUNK_CELLS
+	var column := first
+	while true:
+		var cell := base+Vector2i(column%WalkGrid.CHUNK_CELLS,column/WalkGrid.CHUNK_CELLS)
+		var terrain_point := Vector3((cell.x+.5)*WalkGrid.CELL,0,(cell.y+.5)*WalkGrid.CELL)
+		var surface_weight: float = weights[column] if column < weights.size() else _terrain_paths.weight_at(terrain_point)
+		var ground: float = terrain.height_at(terrain_point) if terrain != null and surface_weight > 0.0 else NAN
+		for span in WalkGrid.SPANS:
+			var slot := column*WalkGrid.SPANS+span
+			trail[slot] = roundi(surface_weight*255.0) if is_finite(ground) and absf(floor_y[slot]-ground)<.5 else 0
+		if painting:
+			var local := _content.to_local(terrain_point)
+			var xz := Vector2(local.x,local.z)
+			var paint := layers.flags_at(xz)
+			var cost := layers.cost_at(xz)
+			paint_cost[column] = 255 if is_inf(cost) else mini(254,roundi(cost*WalkGrid.PAINT_SCALE))
+			for span in WalkGrid.SPANS:
+				var slot := column*WalkGrid.SPANS+span
+				flags[slot] &= ~(WalkGrid.PAINT_BLOCK|WalkGrid.PAINT_TRAIL|WalkGrid.PAINT_FORD)
+				if paint.block: flags[slot] |= WalkGrid.PAINT_BLOCK
+				if paint.trail: flags[slot] |= WalkGrid.PAINT_TRAIL
+				if paint.ford: flags[slot] |= WalkGrid.PAINT_FORD
+				# Paint conveys intent; it cannot conjure a bridge or make deep water safe.
+				if paint.lake and not paint.ford and not (paint.bridge and span == 0 and chunk.water_depth[slot] <= .001): flags[slot] |= WalkGrid.PAINT_BLOCK
+		column += 1
+		if quick or column == total or Time.get_ticks_usec() >= deadline: break
+	chunk.trail_weight = trail
+	if painting:
+		chunk.flags = flags
+		chunk.paint_cost = paint_cost
+	return column - first
 
 func _apply_paint(chunk: WalkChunk, column: int) -> void:
 	if column == 0: chunk._cached_view = {}
@@ -939,6 +1004,7 @@ func _has_room_cached(key: Vector3i, p: Dictionary) -> bool:
 
 ## WalkGrid.nearest() reading cached samples and room results.
 func _nearest_cached(pos: Vector3, p: Dictionary, rooms: Dictionary, radius: float) -> Vector3i:
+	if NEAREST_BY_DISTANCE: return _nearest_by_distance(pos, p, rooms, radius)
 	var c := WalkGrid.column(pos)
 	var best := Vector3i(0,-1,0)
 	var best_d := radius*radius
@@ -951,6 +1017,38 @@ func _nearest_cached(pos: Vector3, p: Dictionary, rooms: Dictionary, radius: flo
 				var d := _cell_point(key).distance_squared_to(pos)
 				if d <= best_d and _pure_room(key,p,rooms): best_d = d; best = key
 	return best
+
+## 0.1.0 perf: _nearest_cached() tested body room (25+ cells each) for every allowed cell that beat
+## the running best in scan order. This collects the allowed cells first and tests them nearest
+## first, stopping at the first with room: the same answer (smallest distance, a tie going to the
+## later cell in scan order, as `d <= best_d` did) with one or two room tests instead of ~15.
+## Rollback: NEAREST_BY_DISTANCE = false.
+const NEAREST_BY_DISTANCE := true
+var _near_keys: Array[Vector3i] = []
+var _near_dist := PackedFloat64Array()
+
+func _nearest_by_distance(pos: Vector3, p: Dictionary, rooms: Dictionary, radius: float) -> Vector3i:
+	var c := WalkGrid.column(pos)
+	var limit := radius*radius
+	var r := ceili(radius/WalkGrid.CELL)
+	_near_keys.clear(); _near_dist.clear()
+	for z in range(-r,r+1):
+		for x in range(-r,r+1):
+			for span in WalkGrid.SPANS:
+				var key := Vector3i(c.x+x,span,c.y+z)
+				if not WalkGrid.allowed(_cell(key),p): continue
+				var d := _cell_point(key).distance_squared_to(pos)
+				if d <= limit: _near_keys.append(key); _near_dist.append(d)
+	var count := _near_dist.size()
+	while true:
+		var best := -1
+		var best_d := limit
+		for i in count:
+			if _near_dist[i] <= best_d: best_d = _near_dist[i]; best = i
+		if best < 0: return Vector3i(0,-1,0)
+		if _pure_room(_near_keys[best],p,rooms): return _near_keys[best]
+		_near_dist[best] = INF
+	return Vector3i(0,-1,0)
 
 ## True when nothing *known* along the segment is bad: every sample is walkable or lies
 ## in a chunk that is not sampled yet. Following a player over ground they just walked

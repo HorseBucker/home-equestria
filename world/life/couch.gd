@@ -51,7 +51,8 @@ func _update_pullout() -> void:
 	_shown_extension = extension
 
 func can_open() -> bool:
-	return seats.size() == 2 and seats.all(func(seat: Node3D) -> bool: return is_instance_valid(seat))
+	# Perf 0.1.0: the same test without a lambda and its allocation (beds ask every tick).
+	return seats.size() == 2 and is_instance_valid(seats[0]) and is_instance_valid(seats[1])
 
 func head_side(seat: Node3D) -> float:
 	var actual: Node3D = seat.get_meta("couch_seat", seat)

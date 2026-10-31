@@ -9,6 +9,13 @@ var joints: Dictionary = {}
 var names: Dictionary = {}
 ## PonySolverNative (native/pony_solver) holding these limits, or null: apply() then runs in C++.
 var _native: RefCounted
+## constrain() through PonySolverNative.constrain_basis (0.1.0 perf pass): the same port of the
+## code below that apply() already runs, about a sixth of the GDScript's cost per bone (secondary
+## breath and head, idle body, postures, clip head and hoof holds call it every tick). Needs a
+## pony_solver binary with constrain_basis. Rollback: NATIVE_CONSTRAIN = false.
+const NATIVE_CONSTRAIN := true
+static var _can_constrain := ClassDB.class_has_method(&"PonySolverNative", &"constrain_basis")
+var _native_constrain := false
 
 
 ## Hands the bound limits to the native solver, in this dictionary's order.
@@ -24,11 +31,14 @@ func bind_native(native: RefCounted) -> void:
 		data.append_array([axis.x, axis.y, axis.z, joint.lower, joint.upper, joint.swing])
 	native.bind_limits(indices, data)
 	_native = native
+	_native_constrain = NATIVE_CONSTRAIN and _can_constrain
 
 
 func bind(profile: Resource, skeleton: Skeleton3D) -> void:
 	joints.clear()
 	names.clear()
+	# A rebind holds new limits the native copy does not have until bind_native() again.
+	_native_constrain = false
 	var fk := SOLVER.forward_kinematics(profile.parents, profile.rest)
 	var poses: Array = profile.calibration_samples() if profile.has_method("calibration_samples") else profile.samples
 	for index in profile.parents.size():
@@ -83,6 +93,9 @@ func bind(profile: Resource, skeleton: Skeleton3D) -> void:
 
 
 func constrain(index: int, basis: Basis) -> Basis:
+	# _native is checked too: parity tools null it to run the GDScript reference below.
+	if _native_constrain and _native != null:
+		return _native.constrain_basis(index, basis)
 	if not joints.has(index):
 		return basis
 	var joint: Dictionary = joints[index]

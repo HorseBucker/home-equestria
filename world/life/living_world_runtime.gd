@@ -537,7 +537,6 @@ func _discover(id: String) -> void:
 			if core.state.places[route.from].region == region and route.revision != stamp:
 				core.state.routes.erase(key)
 		_cancel_stale_journeys("Navigation changed; waiting for a verified route")
-	var choices: Array = nav.command_places()
 	var index: int = entry.discover
 	# The first lookup commonly queues cold ground sampling and returns INF.
 	# Retry the anchor until published; losing it also prevents offscreen trips.
@@ -548,6 +547,9 @@ func _discover(id: String) -> void:
 	var tags:Array=["rest","view","walk"]
 	var railway:Node=host.get("railway")
 	var station:String=railway.station_place_near(at) if is_instance_valid(railway) else ""
+	# Perf 0.1.0: the named-place list (a scan of painted spots and authored places) is only read
+	# by the "named place" branch below; the anchor, station and outdoor branches skip building it.
+	var choices: Array = [] if index == 0 or index % 2 != 0 or (not station.is_empty() and index % 3 == 0) else nav.command_places()
 	if index==0:
 		place_id="%s:anchor:%s"%[region,id]
 		if core.state.residents[id].home_region==region:tags.append("home:"+id)

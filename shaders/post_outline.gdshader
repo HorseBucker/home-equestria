@@ -169,6 +169,12 @@ void fragment() {
 	float thickness = clamp(remap(min_d, min_distance, max_distance, max_thickness, min_thickness), min_thickness, max_thickness);
 	float fade_a = clamp(remap(min_d, min_distance, max_distance, 1.0, 0.0), 0.0, 1.0);
 
+	ALBEDO.rgb = outlineColor.rgb;
+	// Past max_distance (sky, far hills) the line has faded out: ALPHA is 0 whatever the edges
+	// are, so the second ring of depth reads and the normal reads are skipped (perf 0.1.0).
+	if (fade_a <= 0.0) {
+		ALPHA = 0.0;
+	} else {
 	n = getNeighbors(SCREEN_UV, thickness, aspect);
 	depth_samples = getLinearDepthSamples(n, INV_PROJECTION_MATRIX);
 
@@ -177,6 +183,6 @@ void fragment() {
 	float depthEdges = detectEdgesDepth(depth_samples, pixel_normal, VIEW);
 	float normEdges = min(detectEdgesNormal(n, CAMERA_DIRECTION_WORLD), 1.0);
 
-	ALBEDO.rgb = outlineColor.rgb;
 	ALPHA = max(depthEdges, normEdges) * outlineColor.a * fade_a;
+	}
 }

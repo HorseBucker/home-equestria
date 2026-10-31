@@ -59,12 +59,14 @@ func _process(delta: float) -> void:
 		_load_one()
 	if not _loaded: return
 	for bed in beds:
-		bed.volume_db = linear_to_db(maxf(0.0001, gain * float(bed.get_meta("gain")))) - 14.0
+		var bed_db := linear_to_db(maxf(0.0001, gain * float(bed.get_meta("gain")))) - 14.0
+		if absf(bed.volume_db - bed_db) >= .01: bed.volume_db = bed_db   # Perf 0.1.0: settled levels are not rewritten.
 		if gain > 0.001 and not bed.playing: bed.play(rng.randf() * bed.stream.get_length())
 		elif gain <= 0.001 and bed.playing: bed.stop()
 	for call in calls:
 		if call.playing:
-			call.volume_db = float(call.get_meta("base_db", -20.0)) + linear_to_db(maxf(gain, 0.0001))
+			var call_db := float(call.get_meta("base_db", -20.0)) + linear_to_db(maxf(gain, 0.0001))
+			if absf(call.volume_db - call_db) >= .01: call.volume_db = call_db
 			if gain <= 0.001: call.stop()
 	if target_gain < 0.2:
 		_quiet_in = maxf(_quiet_in,25.0)

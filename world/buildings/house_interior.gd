@@ -305,9 +305,17 @@ func bed_rest(id: String = "") -> Transform3D:
 func on_mattress(point: Vector3, id: String = "") -> bool:
 	return HOUSE_BEDS.on_mattress(self, point, id)
 
+## 0.1.0 perf: the id string is rebuilt only when the house has moved (callers ask ~57 times per
+## physics tick). Rollback: PLACE_ID_CACHE = false.
+const PLACE_ID_CACHE:=true
+var _place_id_at:=Vector3.INF
+var _place_id_text:=""
 func place_id() -> String:
 	var p:=global_position
-	return "house:%d:%d:%d"%[roundi(p.x*10),roundi(p.y*10),roundi(p.z*10)]
+	if PLACE_ID_CACHE and p==_place_id_at:return _place_id_text
+	_place_id_at=p
+	_place_id_text="house:%d:%d:%d"%[roundi(p.x*10),roundi(p.y*10),roundi(p.z*10)]
+	return _place_id_text
 func label() -> String:return "House "+str(get_parent().name)
 func door() -> Node:return get_parent().get_node_or_null("FrontDoor")
 

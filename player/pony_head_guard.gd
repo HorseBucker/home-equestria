@@ -60,6 +60,21 @@ func _resolve_timed()->void:
 	if is_instance_valid(camera) and camera.is_inside_tree():_resolved_eye=camera.global_position;_resolved_tick=Engine.get_physics_frames()
 	if started > 0: CPU_PROFILE.record("head_guard", started)
 
+## Perf 0.1.0: one overlap test of a ball around the whole pass (the eye's sweep from its last
+## position, its 3.5 cm ball and both kiss-eye balls, plus slack) on the head layer before the
+## per-head affection lookups, the sweep, the depenetration and the kiss passes. With no head
+## shape inside it none of those can move anything: the eye stays where it is, exactly what the
+## full pass returns. Any head nearby runs the full pass unchanged. false: always the full pass.
+const HEAD_GUARD_CLEAR_SKIP:=true
+var _clear_shape:=SphereShape3D.new()
+var _clear_query:=PhysicsShapeQueryParameters3D.new()
+
+func _clear(space:PhysicsDirectSpaceState3D,from:Vector3,eye:Vector3)->bool:
+	_clear_shape.radius=from.distance_to(eye)*.5+EYE_HALF+EYE_RADIUS+.03
+	_clear_query.shape=_clear_shape;_clear_query.collision_mask=QUERY.LAYER
+	_clear_query.transform=Transform3D(Basis.IDENTITY,(from+eye)*.5)
+	return space.intersect_shape(_clear_query,1).is_empty()
+
 func resolve()->void:
 	if not is_instance_valid(camera) or not is_instance_valid(body) or not camera.is_inside_tree() or not body.is_inside_tree():
 		_previous=Vector3.INF
@@ -71,6 +86,9 @@ func resolve()->void:
 	var from:Vector3=_previous if _previous.is_finite() else eye
 	if from.distance_to(eye)>1.0:from=eye
 	_kissing.clear()
+	if HEAD_GUARD_CLEAR_SKIP and _clear(space,from,eye):
+		_previous=eye
+		return
 	var others:Array[RID]=[]
 	for head:Node3D in heads:
 		# Streamed or temporarily removed heads remain valid objects but have no world pose.

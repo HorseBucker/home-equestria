@@ -75,14 +75,18 @@ func _apply(delta: float) -> void:
 	_sway_time += delta
 	var level := clampf(drunk / PASS_OUT_DRUNK, 0.0, 1.0)
 	# Walking drifts: a slow wandering sideways pull while moving.
+	# Perf 0.1.0: sober (level 0) every value below is zero or unchanged, so a write is made only
+	# when it differs (a rotation write re-sends the camera's transform to its whole subtree).
 	if "drunk_drift" in body:
 		var wander := Vector3(sin(_sway_time * 0.9) + 0.5 * sin(_sway_time * 2.3), 0.0, cos(_sway_time * 0.7) * 0.6)
-		body.drunk_drift = wander * level * 1.4
+		var drift := wander * level * 1.4
+		if body.drunk_drift != drift: body.drunk_drift = drift
 	# Desktop view: a gentle roll and wobble (never in the headset: comfort).
 	if not game.xr_active:
 		var camera: Camera3D = game._find_camera(game.player)
 		if camera != null:
-			camera.rotation.z = sin(_sway_time * 1.3) * 0.06 * level
+			var roll := sin(_sway_time * 1.3) * 0.06 * level
+			if camera.rotation.z != roll: camera.rotation.z = roll
 			var base := float(get_node("/root/Settings").get_value("controls/fov"))
 			if level > 0.001 or absf(camera.fov - base) > 0.05:
 				camera.fov = lerpf(camera.fov, base + sin(_sway_time * 0.8) * 4.0 * level, 0.1)

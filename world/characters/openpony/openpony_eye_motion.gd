@@ -30,6 +30,15 @@ var saccades_enabled := true
 var rate_divisor := 1
 var rate_phase := 0
 var _written: Dictionary = {}
+## Unchanged inputs reuse the last full run (0.1.0 perf pass). Between blinks and saccades, with no
+## moving target, a full run recomputed the very poses it wrote last time (lids, brows, ears and both
+## eyes are a pure function of the values in _inputs() on this rig). Such a run re-applies the
+## cached writes instead, as the clip tiers' in-between ticks already do, and skips the identical
+## eye surface update. Rollback: REUSE_UNCHANGED = false.
+const REUSE_UNCHANGED := true
+var _last_inputs: Array = []
+## The head's AnimationPlayer (bind): a playing clip moves brow/ear source poses, so no reuse.
+var _player: AnimationPlayer
 var blink_enabled := true
 var _rests: Array[Transform3D] = []
 var _parents: Array[int] = []
@@ -62,6 +71,8 @@ static var _bound := {}
 
 func bind(player: AnimationPlayer) -> void:
 	var sk := get_skeleton()
+	_player = player
+	_last_inputs = []
 	# From the global generator: random in game, repeatable in a test that calls seed().
 	_rng.seed = randi()
 	var names := PackedStringArray()
@@ -203,6 +214,17 @@ func _unprofiled_process_modification() -> void:
 			return
 		for b in _written: sk.set_bone_pose(b, _written[b])
 		return
+	if REUSE_UNCHANGED:
+		var inputs := _inputs(sk)
+		if not inputs.is_empty() and inputs == _last_inputs:
+			if native != null: native.eye_rewrite(sk)
+			else:
+				for b in _written: sk.set_bone_pose(b, _written[b])
+			return
+		# Stored with copies: the expression dictionaries are edited in place by their owners.
+		if not inputs.is_empty():
+			for k in range(10, 13): inputs[k] = (inputs[k] as Dictionary).duplicate()
+		_last_inputs = inputs
 	if native != null:
 		var scalars := PackedFloat64Array([closure, expression_closure, target_weight, convergence_degrees])
 		scalars.append_array(_native_asymmetry())
@@ -263,6 +285,18 @@ func _unprofiled_process_modification() -> void:
 		var bone := _eye_bones[side_index]
 		if bone < 0: continue
 		_write(sk, bone, eye_pose(side_index, aim + _offset))
+
+
+## Everything a full run reads besides constants and the brow/ear source poses (which only a playing
+## head clip moves). Empty while a head clip plays (never reused).
+func _inputs(sk: Skeleton3D) -> Array:
+	if _player != null and is_instance_valid(_player) and _player.is_playing(): return []
+	var aim_frame := Transform3D.IDENTITY
+	if target_weight > 0.0 and _head_bone >= 0:
+		aim_frame = sk.global_transform * sk.get_bone_global_pose(_head_bone)
+	return [closure, expression_closure, target_weight, convergence_degrees, gaze, _offset, cross_inward,
+		_native_asymmetry(), target_world if target_weight > 0.0 else Vector3.ZERO, aim_frame,
+		expression_eyes, expression_brows, expression_ears, surface_update]
 
 
 ## Radians both eyes turn inward toward something right at her nose (a booping finger,

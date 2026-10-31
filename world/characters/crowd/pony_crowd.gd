@@ -74,6 +74,8 @@ var _service: Node
 var _visual_members: Array[Node] = []
 ## Each member's model pivot (null without one), refreshed with _visual_members in rank().
 var _visual_pivots: Array[Node3D] = []
+## Each member's view-test radius (0.1.0 perf pass: read per frame, its scale re-measured per ranking).
+var _visual_radii := PackedFloat32Array()
 const HIDDEN := &"crowd_hidden"
 
 func _unprofiled_process(_delta: float) -> void:
@@ -83,6 +85,7 @@ func _unprofiled_process(_delta: float) -> void:
 			if is_instance_valid(pony) and pony.has_meta(HIDDEN):
 				pony.refresh_hidden_clip()
 				pony.pivot.show();pony.remove_meta(HIDDEN)
+				if pony.has_method(&"set_crowd_hidden"): pony.set_crowd_hidden(false)
 		return
 	var xr := preload("res://world/player_view.gd").viewport(self).use_xr
 	# Typed on both paths: "[] if xr else ..." is an untyped Array, and assigning it errored every
@@ -93,7 +96,7 @@ func _unprofiled_process(_delta: float) -> void:
 		var pony: Node = _visual_members[index]
 		if not is_instance_valid(pony) or not pony.is_inside_tree(): continue
 		var center: Vector3 = pony.global_position + Vector3.UP * .7
-		var radius := 2.5 * maxf(1.0, pony.global_basis.get_scale().length()/sqrt(3.0))
+		var radius: float = _visual_radii[index]
 		var draw := true
 		if xr:
 			# Camera3D's desktop frustum may be narrower than the stereo eye views.
@@ -106,9 +109,14 @@ func _unprofiled_process(_delta: float) -> void:
 		if not is_instance_valid(visual): continue
 		if not draw and visual.visible:
 			pony.set_meta(HIDDEN, true); visual.hide()
+			# Her rigs stop their passes while nothing of her draws (pony_locomotion.gd HIDDEN_RIG_PARK).
+			if pony.has_method(&"set_crowd_hidden"): pony.set_crowd_hidden(true)
 		elif draw and pony.has_meta(HIDDEN):
 			pony.refresh_hidden_clip()
-			pony.remove_meta(HIDDEN); visual.show()
+			pony.remove_meta(HIDDEN)
+			# Rigs back on their passes, with one this frame: she is drawn already posed.
+			if pony.has_method(&"set_crowd_hidden"): pony.set_crowd_hidden(false)
+			visual.show()
 
 
 static func for_pony(pony: Node) -> Node:
@@ -187,8 +195,12 @@ func rank() -> void:
 	var members := get_tree().get_nodes_in_group(MEMBERS)
 	_visual_members.assign(members)
 	_visual_pivots.clear()
-	for pony in members:
+	_visual_radii.resize(members.size())
+	for i in members.size():
+		var pony: Node = members[i]
 		_visual_pivots.append(pony.pivot if "pivot" in pony else null)
+		# The per-frame view test's bounding radius, from her scale at this ranking (0.25 s).
+		_visual_radii[i] = 2.5 * maxf(1.0, pony.global_basis.get_scale().length() / sqrt(3.0)) if pony is Node3D else 2.5
 	var camera: Camera3D = preload("res://world/player_view.gd").camera(self)
 	var counts := {"hero": 0, "near": 0, "far": 0, "pinned": 0, "hidden": 0, "unseen_rest": 0, "resting": 0, "camera": camera != null}
 	if camera == null or not enabled:

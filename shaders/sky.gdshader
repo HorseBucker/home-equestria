@@ -9,6 +9,16 @@ render_mode use_half_res_pass;
 //
 // SkyController drives daylight/golden and the palette; everything else is here.
 
+// Values that change every frame arrive as global uniforms, pushed by SkyController just before
+// each frame is drawn. TIME, POSITION or a material uniform written every frame each mark the
+// sky's reflection cubemap dirty, and re-rendering it every frame was the largest single GPU pass
+// (0.23-0.28 ms, perf 0.1.0). With these the cubemap refreshes when the sky itself changes
+// (sun step, palette, weather) and at least every SkyController.RADIANCE_REFRESH_SEC.
+global uniform float sky_time;          // TIME's twin: seconds, wraps at the render time rollover
+global uniform vec3 sky_eye;            // POSITION's twin: the player's camera position
+global uniform vec2 sky_cloud_offset;   // the volumetric clouds' accumulated wind drift (metres)
+global uniform vec3 sky_cloud_shape;    // volumetric cloud coverage, density, darkness
+
 group_uniforms Palette;
 uniform vec3 day_zenith : source_color = vec3(0.18, 0.38, 0.78);
 uniform vec3 day_horizon : source_color = vec3(0.62, 0.78, 0.95);
@@ -72,7 +82,7 @@ uniform float grassy_cloud_brightness = 3.0;
 uniform float grassy_cloud_highlight = 8.0;
 
 vec4 grassy_cloud_layer(vec3 dir, float sectors, float elevation, float row) {
-	float yaw = mod(atan(dir.x, -dir.z) + PI + TIME * 0.00012, TAU);
+	float yaw = mod(atan(dir.x, -dir.z) + PI + sky_time * 0.00012, TAU);
 	float cell = floor(yaw * sectors / TAU);
 	float seed = fract(sin(cell * 127.1 + row * 37.1) * 43758.5453);
 	float midpoint = (cell + 0.36 + seed * 0.28) * TAU / sectors;
@@ -127,14 +137,16 @@ uniform bool volume_clouds = false;
 uniform sampler3D cloud_noise : filter_linear_mipmap, repeat_enable;
 uniform float cloud_base = 700.0;
 uniform float cloud_thickness = 650.0;
+// The march reads coverage/density/darkness from the global sky_cloud_shape, eased every frame by
+// SkyController. These two material copies only grey the reflection cubemap (AT_CUBEMAP_PASS) and
+// follow it at the cubemap's refresh rate, so easing weather does not re-render it every frame.
 uniform float cloud_coverage : hint_range(0.0, 1.0) = 0.45;
-uniform float cloud_density : hint_range(0.0, 4.0) = 1.0;
 uniform float cloud_darkness : hint_range(0.0, 1.0) = 0.0;
 uniform vec2 cloud_drift = vec2(6.0, 2.0);      // metres per second
-// Where the wind has carried the clouds so far (metres), accumulated by SkyController each
-// frame. drift*TIME made every change of wind jump the whole field by that change times the
-// seconds since launch, so after an hour the clouds raced (dev 2026-09-23).
-uniform vec2 cloud_offset = vec2(0.0);
+// Where the wind has carried the clouds so far (metres) is the global sky_cloud_offset,
+// accumulated by SkyController each frame. drift*TIME made every change of wind jump the whole
+// field by that change times the seconds since launch, so after an hour the clouds raced
+// (dev 2026-09-23).
 uniform vec2 cloud_seed = vec2(0.0);
 uniform float cloud_shape_scale = 0.00032;      // noise repeats per metre (shape)
 uniform int cloud_steps = 28;
@@ -146,22 +158,28 @@ float cloud_hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 437
 float cloud_density_at(vec3 p, float time) {
 	float h = (p.y - cloud_base) / cloud_thickness;
 	if (h < 0.0 || h > 1.0) return 0.0;
-	vec3 q = p + vec3(cloud_offset.x, 0.0, cloud_offset.y);
+	vec3 q = p + vec3(sky_cloud_offset.x, 0.0, sky_cloud_offset.y);
 	vec2 wq = q.xz * cloud_shape_scale * 0.18 + cloud_seed;
 	float weather = texture(cloud_noise, vec3(wq, 0.37)).r;
-	float cover = smoothstep(1.0 - cloud_coverage - 0.12, 1.0 - cloud_coverage + 0.18, weather);
+	float cover = smoothstep(1.0 - sky_cloud_shape.x - 0.12, 1.0 - sky_cloud_shape.x + 0.18, weather);
 	if (cover <= 0.0) return 0.0;
-	vec3 sp = q * cloud_shape_scale + vec3(cloud_seed.x, 0.0, cloud_seed.y);
-	float shape = texture(cloud_noise, sp).r * 0.62 + texture(cloud_noise, sp * 2.7 + vec3(0.13)).r * 0.26
-		+ texture(cloud_noise, sp * 7.3 + vec3(0.41)).r * 0.12;
 	// Towers rise where the weather is strongest; bases stay flat and soft.
 	float top = mix(0.35, 1.0, cover);
 	float profile = smoothstep(0.0, 0.08, h) * (1.0 - smoothstep(top * 0.55, top, h));
-	// Heavy weather: a mottled, lumpy underside instead of an even lid.
-	float lumps = mix(1.0, 0.55 + texture(cloud_noise, sp * 1.9 + vec3(0.7)).r * 0.9, smoothstep(0.7, 0.95, cloud_coverage));
-	float d = shape * profile * cover * lumps - (0.52 - cloud_coverage * 0.25);
+	// Above a tower's top (or on the slab floor) the density below is negative before the ramp
+	// (shape, cover and lumps are at most 1, 1 and 1.45; the bias is at least 0.27), so it is
+	// exactly 0: skip the shape reads (perf 0.1.0; most of the light march toward the sun lands here).
+	if (profile <= 0.0) return 0.0;
+	vec3 sp = q * cloud_shape_scale + vec3(cloud_seed.x, 0.0, cloud_seed.y);
+	float shape = texture(cloud_noise, sp).r * 0.62 + texture(cloud_noise, sp * 2.7 + vec3(0.13)).r * 0.26
+		+ texture(cloud_noise, sp * 7.3 + vec3(0.41)).r * 0.12;
+	// Heavy weather: a mottled, lumpy underside instead of an even lid. Below 0.7 coverage the
+	// mix weight is 0 and lumps is exactly 1, so the read is skipped (a branch every pixel agrees on).
+	float lump_mix = smoothstep(0.7, 0.95, sky_cloud_shape.x);
+	float lumps = lump_mix > 0.0 ? mix(1.0, 0.55 + texture(cloud_noise, sp * 1.9 + vec3(0.7)).r * 0.9, lump_mix) : 1.0;
+	float d = shape * profile * cover * lumps - (0.52 - sky_cloud_shape.x * 0.25);
 	// steep ramp: crisp, billowy edges instead of haze
-	return smoothstep(0.0, 0.09, d) * 1.6 * cloud_density;
+	return smoothstep(0.0, 0.09, d) * 1.6 * sky_cloud_shape.y;
 }
 
 // Light reaching a point from the sun: a few steps through the cloud toward it.
@@ -189,15 +207,16 @@ vec4 volume_cloud_layer(vec3 ro, vec3 rd, vec3 sky_col, float time, vec2 jitter_
 	vec3 to_sun = LIGHT0_ENABLED ? LIGHT0_DIRECTION : vec3(0.0, 1.0, 0.0);
 	float sun_up = clamp(to_sun.y * 4.0, 0.0, 1.0);
 	vec3 sun_col = LIGHT0_ENABLED ? LIGHT0_COLOR * LIGHT0_ENERGY * sun_up : vec3(0.0);
+	bool sun_lit = sun_col != vec3(0.0);
 	vec3 moon_col = LIGHT1_ENABLED ? LIGHT1_COLOR * LIGHT1_ENERGY * 0.6 : vec3(0.0);
 	float cos_sun = dot(rd, to_sun);
 	// silver lining: forward scattering toward the sun
 	float phase = mix(0.6, 1.0, 0.5 + 0.5 * cos_sun) + pow(max(cos_sun, 0.0), 8.0) * 1.6;
 	// Overcast light is grey, not sky blue.
 	vec3 sky_grey = vec3(dot(sky_col, vec3(0.3, 0.45, 0.25)));
-	vec3 amb_sky = mix(sky_col, sky_grey * vec3(0.95, 0.97, 1.0), cloud_darkness);
+	vec3 amb_sky = mix(sky_col, sky_grey * vec3(0.95, 0.97, 1.0), sky_cloud_shape.z);
 	vec3 ambient_top = amb_sky * 1.1 + vec3(0.06);
-	vec3 ambient_bottom = amb_sky * mix(0.42, 0.3, cloud_darkness);
+	vec3 ambient_bottom = amb_sky * mix(0.42, 0.3, sky_cloud_shape.z);
 	float trans = 1.0;
 	vec3 light = vec3(0.0);
 	for (int i = 0; i < steps; i++) {
@@ -205,11 +224,13 @@ vec4 volume_cloud_layer(vec3 ro, vec3 rd, vec3 sky_col, float time, vec2 jitter_
 		float d = cloud_density_at(p, time);
 		if (d > 0.001) {
 			float h = clamp((p.y - cloud_base) / cloud_thickness, 0.0, 1.0);
-			float sun_t = cloud_light(p, to_sun, time);
+			// sun_col is 0 with the sun below the horizon or dark (night): the sun term is 0 whatever
+			// the light march says, so skip its four density samples (same for every pixel).
+			float sun_t = sun_lit ? cloud_light(p, to_sun, time) : 1.0;
 			float powder = 1.0 - exp(-d * 2.0);
 			vec3 amb = mix(ambient_bottom, ambient_top, h);
 			vec3 lit = sun_col * sun_t * phase * mix(0.6, 1.0, powder) + amb + moon_col * h * 0.3;
-			lit *= mix(1.0, 0.42, cloud_darkness);
+			lit *= mix(1.0, 0.42, sky_cloud_shape.z);
 			float absorb = d * dt * 0.009;
 			float a = 1.0 - exp(-absorb);
 			light += trans * a * lit;
@@ -227,6 +248,15 @@ vec4 volume_cloud_layer(vec3 ro, vec3 rd, vec3 sky_col, float time, vec2 jitter_
 }
 
 void sky() {
+	// Nothing reads the half-res buffer in the reflection cubemap (its AT_CUBEMAP_PASS branch below
+	// never samples HALF_RES_COLOR, and the radiance filter overwrites that mip), nor anywhere when
+	// the flat clouds are on. Engine-side the half-res cubemap still ran the full cloud raymarch for
+	// six 128 px faces on every radiance update; skip straight out instead.
+	// (Sky shaders may not return early, so the rest of the function is this branch's else.)
+	if (AT_HALF_RES_PASS && (AT_CUBEMAP_PASS || !volume_clouds)) {
+		COLOR = vec3(0.0);
+		ALPHA = 0.0;
+	} else {
 	vec3 dir = normalize(EYEDIR);
 	float up = clamp(dir.y, -1.0, 1.0);
 
@@ -244,7 +274,7 @@ void sky() {
 	// Stars fade with any daylight at all; a star visible at dusk reads as a bug.
 	float night = 1.0 - smoothstep(0.0, 0.35, daylight);
 	if (night > 0.001 && up > -0.05) {
-		float s = stars(dir, TIME);
+		float s = stars(dir, sky_time);
 		col += vec3(s) * star_brightness * night * smoothstep(-0.05, 0.25, up);
 	}
 
@@ -256,7 +286,8 @@ void sky() {
 		col += LIGHT0_COLOR * (disk * 6.0 + glow * (1.0 + golden * 2.5));
 	}
 
-	if (LIGHT1_ENABLED) {
+	// The moon term is scaled by `night`, exactly 0 from daylight 0.35 up: skip it by day.
+	if (LIGHT1_ENABLED && night > 0.0) {
 		float moon_d = dot(dir, LIGHT1_DIRECTION);
 		float disk = smoothstep(1.0 - moon_size, 1.0 - moon_size * 0.5, moon_d);
 		// Real maria: project the view ray onto the disc, map to the near-side
@@ -284,7 +315,7 @@ void sky() {
 		// re-rolled every frame and differed per eye, so the clouds crawled with moving grain
 		// (dev 2026-09-25). This one holds still and is the same in both eyes.
 		vec3 seed_dir = normalize(dir) * 997.0;
-		vec4 layer = volume_cloud_layer(POSITION, dir, col, TIME, floor(seed_dir.xz + seed_dir.y * vec2(0.37, 0.61)));
+		vec4 layer = volume_cloud_layer(sky_eye, dir, col, sky_time, floor(seed_dir.xz + seed_dir.y * vec2(0.37, 0.61)));
 		COLOR = layer.rgb * exposure;
 		ALPHA = layer.a;
 	} else if (volume_clouds) {
@@ -298,7 +329,7 @@ void sky() {
 		col = mix(col, ground_color, smoothstep(0.0, -0.12, up));
 		COLOR = col * exposure;
 	} else {
-	// Clouds: intersect the view ray with flat layers. POSITION anchors the
+	// Clouds: intersect the view ray with flat layers. sky_eye (POSITION) anchors the
 	// masks in world space, so walking does not drag the whole sky along with
 	// the viewer. The bank occupies low angles and the old layer stays overhead.
 	vec2 toward_sun = vec2(0.0, 0.004);
@@ -310,8 +341,8 @@ void sky() {
 	// layers. Bank detail doubles as its lighting breakup, avoiding another
 	// texture lookup and a uniformly white horizon wall.
 	if (!grassy_clouds_enabled && up > 0.012 && up < 0.30) {
-		vec2 bank_plane = POSITION.xz + dir.xz / max(up, 0.012) * cloud_bank_height;
-		vec2 bank_uv = bank_plane * cloud_bank_scale + cloud_wind * TIME * 0.62;
+		vec2 bank_plane = sky_eye.xz + dir.xz / max(up, 0.012) * cloud_bank_height;
+		vec2 bank_uv = bank_plane * cloud_bank_scale + cloud_wind * sky_time * 0.62;
 		float bank_broad = texture(cloud_texture, bank_uv).r;
 		float bank_detail = texture(cloud_texture, bank_uv * 2.37 + vec2(0.31, 0.17)).r;
 		float bank_mask = bank_broad * (0.78 + bank_detail * 0.34);
@@ -328,8 +359,8 @@ void sky() {
 	// comes from a sample nudged toward the sun in UV space, which gives each
 	// puff a bright cap and a shaded belly without any lighting model.
 	if (!grassy_clouds_enabled && up > 0.02) {
-		vec2 plane = POSITION.xz + dir.xz / up * cloud_height;
-		vec2 uv = plane * cloud_scale + cloud_wind * TIME;
+		vec2 plane = sky_eye.xz + dir.xz / up * cloud_height;
+		vec2 uv = plane * cloud_scale + cloud_wind * sky_time;
 		float body = texture(cloud_texture, uv).r;
 		float cap = texture(cloud_texture, uv + toward_sun).r;
 		float lit = smoothstep(0.35, 0.75, cap);
@@ -352,5 +383,6 @@ void sky() {
 	col = mix(col, ground_color, smoothstep(0.0, -0.12, up));
 
 	COLOR = col * exposure;
+	}
 	}
 }

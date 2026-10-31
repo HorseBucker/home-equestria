@@ -103,7 +103,20 @@ var _parked := false
 var _parked_msec := 0
 
 
+## Far hands (0.1.0 perf pass): with no hand or tracked controller near her and nothing live on
+## her, every tick repeated the same wake test. The next test then waits as many ticks as the
+## nearest hand needs to close the gap to her wake distance at FAR_HAND_SPEED (hand plus her own
+## gallop), at most FAR_SKIP_MAX ticks, so a teleport landing beside her is seen within 1/6 s and the
+## hulls are up before a hand can reach her coat. The skipped time is added to the next test.
+## desktop_offer, desktop_pet and wake_tick end the wait. Rollback: FAR_SKIP_MAX = 0.
+const FAR_HAND_SPEED := 20.0
+const FAR_SKIP_MAX := 10
+var _skip_ticks := 0
+var _skipped_seconds := 0.0
+
+
 func wake_tick() -> void:
+	_skip_ticks = 0
 	if _parked:
 		_parked = false
 		_pet_quiet += (Time.get_ticks_msec() - _parked_msec) / 1000.0   # the quiet time it skipped
@@ -177,10 +190,23 @@ func is_petting() -> bool:
 	return petting
 
 
+## The key's inputs and the last key built from them: within FIT_REACH it was formatted every tick.
+var _key_identity: Object
+var _key_model: Object
+var _key_wings := false
+var _key_cache := ""
+
 func _fit_key() -> String:
 	var identity: Resource = mare.get("identity")
-	var model: String = mare.model_scene.resource_path if mare.get("model_scene") != null else ""
-	return "%s|%s|%s|%s" % [identity.id if identity != null else "", model, identity.hair_scene if identity != null else "", "open" if _wings_open() else "folded"]
+	var scene: Object = mare.get("model_scene")
+	var wings := _wings_open()
+	if _key_cache != "" and identity == _key_identity and scene == _key_model and wings == _key_wings: return _key_cache
+	var model: String = mare.model_scene.resource_path if scene != null else ""
+	_key_identity = identity
+	_key_model = scene
+	_key_wings = wings
+	_key_cache = "%s|%s|%s|%s" % [identity.id if identity != null else "", model, identity.hair_scene if identity != null else "", "open" if wings else "folded"]
+	return _key_cache
 
 func _wings_open()->bool:
 	return mare.flight!=null and mare.flight.wings!=null and mare.flight.wings.opened
@@ -198,6 +224,12 @@ func _physics_process(delta: float) -> void:
 
 
 func _unprofiled_physics_process(delta: float) -> void:
+	if _skip_ticks > 0:
+		_skip_ticks -= 1
+		_skipped_seconds += delta
+		return
+	delta += _skipped_seconds
+	_skipped_seconds = 0.0
 	var hands := _hands()
 	var desktop_near: bool = Time.get_ticks_msec() < _desktop_until and _desktop_eye.is_finite()
 	if hands.is_empty() and not desktop_near and not active and not petting:
@@ -229,6 +261,12 @@ func _unprofiled_physics_process(delta: float) -> void:
 		if not _excepted.is_empty(): _clear_exceptions()
 		_advance_petting(delta, _desktop_touching())
 		if not petting and not desktop_near and mare.get(&"sim_tier") == 2: _park()
+		elif not petting and not desktop_near and not want and FAR_SKIP_MAX > 0 \
+				and (nearest >= FIT_REACH * FIT_REACH or _installed_key == _key):
+			# Ticks the nearest hand needs to reach her wake distance; FAR_SKIP_MAX when none is out.
+			var reach := FAR_HAND_SPEED * maxf(get_physics_process_delta_time(), 1.0 / 240.0)
+			var gap := sqrt(nearest) - wake
+			_skip_ticks = FAR_SKIP_MAX if gap >= reach * FAR_SKIP_MAX else maxi(int(gap / reach) - 1, 0)
 		return
 	# A settled clip-tier rest freezes her skeletons: no skeleton_updated, so read them directly.
 	var tick := Engine.get_physics_frames()

@@ -116,6 +116,36 @@ func leg_contact_weight(i: int) -> float:
 	return lerpf(trot_weight, gallop_weight, leg_blend[i])
 
 
+## The per-leg timing pony_locomotion.gd _update_contacts_native() hands PonySolverNative, five
+## values a leg: stride_offset() * blend, airborne, airborne and predicting, touchdown_seconds()
+## capped at 0.45 s when predicting, and leg_contact_weight() (1 with no blend). 0.1.0 perf pass:
+## one gait_leg() lookup and one progress per leg instead of five calls each re-deriving them; the
+## same operations in the same order, so the same values bit for bit (tools/perf/test_contact_timing.gd).
+func contact_timing(blend: float, predict: bool) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	out.resize(20)
+	for i in 4:
+		var owner := _owner[i]
+		var leg: Dictionary = _profile.gait_leg(owner, i)
+		var span := float(leg.contact_span)
+		var progress := fposmod(leg_phase(i) - float(leg.contact_start), 1.0)
+		var airborne := progress >= span
+		var extra := _stride_lengths[i]
+		var stride: float
+		if progress < span:
+			stride = extra * (progress / span - 0.5) + _stride_shift[i]
+		else:
+			stride = extra * 0.5 * cos(PI * ((progress - span) / (1.0 - span))) + _stride_shift[i]
+		var k := i * 5
+		out[k] = stride * blend
+		out[k + 1] = 1.0 if airborne else 0.0
+		out[k + 2] = 1.0 if airborne and predict else 0.0
+		if airborne and predict:
+			out[k + 3] = minf(0.45, (1.0 - progress) * _profile.gait_cycle(owner) / maxf(_gait_playback(owner), 0.05))
+		out[k + 4] = leg_contact_weight(i) if blend > 0.0 else 1.0
+	return out
+
+
 ## Seconds until the owning gait's clip lands this leg at the current cadence.
 func touchdown_seconds(i: int) -> float:
 	var cycle: float = _profile.gait_cycle(_owner[i])

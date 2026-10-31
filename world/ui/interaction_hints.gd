@@ -191,8 +191,12 @@ func _fade(delta: float) -> void:
 	for mesh: Variant in _outlined.keys():
 		if not is_instance_valid(mesh): _outlined.erase(mesh); continue
 		var goal := 1.0 if _wanted.has(mesh) else 0.0
-		var amount := move_toward(float(_outlined[mesh]), goal, delta / FADE_SECONDS) if xr else goal
-		OUTLINE.set_amount(mesh, amount)
+		var previous := float(_outlined[mesh])
+		var amount := move_toward(previous, goal, delta / FADE_SECONDS) if xr else goal
+		# Perf 0.1.0: a held outline is not rewritten every tick (same overlay, same amount);
+		# it is still re-applied if anything else replaced the overlay meanwhile.
+		if amount != previous or amount <= 0.0 or (mesh as GeometryInstance3D).material_overlay != OUTLINE.material():
+			OUTLINE.set_amount(mesh, amount)
 		if amount <= 0.0: _outlined.erase(mesh)
 		else: _outlined[mesh] = amount
 

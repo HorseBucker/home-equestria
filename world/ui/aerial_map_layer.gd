@@ -66,6 +66,8 @@ func _ready() -> void:
 			_levels.append({"mpp": mpp, "tiles": rows})
 	_levels.sort_custom(func(a: Dictionary, b: Dictionary): return a.mpp > b.mpp)
 	set_process(true)
+	# Perf 0.1.0: a hidden map with no decode in flight stops polling; showing it wakes it.
+	_view.visibility_changed.connect(func() -> void: if available(): set_process(true))
 
 func available() -> bool:
 	return _overview != null
@@ -125,6 +127,7 @@ func _process(_delta: float) -> void:
 			_failed[request.key] = true
 			_loading = {}
 		return
+	if not _view.is_visible_in_tree(): set_process(false)
 
 func _refresh_requests() -> void:
 	var visible := _view_rect(_view)

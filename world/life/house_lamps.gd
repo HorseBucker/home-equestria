@@ -80,7 +80,12 @@ func lit(place: String) -> bool:
 ## A pony wants a lamp on: home, awake, after her own dusk and before her shut-off time, or up
 ## before a dark dawn.
 func wants_light(id: String, place: String) -> bool:
-	if not _home(id, place) or _asleep(id): return false
+	# Perf 0.1.0: the clock tests first, then where she is. The answer is the same; by day and
+	# after bedtime no house lookup runs (each one re-runs the town's house assignment), which
+	# took a 2 ms tick every CHECK for the whole roster.
+	return _lamp_hours(id) and _home(id, place) and not _asleep(id)
+
+func _lamp_hours(id: String) -> bool:
 	var h := float(clock.hours)
 	var day := int(clock.day)
 	var daylight: float = float(clock.daylight()) if clock.has_method("daylight") else 1.0
@@ -110,13 +115,13 @@ func _home(id: String, place: String) -> bool:
 	var actor := _body(id)
 	if actor != null:
 		if str(actor.get_meta("house_id", "")) == place: return true
-		var house: Node3D = population.home_house(id)
+		var house: Node3D = night_rest.cached_home_house(id) if is_instance_valid(night_rest) and night_rest.has_method("cached_home_house") else population.home_house(id)
 		return house != null and house.contains(actor.global_position)
 	if not ESSENCE.unloaded(population, id): return false   # visiting, on the train
 	var resident := ESSENCE.record(population, id)
 	if resident.is_empty(): return false
 	var at := ESSENCE.position(resident)
-	var home := ESSENCE.home(population, id)
+	var home: Vector3 = night_rest.cached_essence_home(id) if is_instance_valid(night_rest) and night_rest.has_method("cached_essence_home") else ESSENCE.home(population, id)
 	return at.is_finite() and home.is_finite() and at.distance_to(home) < HOME_RADIUS
 
 func _body(id: String) -> Node3D:

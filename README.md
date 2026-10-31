@@ -1,6 +1,6 @@
 # Home: Equestria
 
-A VR (and desktop) life-sim in Ponyville. Current version: **0.0.9.6-maredev** ([what's new](https://github.com/homedevanon/home-equestria/releases/tag/0.0.9.6-maredev)).
+A VR (and desktop) life-sim in Ponyville. Current version: **0.1.0-maredev** ([what's new](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev)).
 
 ### New here? Get the Universal Launcher
 
@@ -8,7 +8,7 @@ A VR (and desktop) life-sim in Ponyville. Current version: **0.0.9.6-maredev** (
 |---|---|
 | Windows | [HomeEquestria-Setup-windows.exe](https://github.com/homedevanon/home-equestria/releases/download/setup/HomeEquestria-Setup-windows.exe) |
 | Linux | [HomeEquestria-Setup-linux.x86_64](https://github.com/homedevanon/home-equestria/releases/download/setup/HomeEquestria-Setup-linux.x86_64) (make it executable first: `chmod +x HomeEquestria-Setup-linux.x86_64`) |
-| Quest standalone | The `quest.apk` from the [0.0.4-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.0.4-maredev). Nothing else. |
+| Quest standalone | The `quest.apk` from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev). Nothing else. |
 
 Put the setup where you want the game, then open it. It installs into a `HomeEquestria` folder right next to itself (or press Change), downloads the newest version (about 3 GB), checks every file against the signed release, and can add a desktop shortcut. After that the game updates itself.
 
@@ -22,17 +22,17 @@ On 0.0.4-maredev or newer: press Update on the title screen or in the pause menu
 
 | You want to... | Download |
 |---|---|
-| Install by hand on Windows | Windows from MEGA, **or** both `windows.zip` parts from the [0.0.4-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.0.4-maredev), then press Update in game |
-| Install by hand on Linux | Linux from MEGA, **or** both `linux.tar.gz` parts from the [0.0.4-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.0.4-maredev), then press Update in game |
-| Edit the game from source | `Source code` (or clone the repo) **plus** all three `source-data` zips from the [0.0.7-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.0.7-maredev), extracted into the repo root next to `project.godot` (they hold the ground, foliage and other generated data git leaves out), then the small `source-data-update` zip from the [0.0.9.6-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.0.9.6-maredev) on top |
+| Install by hand on Windows | Windows from MEGA, **or** both `windows.zip` parts from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev) |
+| Install by hand on Linux | Linux from MEGA, **or** both `linux.tar.gz` parts from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev) |
+| Edit the game from source | `Source code` (or clone the repo) **plus** all three `source-data` zips from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev), extracted into the repo root next to `project.godot` (they hold the ground, foliage and other generated data git leaves out) |
 
-MEGA (0.0.4-maredev full game, update in game after):
-- Windows: https://mega.nz/file/OkJ3mBDb#MLCK8sBqQ4GPWMSesgNK2UzWwK0wSbH2QA12RdcsmUo
-- Linux: https://mega.nz/file/XoRSgDQL#FI9EM4Ns37nzOnUYT_5rjcTWhVEoxdYaXhiUFFBe7D0
-- Quest: https://mega.nz/file/nkxBgLaA#U1f9JWvNbVIYCB-471AcM8pMRSAf5OJymkOjPX-tP60
+MEGA (0.1.0-maredev full game):
+- Windows: https://mega.nz/file/bl4kkDIC#IlRcT0QvC6ofBqEXgqHSSZq31Ox8IF3VaCf19RB995A
+- Linux: https://mega.nz/file/ntxxyTQQ#KFG5G3Q1jq3XPwKwvD5qmfFNJvD7VWuIYxYCgF1Fkeg
+- Quest: https://mega.nz/file/CkgHgJ7D#CliUBnbFNfgMAwra6y61hCgpFeHQ3P7SXYBFz_w3hRA
 
 The release pages explain every file, how to join the two-part downloads and their SHA-256.
 
-**Playing? Please also download `download-me` from the [0.0.4-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.0.4-maredev).** It's a tiny file that does nothing; its download counter is the only way I can tell how many anons are playing from MEGA (MEGA has no counter). One click each, thank you!
+**Playing? Please also download `download-me` from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev).** It's a tiny file that does nothing; its download counter is the only way I can tell how many anons are playing from MEGA (MEGA has no counter). One click each, thank you!
 
 Bug reports: https://scrumboy.com/1s42pi65 or https://github.com/homedevanon/home-equestria/issues

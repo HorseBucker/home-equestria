@@ -93,7 +93,8 @@ func _spawn_player() -> void:
 		cam.add_child(water_view)
 		var fps_debug:=preload("res://world/ui/debug_fps.gd").new()
 		fps_debug.name="DebugFPS";host.add_child(fps_debug);fps_debug.setup(cam,host.xr_active)
-		if DEV.enabled():
+		# Player builds leave the profiler out, also when the debug tools are unlocked.
+		if DEV.enabled() and ResourceLoader.exists("res://world/debug/render_profiler.gd"):
 			var render_profiler: Node = load("res://world/debug/render_profiler.gd").new()
 			render_profiler.name = "RenderProfiler"; host.add_child(render_profiler)
 			var measure: Node = load("res://world/debug/pony_measure.gd").new()
@@ -173,14 +174,25 @@ func _player_eye_camera() -> Camera3D:
 	if is_instance_valid(cached) and cached.is_inside_tree() and is_instance_valid(host.player) and host.player.is_ancestor_of(cached) \
 			and (cached is XRCamera3D or (not host.xr_active and cached.current and cached.get_viewport() == host.get_viewport())):
 		return cached
-	_eye_camera = _find_camera(host.player) as Camera3D if is_instance_valid(host.player) else null
+	_eye_camera = _search_camera(host.player) as Camera3D if is_instance_valid(host.player) else null
 	return _eye_camera
 
 
 ## The player's real eye camera. The XR rig also carries a disabled cinematic-view
 ## camera ahead of the headset camera in tree order, so prefer the current camera,
 ## then an XRCamera3D, then any Camera3D.
+## Perf 0.1.0: asked about the player rig itself (most of ~50 callers, some every tick) it answers
+## from _player_eye_camera(), the same search's result kept while it is still that answer
+## (in the rig, an XR camera or the viewport's current camera); a full search took ~10 us.
 func _find_camera(node: Node) -> Node3D:
+	if FIND_CAMERA_CACHE and node != null and node == host.player and is_instance_valid(node):
+		var eye: Camera3D = _player_eye_camera()
+		if eye != null: return eye
+	return _search_camera(node)
+
+const FIND_CAMERA_CACHE := true
+
+func _search_camera(node: Node) -> Node3D:
 	var cameras: Array[Node] = node.find_children("*", "Camera3D", true, false)
 	if node is Camera3D:
 		cameras.push_front(node)

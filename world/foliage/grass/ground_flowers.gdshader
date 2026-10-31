@@ -89,6 +89,12 @@ int ground_id(vec2 xz) {
 	return blend > 0.5 ? int((c >> 22u) & 31u) : int((c >> 27u) & 31u);
 }
 bool is_road(int id) { return id == 1 || id == 4 || id == 5; }
+// Rollback switch (perf 0.1.0 GPU pass): the road-verge search (up to 16 control reads per
+// vertex) runs only where a verge flower could still win: where road_chance * verge exceeds the
+// cell's other chance and the cell's roll is under it. Elsewhere road_near could not change the
+// final chance test (every later factor is monotonic and at most 1, the glade term does not
+// depend on it), so the same cells flower.
+const bool FLOWER_ROAD_LATE = true;
 
 const vec3 PALETTE[8] = vec3[8](
 	vec3(1.0, 0.3, 0.62), vec3(1.0, 0.8, 0.08), vec3(0.98, 0.95, 0.9), vec3(0.62, 0.36, 1.0),
@@ -114,20 +120,24 @@ void vertex() {
 	int id = maybe ? ground_id(xz) : -1;
 	float chance = 0.0;
 	if (keep && id >= 0 && id_density[id] > 0.5 && y > sea_level + 0.4) {
-		// Beside a road: any road texel within about 2.5 m.
-		bool road_near = false;
-		for (int k = 0; k < 8 && !road_near; k++) {
-			float a = float(k) * 0.785398;
-			vec2 d = vec2(cos(a), sin(a));
-			road_near = is_road(ground_id(xz + d * 1.3)) || is_road(ground_id(xz + d * 2.6));
-		}
 		// Patches: small clusters (a few metres) where a fine and a broad noise both peak, so
 		// they appear sparsely, tens of metres apart, not as a continuous meadow.
 		float meadow = smoothstep(0.78, 0.84, value_noise(xz * 0.22 + 17.0)) * smoothstep(0.55, 0.7, value_noise(xz * 0.018 + 3.0));
 		chance = max(stray_chance, meadow * patch_chance);
 		// Only some stretches of verge flower (about one in five), in clumps along them.
 		float verge = smoothstep(0.68, 0.74, value_noise(xz * 0.05 + 41.0)) * smoothstep(0.5, 0.65, value_noise(xz * 0.4 + 5.0));
-		if (road_near) chance = max(chance, road_chance * verge);
+		// Beside a road: any road texel within about 2.5 m. The 16-read search can only matter
+		// when the verge chance beats the cell's other chance and its roll (FLOWER_ROAD_LATE).
+		float verge_chance = road_chance * verge;
+		if (!FLOWER_ROAD_LATE || (verge_chance > chance && roll < verge_chance * season_flowers)) {
+			bool road_near = false;
+			for (int k = 0; k < 8 && !road_near; k++) {
+				float a = float(k) * 0.785398;
+				vec2 d = vec2(cos(a), sin(a));
+				road_near = is_road(ground_id(xz + d * 1.3)) || is_road(ground_id(xz + d * 2.6));
+			}
+			if (road_near) chance = max(chance, verge_chance);
+		}
 		float hx = ground_height(xz + vec2(1.0, 0.0)) - y;
 		float hz = ground_height(xz + vec2(0.0, 1.0)) - y;
 		vec3 n = normalize(vec3(-hx, 1.0, -hz));

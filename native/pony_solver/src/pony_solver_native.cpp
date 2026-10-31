@@ -29,6 +29,7 @@ void PonySolverNative::_bind_methods() {
 								 "target", "sole_basis", "pole", "epsilon", "budget"),
 			&PonySolverNative::solve_leg);
 	ClassDB::bind_method(D_METHOD("apply_limits", "pose"), &PonySolverNative::apply_limits);
+	ClassDB::bind_method(D_METHOD("constrain_basis", "index", "basis"), &PonySolverNative::constrain_basis);
 	ClassDB::bind_method(D_METHOD("bind_contact_legs", "bones", "end_heights", "sole_bases"), &PonySolverNative::bind_contact_legs);
 	ClassDB::bind_method(D_METHOD("contacts_begin", "source_pose", "feet", "global", "pivot", "model_frame", "delta", "timing", "motion"),
 			&PonySolverNative::contacts_begin);
@@ -365,6 +366,12 @@ void PonySolverNative::solve_leg_core(Corrected &corrected, const Source &source
 
 // pony_joint_limits.gd apply(): constrains every bound joint of `pose` in place and returns
 // the angle each one moved, in bind_limits() order.
+// pony_joint_limits.gd constrain(): `joints` is written only by bind_limits(), which joins any
+// kicked solve first, and the solve task only reads it, so no join is needed here.
+Basis PonySolverNative::constrain_basis(int32_t p_index, const Basis &p_basis) const {
+	return constrain(p_index, p_basis);
+}
+
 PackedFloat64Array PonySolverNative::apply_limits(Array p_pose) {
 	solve_join();
 	PackedFloat64Array angles;

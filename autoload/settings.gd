@@ -26,6 +26,9 @@ const PONY_SIZES := [
 const BUSES := ["Voice", "SFX", "Ambience", "Music"]
 const DEFAULTS := {
 	"setup/completed": false,
+	# dev 2026-10-31: the machine check is opt-in. A new desktop player is asked once before the
+	# title (world/ui/quality_prompt.gd); saying no keeps High. True once asked (or on old installs).
+	"setup/quality_asked": false,
 	"setup/season": 0,
 	"title/view": "random",
 	"player/height_cm": 182,
@@ -51,6 +54,11 @@ const DEFAULTS := {
 	"video/upscaler": "preset",
 	"video/vsync": false,
 	"video/fps_cap": 0,
+	# dev 2026-10-31: one more frame queued ahead of the GPU (frame_queue_size 3) is the 0.1.0 pass's
+	# biggest desktop FPS win (crowd 336 -> 405 FPS) but adds a frame of input lag (16 ms at 60 FPS).
+	# "preset" turns it on for Medium and below, off for High and Ultra (dev's call); the player can
+	# force it either way. Boot-only: written to user://launch.cfg.
+	"video/frames_ahead": "preset",
 	"video/window": "windowed",
 	# Windowed mode's size (dev 2026-10-27); the project's own window is 1600 x 900.
 	"video/window_size": "1600x900",
@@ -103,6 +111,7 @@ const DEFAULTS := {
 const SPECS := {
 	"inventory/hud_placement": {"type": "choice", "options": [["gesture", "Hand gestures"]]},
 	"setup/completed": {"type": "bool"},
+	"setup/quality_asked": {"type": "bool"},
 	"setup/season": {"type": "int", "min": 0, "max": 3, "step": 1},
 	"title/view": {"type": "choice", "options": [["random", "Random"], ["above_ponyville", "Above Ponyville"], ["golden_oak", "Golden Oak Library"], ["fluttershy_cottage", "Fluttershy's cottage"], ["zecora_hut", "Zecora's hut"], ["town_square", "Town square"], ["sweet_apple_acres", "Sweet Apple Acres"]]},
 	"player/height_cm": {"type": "int", "min": 100, "max": 250, "step": 1},
@@ -125,6 +134,7 @@ const SPECS := {
 	"video/antialiasing": {"type": "choice", "options": [["preset", "Follow preset"], ["off", "Off"], ["fxaa", "FXAA"], ["smaa", "SMAA"], ["taa", "TAA"], ["msaa2", "MSAA 2x"], ["msaa4", "MSAA 4x"]], "note": "desktop"},
 	"video/upscaler": {"type": "choice", "options": [["preset", "Follow preset"], ["bilinear", "Bilinear"], ["fsr1", "FSR 1"], ["fsr2", "FSR 2"]], "note": "below 100%"},
 	"video/vsync": {"type": "bool", "labels": ["Off", "On"], "note": "desktop"},
+	"video/frames_ahead": {"type": "choice", "options": [["preset", "Follow preset (restart)"], ["off", "Off (restart)"], ["on", "On (restart)"]], "note": "more FPS, +1 frame input lag"},
 	"video/fps_cap": {"type": "choice", "options": [[0, "Unlimited"], [30, "30"], [60, "60"], [72, "72"], [90, "90"], [120, "120"], [144, "144"], [165, "165"], [240, "240"]], "note": "desktop"},
 	"video/window": {"type": "choice", "options": [["windowed", "Windowed"], ["fullscreen", "Fullscreen"], ["exclusive", "Exclusive fullscreen (can be slower)"]]},
 	# The settings page lists only the sizes that fit the screen (window_sizes()).
@@ -193,7 +203,7 @@ const TABS := [
 	["Graphics", [["Quality preset", "video/quality"], ["Shadows", "video/shadows"], ["Draw distance", "video/draw_distance"],
 		["Grass density", "video/grass_density"], ["Trees & plants", "video/foliage_density"], ["Max nearby ponies", "ponies/max_nearby"], ["Pony pictures from", "video/pony_impostors"],
 ["Clouds", "video/clouds"], ["Rain & snow particles", "video/weather_particles"], ["Ocean", "video/ocean"], ["Glow in VR", "video/vr_desktop_effects"], ["Colour grade", "video/color_grade"],
-		["Render scale", "video/render_scale"], ["Upscaler", "video/upscaler"], ["Anti-aliasing", "video/antialiasing"], ["V-Sync", "video/vsync"], ["FPS cap", "video/fps_cap"], ["Window", "video/window"], ["Window size", "video/window_size"]]],
+		["Render scale", "video/render_scale"], ["Upscaler", "video/upscaler"], ["Anti-aliasing", "video/antialiasing"], ["V-Sync", "video/vsync"], ["FPS cap", "video/fps_cap"], ["Extra frame ahead", "video/frames_ahead"], ["Window", "video/window"], ["Window size", "video/window_size"]]],
 	["Controls", [["Mouse sensitivity", "controls/mouse_sensitivity"], ["Invert mouse Y", "controls/invert_y"], ["Field of view", "controls/fov"],
 		["Move forward", "bind:move_forward"], ["Move back", "bind:move_back"], ["Move left", "bind:move_left"], ["Move right", "bind:move_right"],
 		["Sprint", "bind:move_sprint"], ["Jump / fly up", "bind:move_jump"], ["Push to talk", "bind:voice_talk"],
@@ -306,15 +316,21 @@ func _ready() -> void:
 			var raw: Variant = config.get_value(key.get_slice("/", 0), key.get_slice("/", 1), DEFAULTS[key])
 			var clean: Variant = validate(key, raw)
 			_values[key] = clean if clean != null else DEFAULTS[key]
-	elif DisplayServer.get_name() != "headless":
-		# No settings file yet: pick the quality tier for this machine (Quality.pick_default_quality
-		# documents the rule) and store it, so the choice persists like any other.
+	elif DisplayServer.get_name() != "headless" and OS.has_feature("android"):
+		# No settings file yet on a headset: pick the quality tier for this machine
+		# (Quality.pick_default_quality documents the rule). Desktop players are asked instead
+		# (setup/quality_asked, world/ui/quality_prompt.gd).
 		var pick: String = (load("res://autoload/quality.gd") as Script).call("pick_for_this_machine")
 		if validate("video/quality", pick) != null:
 			_values["video/quality"] = pick
 			_store("video/quality", pick)
 			_adopt_preset(pick)
 			print("[settings] first launch on %s: quality %s" % [RenderingServer.get_video_adapter_name(), pick])
+	# Installs from before the question had their tier picked or chosen already: never ask them.
+	if not first_launch and not config.has_section_key("setup", "quality_asked"):
+		_values["setup/quality_asked"] = true; _store("setup/quality_asked", true)
+	# launch.cfg follows the stored choice (written only when it differs).
+	_write_frames_ahead()
 	# Render scale used to mirror the preset (100%, 85% on Low, 70% on Very Low) instead of Auto;
 	# move a stored mirror value to Auto once, so only a scale the player chose stays literal.
 	if not first_launch and not config.has_section_key("video", "render_scale_auto"):
@@ -513,10 +529,12 @@ static func route(player: Node, bus: String) -> void:
 
 # ------------------------------------------------------------------ applying
 func _apply(key: String) -> void:
+	if key == "video/quality": _write_frames_ahead()
 	if key.begins_with("audio/"): _apply_audio()
 	elif key in ["video/quality", "video/shadows", "video/draw_distance", "video/render_scale", "video/antialiasing", "video/upscaler"]: _apply_quality()
 	elif key in ["video/vsync", "video/fps_cap", "video/window"]: _apply_display(key == "video/window")
 	elif key == "video/window_size": _apply_window_size()
+	elif key == "video/frames_ahead": _write_frames_ahead()
 	elif key == "access/ui_scale": _apply_text_scale()
 	elif key == "video/grass_density": apply_grass()
 	elif key in ["access/subtitles", "access/subtitle_scale"]: apply_subtitles()
@@ -578,6 +596,24 @@ func _xr_running() -> bool:
 ## V-Sync, FPS cap and window mode are desktop concerns: the headset paces XR frames. `sizing`
 ## also sets the windowed size (at launch and when the Window row changes, not on every apply,
 ## so a window the player resized by hand stays as it is).
+## "Extra frame ahead" into user://launch.cfg (frame_queue_size, read once at boot; Godot's default is
+## 2). Desktop only: Quest keeps 2. Never from headless tests or the editor (the player's file).
+## Medium and below queue the extra frame unless the player chose otherwise (a Custom setup
+## follows the tier it started from).
+const FRAMES_AHEAD_TIERS := ["Medium", "Low", "Very Low"]
+func frames_ahead_on() -> bool:
+	var mode := str(get_value("video/frames_ahead"))
+	if mode != "preset": return mode == "on"
+	var tier := str(get_value("video/quality"))
+	if tier == "Custom": tier = str(get_value("video/quality_base"))
+	return tier in FRAMES_AHEAD_TIERS
+
+func _write_frames_ahead() -> void:
+	if DisplayServer.get_name() == "headless" or OS.has_feature("editor") or OS.has_feature("android"): return
+	var queue := 3 if frames_ahead_on() else 2
+	var err: Error = preload("res://world/launch_config.gd").write_overrides({"rendering/rendering_device/vsync/frame_queue_size": queue})
+	if err != OK: push_warning("[settings] could not write the frame queue to launch.cfg: %s" % error_string(err))
+
 func _apply_display(sizing := false) -> void:
 	if DisplayServer.get_name() == "headless": return
 	if _xr_running():

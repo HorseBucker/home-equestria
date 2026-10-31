@@ -99,7 +99,8 @@ NavigationService::FollowGround *NavigationService::follow_ground(uint32_t world
 	if (found->snapshot != snapshot || !found->access) {
 		// A new snapshot: the clearance cache's layers stay valid per chunk neighbourhood revision.
 		found->validator.reset();
-		found->access.reset(new GroundAccess(snapshot, target->cache(), profile));
+		found->cache = target->cache();
+		found->access.reset(new GroundAccess(snapshot, found->cache, profile));
 		found->validator.reset(new ArcValidator(*found->access, required));
 		found->snapshot = snapshot;
 	}
@@ -363,15 +364,10 @@ bool NavigationService::follow_step(const int64_t *keys, size_t key_count, const
 	}
 	++follow_clock;
 	++follow_stats.steps;
-	struct Row {
-		bool usable = false;
-		double speed = 0.0;
-		Actor *actor = nullptr;
-		ActorHandle handle;
-	};
-	std::vector<Row> table(rows);
+	std::vector<FollowRow> &table = follow_table;
+	table.assign(rows, FollowRow());
 	for (size_t i = 0; i < rows; ++i) {
-		Row &row = table[i];
+		FollowRow &row = table[i];
 		row.usable = positions[i].finite() && velocities[i].finite() && std::isfinite(headings[i]);
 		if (row.usable) row.speed = std::hypot(double(velocities[i].x), double(velocities[i].z));
 		const int64_t slot = keys[i * 2];
@@ -385,346 +381,545 @@ bool NavigationService::follow_step(const int64_t *keys, size_t key_count, const
 			}
 		}
 	}
-	std::vector<Neighbour> neighbours;
+	FollowBatch batch;
+	batch.positions = positions;
+	batch.velocities = velocities;
+	batch.headings = headings;
+	batch.inputs = inputs;
+	batch.input_count = input_count;
+	batch.rows = rows;
+	batch.delta = delta;
+	batch.table = &table;
+	batch.commands = &commands;
+	batch.state = &state;
+	batch.preferred = &preferred;
+	size_t followers = 0;
 	for (size_t i = 0; i < rows; ++i) {
-		Row &row = table[i];
-		if (row.actor == nullptr) {
+		if (table[i].actor == nullptr) {
 			++follow_stats.observers;
-			continue;
+		} else {
+			++follow_stats.rows;
+			++followers;
 		}
-		++follow_stats.rows;
-		FollowState &follow = row.actor->follow;
-		const SteeringLimits &lim = follow.limits;
-		const float *in = input_count != 0 ? inputs + i * size_t(INPUT_STRIDE) : nullptr;
-		bool inputs_ok = row.usable;
-		if (in != nullptr) {
-			for (int32_t k = 0; k < INPUT_STRIDE; ++k) {
-				inputs_ok = inputs_ok && std::isfinite(in[k]);
+	}
+	bool parallel = parallel_follow && parallel_for != nullptr && followers >= parallel_min_rows;
+	if (parallel) {
+		// One actor in two rows steps twice, in row order: only the serial step keeps that order.
+		std::vector<const Actor *> &seen = follow_seen;
+		seen.clear();
+		for (size_t i = 0; i < rows; ++i) {
+			if (table[i].actor != nullptr) {
+				seen.push_back(table[i].actor);
 			}
 		}
-		float *state_row = state.data() + i * size_t(STATE_STRIDE);
-		if (!inputs_ok) {
-			// NaN/INF never reaches the steering: a navigation-owned actor gets a valid stop.
-			++follow_stats.rejected_rows;
-			write_command(commands, i, true, 0.0, 0.0, MODE_STOP);
-			state_row[5] = float(REASON_INVALID_INPUT);
-			follow.last.reason = REASON_INVALID_INPUT;
-			continue;
+		std::sort(seen.begin(), seen.end());
+		parallel = std::adjacent_find(seen.begin(), seen.end()) == seen.end();
+	}
+	if (parallel) {
+		// Ground lookups (they may create or refresh follow_grounds) stay on this thread.
+		for (size_t i = 0; i < rows; ++i) {
+			FollowRow &row = table[i];
+			if (row.actor == nullptr) {
+				continue;
+			}
+			const SteeringLimits &lim = row.actor->follow.limits;
+			row.ground = follow_ground(row.actor->world, row.actor->profile,
+					required_clearance(lim.capsule_radius, CELL * 0.5, 0.35 / (CELL * 0.5)));
 		}
-		const double dt = (in != nullptr && in[INPUT_STEP_SECONDS] > 0.0f && in[INPUT_STEP_SECONDS] <= 1.0f)
-				? double(in[INPUT_STEP_SECONDS])
-				: delta;
-		const Vec3f &p = positions[i];
-		const Vec3f &velocity = velocities[i];
-		const double yaw = headings[i];
-		double fx = 0.0, fz = 0.0;
-		forward_of(yaw, fx, fz);
-		const double speed = std::max(0.0, double(velocity.x) * fx + double(velocity.z) * fz);
-		++follow.steps;
+		const size_t blocks = std::min(PARALLEL_MAX_BLOCKS, followers);
+		if (follow_blocks.size() < blocks) {
+			follow_blocks.resize(blocks);
+		}
+		// Idle blocks drop their ground copies (they would keep old snapshots alive).
+		for (size_t b = blocks; b < follow_blocks.size(); ++b) {
+			follow_blocks[b].grounds.clear();
+		}
+		// Contiguous row ranges, in row order, so the merged events keep the serial order.
+		size_t next = 0;
+		for (size_t b = 0; b < blocks; ++b) {
+			FollowBlock &block = follow_blocks[b];
+			block.rows.clear();
+			block.sink.stats = FollowCounters();
+			block.sink.events.clear();
+			const size_t take = followers / blocks + (b < followers % blocks ? 1 : 0);
+			while (block.rows.size() < take && next < rows) {
+				if (table[next].actor != nullptr) {
+					block.rows.push_back(next);
+				}
+				++next;
+			}
+		}
+		FollowParallelJob job;
+		job.service = this;
+		job.batch = &batch;
+		job.blocks = blocks;
+		parallel_for(&NavigationService::follow_block_job, &job, uint32_t(blocks));
+		for (size_t b = 0; b < blocks; ++b) {
+			FollowSink &sink = follow_blocks[b].sink;
+			merge_counters(follow_stats, sink.stats);
+			for (FollowEvent &event : sink.events) {
+				follow_events.push_back(std::move(event));
+			}
+			sink.events.clear();
+		}
+	} else {
+		for (FollowBlock &block : follow_blocks) {
+			block.grounds.clear();
+		}
+		FollowSink &sink = follow_serial_sink;
+		sink.stats = FollowCounters();
+		sink.events.clear();
+		for (size_t i = 0; i < rows; ++i) {
+			if (table[i].actor != nullptr) {
+				follow_row(batch, i, sink, nullptr);
+			}
+		}
+		merge_counters(follow_stats, sink.stats);
+		for (FollowEvent &event : sink.events) {
+			follow_events.push_back(std::move(event));
+		}
+		sink.events.clear();
+	}
+	follow_stats.step_us += elapsed_us(started);
+	return true;
+}
 
-		// 1. Progress from actual movement.
-		const double ahead = std::max(2.0, speed + 1.5);
-		CorridorProjection projection = follow.corridor.project_window(p.x, p.y, p.z, follow.s, 0.75, ahead,
-				lim.projection_vertical);
-		bool recovered = false;
-		const bool repairing = follow.monitor.level() == Escalation::LOCAL_REPAIR;
-		if (!projection.found || projection.lateral > 2.5 || (repairing && projection.lateral > 0.75)) {
-			// Explicit recovery: every segment, nearest wins (may move progress back).
-			const CorridorProjection all = follow.corridor.project_all(p.x, p.y, p.z, lim.projection_vertical);
-			if (all.found && (!projection.found || all.lateral + 0.25 < projection.lateral)) {
-				projection = all;
-				recovered = true;
-			}
-		}
-		if (!projection.found || projection.lateral > 4.0) {
-			if (!follow.lost) {
-				follow.lost = true;
-				++follow_stats.lost;
-				follow_event(row.handle, follow, EVENT_CORRIDOR_LOST, "Off the route corridor", p);
-			}
-			const double braked = std::max(0.0, speed - lim.braking * dt);
-			write_command(commands, i, true, braked, 0.0, braked > 0.0 ? MODE_BRAKE : MODE_STOP);
-			state_row[0] = float(follow.s);
-			state_row[5] = float(REASON_CORRIDOR_LOST);
-			follow.last.reason = REASON_CORRIDOR_LOST;
-			follow.prev_v = braked;
-			follow.prev_k = 0.0;
-			continue;
-		}
-		follow.lost = false;
-		double gained = 0.0;
-		if (projection.s > follow.s) {
-			gained = projection.s - follow.s;
-			follow.s = projection.s;
-		} else if (recovered) {
-			follow.s = projection.s;
-		}
-		follow.raw_s = projection.s;
-		follow.intent_progress += gained;
-		follow.last_projection = projection;
+NavigationService::ParallelFor NavigationService::parallel_for = nullptr;
+bool NavigationService::parallel_follow = true;
+size_t NavigationService::parallel_min_rows = 4;
 
-		// 2. Arrival: the terminal region on the right floor, emitted once. Emitted 2 mm inside the
-		// acceptance radius, so single-precision rounding in the caller never reports an arrival
-		// outside it.
+void NavigationService::follow_block_job(void *data, uint32_t index) {
+	FollowParallelJob *job = static_cast<FollowParallelJob *>(data);
+	if (index >= job->blocks) {
+		return;
+	}
+	NavigationService *service = job->service;
+	FollowBlock &block = service->follow_blocks[index];
+	for (size_t i : block.rows) {
+		service->follow_row(*job->batch, i, block.sink, &block);
+	}
+}
+
+ArcValidator *NavigationService::block_validator(FollowBlock &block, const FollowGround &ground) {
+	if (ground.access == nullptr || ground.snapshot == nullptr || ground.cache == nullptr) {
+		return nullptr;
+	}
+	FollowBlockGround *found = nullptr;
+	for (const std::unique_ptr<FollowBlockGround> &entry : block.grounds) {
+		if (entry->world == ground.world && entry->required == ground.required && entry->profile.same(ground.profile)) {
+			found = entry.get();
+			break;
+		}
+	}
+	if (found == nullptr) {
+		// Bounded like follow_grounds: a block keeps at most a few profiles.
+		if (block.grounds.size() >= 16) {
+			block.grounds.clear();
+		}
+		block.grounds.push_back(std::unique_ptr<FollowBlockGround>(new FollowBlockGround()));
+		found = block.grounds.back().get();
+		found->world = ground.world;
+		found->profile = ground.profile;
+		found->required = ground.required;
+	}
+	if (found->snapshot != ground.snapshot || !found->access) {
+		found->validator.reset();
+		found->access.reset(new GroundAccess(ground.snapshot, ground.cache, ground.profile));
+		found->validator.reset(new ArcValidator(*found->access, ground.required));
+		found->snapshot = ground.snapshot;
+	}
+	return found->validator.get();
+}
+
+void NavigationService::sink_event(FollowSink &sink, const ActorHandle &handle, const FollowState &follow, int32_t kind,
+		const std::string &reason, const Vec3f &at) {
+	FollowEvent event;
+	event.actor = handle;
+	event.intent = follow.intent;
+	event.route = follow.route;
+	event.kind = kind;
+	event.reason = reason;
+	event.at = at;
+	event.alternative = follow.alternative;
+	if (!follow.corridor.empty()) {
 		const Vec3f end = follow.corridor.end();
-		const double end_distance = std::hypot(double(p.x) - double(end.x), double(p.z) - double(end.z));
-		if (follow.terminal && !follow.arrived && !follow.failed && end_distance <= std::max(0.0, lim.arrival_radius - 0.002) &&
-				std::fabs(double(p.y) - double(end.y)) <= lim.floor_tolerance &&
-				follow.corridor.length() - follow.s <= lim.arrival_radius + 0.5) {
-			follow.arrived = true;
-			++follow_stats.arrivals;
-			follow_event(row.handle, follow, EVENT_ARRIVED,
-					follow.alternative ? "Arrived at the nearest reachable spot" : "Arrived", p);
-		}
-		if (follow.arrived || follow.failed) {
-			write_command(commands, i, true, 0.0, 0.0, MODE_STOP);
-			state_row[0] = float(follow.s);
-			state_row[1] = float(projection.segment);
-			state_row[5] = float(follow.arrived ? REASON_ARRIVED : REASON_FAILED);
-			follow.last.reason = follow.arrived ? REASON_ARRIVED : REASON_FAILED;
-			follow.prev_v = 0.0;
-			follow.prev_k = 0.0;
-			continue;
-		}
+		event.distance = std::hypot(double(at.x) - double(end.x), double(at.z) - double(end.z));
+	}
+	if (kind == EVENT_REPLAN || kind == EVENT_ALTERNATE) {
+		event.blocked = follow.blocked;
+	}
+	sink.events.push_back(event);
+}
 
-		// 3. Evidence from the last physical move.
-		const int32_t flags = in != nullptr ? int32_t(in[INPUT_FLAGS]) : 0;
-		double nx = in != nullptr ? double(in[INPUT_WALL_NX]) : 0.0;
-		double nz = in != nullptr ? double(in[INPUT_WALL_NZ]) : 0.0;
-		const double normal = std::hypot(nx, nz);
-		const bool wall = (flags & INPUT_FLAG_WALL) != 0 && normal > 1e-6;
-		if (wall) {
-			nx /= normal;
-			nz /= normal;
-		}
-		const double executed = in != nullptr ? double(in[INPUT_EXECUTED_SPEED]) : speed;
-		const bool frontal = wall && fx * nx + fz * nz < -0.7 && (follow.prev_v > 0.05 || executed > 0.05);
-		if (frontal) {
-			// Something the walk grid does not know stopped her nose-on: mark it at once (a small
-			// disc inside it, behind the contact) so no later arc tries to walk through it again.
-			add_blocked(follow, double(p.x) - nx * (lim.capsule_radius + 0.3), double(p.z) - nz * (lim.capsule_radius + 0.3), 0.35);
-		}
-		// Held by that obstruction: still pushing, or stopped because every arc meets the mark.
-		const bool held_by_obstruction = frontal ||
-				(speed < 0.05 && (follow.last.refused_blocked > 0 || follow.last.refused_wall > 0) && !follow.blocked.empty());
-		follow.frontal_contact = held_by_obstruction ? follow.frontal_contact + dt
-													 : std::max(0.0, follow.frontal_contact - 0.5 * dt);
-		Escalation forced = Escalation::NONE;
-		if (follow.frontal_contact > 0.6) {
-			// Repeated frontal obstruction: repair the route around the marked area.
-			follow.frontal_contact = 0.0;
-			forced = follow.monitor.force(Escalation::REPLAN, "repeated frontal obstruction");
-		}
-		const int32_t refusal = in != nullptr ? int32_t(in[INPUT_REFUSAL]) : REFUSAL_NONE;
-		follow.refused = refusal == REFUSAL_SUPPORT ? follow.refused + dt : std::max(0.0, follow.refused - dt);
-		if (follow.refused > 1.5) {
-			follow.refused = 0.0;
-			add_blocked(follow, double(p.x) + fx * (lim.capsule_radius + 0.5), double(p.z) + fz * (lim.capsule_radius + 0.5), 0.35);
-			if (forced == Escalation::NONE) {
-				forced = follow.monitor.force(Escalation::REPLAN, "unsafe support ahead");
-			}
-		}
-		if (forced == Escalation::REPLAN) {
-			++follow_stats.replans;
-			follow_event(row.handle, follow, EVENT_REPLAN, std::string("Replanning: ") + follow.monitor.cause(), p);
-		}
+void NavigationService::merge_counters(FollowCounters &into, const FollowCounters &from) {
+	into.steps += from.steps;
+	into.rows += from.rows;
+	into.observers += from.observers;
+	into.rejected_rows += from.rejected_rows;
+	into.corridors += from.corridors;
+	into.goal_appended += from.goal_appended;
+	into.alternatives += from.alternatives;
+	into.arrivals += from.arrivals;
+	into.repairs += from.repairs;
+	into.replans += from.replans;
+	into.alternates += from.alternates;
+	into.failures += from.failures;
+	into.lost += from.lost;
+	into.cells_checked += from.cells_checked;
+	into.candidates_validated += from.candidates_validated;
+	into.step_us += from.step_us;
+}
 
-		// 4. Steering.
-		SteeringInput steering;
-		steering.pose.x = p.x;
-		steering.pose.z = p.z;
-		steering.pose.yaw = yaw;
-		steering.y = p.y;
-		steering.speed = speed;
-		steering.dt = dt;
-		steering.requested_speed = in != nullptr ? std::max(0.0, double(in[INPUT_REQUESTED_SPEED])) : lim.walk_speed;
-		steering.terminal_speed = in != nullptr ? std::max(0.0, double(in[INPUT_TERMINAL_SPEED])) : 0.0;
-		steering.speed_scale = in != nullptr ? double(in[INPUT_SPEED_SCALE]) : 1.0;
-		steering.terminal = follow.terminal;
-		steering.has_avoidance = (flags & INPUT_FLAG_AVOIDANCE) != 0;
-		steering.avoid_vx = in != nullptr ? double(in[INPUT_AVOID_VX]) : 0.0;
-		steering.avoid_vz = in != nullptr ? double(in[INPUT_AVOID_VZ]) : 0.0;
-		steering.avoid_age = in != nullptr ? double(in[INPUT_AVOID_AGE]) : 1e9;
-		steering.wall = wall;
-		steering.wall_nx = nx;
-		steering.wall_nz = nz;
-		steering.prev_v = follow.prev_v;
-		steering.prev_k = follow.prev_k;
-		steering.prev_mode = follow.prev_mode;
-		steering.prev_pref_vx = follow.pref_vx;
-		steering.prev_pref_vz = follow.pref_vz;
-		steering.reversal_side = follow.reversal_side;
-		steering.reversing = follow.reversing;
-		steering.turn_target = follow.turn_target;
-		steering.prev_reason = follow.last.reason;
-		steering.escape_until = follow.escape_until;
-		steering.repair = follow.monitor.level() == Escalation::LOCAL_REPAIR;
-		steering.support_refused = refusal == REFUSAL_SUPPORT;
-		steering.ignore_yield = follow.yield_time > follow.tuning.yielding_limit;
+// One follower row of follow_step() (steps 1-5 of the file comment). Reads only this row's actor
+// (and the other rows' positions, velocities and limits); writes only this row's outputs.
+void NavigationService::follow_row(const FollowBatch &batch, size_t i, FollowSink &sink, FollowBlock *block) {
+	const std::vector<FollowRow> &table = *batch.table;
+	const Vec3f *positions = batch.positions;
+	const Vec3f *velocities = batch.velocities;
+	const float *headings = batch.headings;
+	const float *inputs = batch.inputs;
+	const size_t input_count = batch.input_count;
+	const size_t rows = batch.rows;
+	const double delta = batch.delta;
+	std::vector<float> &commands = *batch.commands;
+	std::vector<float> &state = *batch.state;
+	std::vector<Vec3f> &preferred = *batch.preferred;
+	const FollowRow &row = table[i];
+	FollowState &follow = row.actor->follow;
+	const SteeringLimits &lim = follow.limits;
+	const float *in = input_count != 0 ? inputs + i * size_t(INPUT_STRIDE) : nullptr;
+	bool inputs_ok = row.usable;
+	if (in != nullptr) {
+		for (int32_t k = 0; k < INPUT_STRIDE; ++k) {
+			inputs_ok = inputs_ok && std::isfinite(in[k]);
+		}
+	}
+	float *state_row = state.data() + i * size_t(STATE_STRIDE);
+	if (!inputs_ok) {
+		// NaN/INF never reaches the steering: a navigation-owned actor gets a valid stop.
+		++sink.stats.rejected_rows;
+		write_command(commands, i, true, 0.0, 0.0, MODE_STOP);
+		state_row[5] = float(REASON_INVALID_INPUT);
+		follow.last.reason = REASON_INVALID_INPUT;
+		return;
+	}
+	const double dt = (in != nullptr && in[INPUT_STEP_SECONDS] > 0.0f && in[INPUT_STEP_SECONDS] <= 1.0f)
+			? double(in[INPUT_STEP_SECONDS])
+			: delta;
+	const Vec3f &p = positions[i];
+	const Vec3f &velocity = velocities[i];
+	const double yaw = headings[i];
+	double fx = 0.0, fz = 0.0;
+	forward_of(yaw, fx, fz);
+	const double speed = std::max(0.0, double(velocity.x) * fx + double(velocity.z) * fz);
+	++follow.steps;
+
+	// 1. Progress from actual movement.
+	const double ahead = std::max(2.0, speed + 1.5);
+	CorridorProjection projection = follow.corridor.project_window(p.x, p.y, p.z, follow.s, 0.75, ahead,
+			lim.projection_vertical);
+	bool recovered = false;
+	const bool repairing = follow.monitor.level() == Escalation::LOCAL_REPAIR;
+	if (!projection.found || projection.lateral > 2.5 || (repairing && projection.lateral > 0.75)) {
+		// Explicit recovery: every segment, nearest wins (may move progress back).
+		const CorridorProjection all = follow.corridor.project_all(p.x, p.y, p.z, lim.projection_vertical);
+		if (all.found && (!projection.found || all.lateral + 0.25 < projection.lateral)) {
+			projection = all;
+			recovered = true;
+		}
+	}
+	if (!projection.found || projection.lateral > 4.0) {
+		if (!follow.lost) {
+			follow.lost = true;
+			++sink.stats.lost;
+			sink_event(sink, row.handle, follow, EVENT_CORRIDOR_LOST, "Off the route corridor", p);
+		}
+		const double braked = std::max(0.0, speed - lim.braking * dt);
+		write_command(commands, i, true, braked, 0.0, braked > 0.0 ? MODE_BRAKE : MODE_STOP);
+		state_row[0] = float(follow.s);
+		state_row[5] = float(REASON_CORRIDOR_LOST);
+		follow.last.reason = REASON_CORRIDOR_LOST;
+		follow.prev_v = braked;
+		follow.prev_k = 0.0;
+		return;
+	}
+	follow.lost = false;
+	double gained = 0.0;
+	if (projection.s > follow.s) {
+		gained = projection.s - follow.s;
+		follow.s = projection.s;
+	} else if (recovered) {
+		follow.s = projection.s;
+	}
+	follow.raw_s = projection.s;
+	follow.intent_progress += gained;
+	follow.last_projection = projection;
+
+	// 2. Arrival: the terminal region on the right floor, emitted once. Emitted 2 mm inside the
+	// acceptance radius, so single-precision rounding in the caller never reports an arrival
+	// outside it.
+	const Vec3f end = follow.corridor.end();
+	const double end_distance = std::hypot(double(p.x) - double(end.x), double(p.z) - double(end.z));
+	if (follow.terminal && !follow.arrived && !follow.failed && end_distance <= std::max(0.0, lim.arrival_radius - 0.002) &&
+			std::fabs(double(p.y) - double(end.y)) <= lim.floor_tolerance &&
+			follow.corridor.length() - follow.s <= lim.arrival_radius + 0.5) {
+		follow.arrived = true;
+		++sink.stats.arrivals;
+		sink_event(sink, row.handle, follow, EVENT_ARRIVED,
+				follow.alternative ? "Arrived at the nearest reachable spot" : "Arrived", p);
+	}
+	if (follow.arrived || follow.failed) {
+		write_command(commands, i, true, 0.0, 0.0, MODE_STOP);
+		state_row[0] = float(follow.s);
+		state_row[1] = float(projection.segment);
+		state_row[5] = float(follow.arrived ? REASON_ARRIVED : REASON_FAILED);
+		follow.last.reason = follow.arrived ? REASON_ARRIVED : REASON_FAILED;
+		follow.prev_v = 0.0;
+		follow.prev_k = 0.0;
+		return;
+	}
+
+	// 3. Evidence from the last physical move.
+	const int32_t flags = in != nullptr ? int32_t(in[INPUT_FLAGS]) : 0;
+	double nx = in != nullptr ? double(in[INPUT_WALL_NX]) : 0.0;
+	double nz = in != nullptr ? double(in[INPUT_WALL_NZ]) : 0.0;
+	const double normal = std::hypot(nx, nz);
+	const bool wall = (flags & INPUT_FLAG_WALL) != 0 && normal > 1e-6;
+	if (wall) {
+		nx /= normal;
+		nz /= normal;
+	}
+	const double executed = in != nullptr ? double(in[INPUT_EXECUTED_SPEED]) : speed;
+	const bool frontal = wall && fx * nx + fz * nz < -0.7 && (follow.prev_v > 0.05 || executed > 0.05);
+	if (frontal) {
+		// Something the walk grid does not know stopped her nose-on: mark it at once (a small
+		// disc inside it, behind the contact) so no later arc tries to walk through it again.
+		add_blocked(follow, double(p.x) - nx * (lim.capsule_radius + 0.3), double(p.z) - nz * (lim.capsule_radius + 0.3), 0.35);
+	}
+	// Held by that obstruction: still pushing, or stopped because every arc meets the mark.
+	const bool held_by_obstruction = frontal ||
+			(speed < 0.05 && (follow.last.refused_blocked > 0 || follow.last.refused_wall > 0) && !follow.blocked.empty());
+	follow.frontal_contact = held_by_obstruction ? follow.frontal_contact + dt
+												 : std::max(0.0, follow.frontal_contact - 0.5 * dt);
+	Escalation forced = Escalation::NONE;
+	if (follow.frontal_contact > 0.6) {
+		// Repeated frontal obstruction: repair the route around the marked area.
+		follow.frontal_contact = 0.0;
+		forced = follow.monitor.force(Escalation::REPLAN, "repeated frontal obstruction");
+	}
+	const int32_t refusal = in != nullptr ? int32_t(in[INPUT_REFUSAL]) : REFUSAL_NONE;
+	follow.refused = refusal == REFUSAL_SUPPORT ? follow.refused + dt : std::max(0.0, follow.refused - dt);
+	if (follow.refused > 1.5) {
+		follow.refused = 0.0;
+		add_blocked(follow, double(p.x) + fx * (lim.capsule_radius + 0.5), double(p.z) + fz * (lim.capsule_radius + 0.5), 0.35);
+		if (forced == Escalation::NONE) {
+			forced = follow.monitor.force(Escalation::REPLAN, "unsafe support ahead");
+		}
+	}
+	if (forced == Escalation::REPLAN) {
+		++sink.stats.replans;
+		sink_event(sink, row.handle, follow, EVENT_REPLAN, std::string("Replanning: ") + follow.monitor.cause(), p);
+	}
+
+	// 4. Steering.
+	SteeringInput steering;
+	steering.pose.x = p.x;
+	steering.pose.z = p.z;
+	steering.pose.yaw = yaw;
+	steering.y = p.y;
+	steering.speed = speed;
+	steering.dt = dt;
+	steering.requested_speed = in != nullptr ? std::max(0.0, double(in[INPUT_REQUESTED_SPEED])) : lim.walk_speed;
+	steering.terminal_speed = in != nullptr ? std::max(0.0, double(in[INPUT_TERMINAL_SPEED])) : 0.0;
+	steering.speed_scale = in != nullptr ? double(in[INPUT_SPEED_SCALE]) : 1.0;
+	steering.terminal = follow.terminal;
+	steering.has_avoidance = (flags & INPUT_FLAG_AVOIDANCE) != 0;
+	steering.avoid_vx = in != nullptr ? double(in[INPUT_AVOID_VX]) : 0.0;
+	steering.avoid_vz = in != nullptr ? double(in[INPUT_AVOID_VZ]) : 0.0;
+	steering.avoid_age = in != nullptr ? double(in[INPUT_AVOID_AGE]) : 1e9;
+	steering.wall = wall;
+	steering.wall_nx = nx;
+	steering.wall_nz = nz;
+	steering.prev_v = follow.prev_v;
+	steering.prev_k = follow.prev_k;
+	steering.prev_mode = follow.prev_mode;
+	steering.prev_pref_vx = follow.pref_vx;
+	steering.prev_pref_vz = follow.pref_vz;
+	steering.reversal_side = follow.reversal_side;
+	steering.reversing = follow.reversing;
+	steering.turn_target = follow.turn_target;
+	steering.prev_reason = follow.last.reason;
+	steering.escape_until = follow.escape_until;
+	steering.repair = follow.monitor.level() == Escalation::LOCAL_REPAIR;
+	steering.support_refused = refusal == REFUSAL_SUPPORT;
+	steering.ignore_yield = follow.yield_time > follow.tuning.yielding_limit;
+	ArcValidator *validator = nullptr;
+	if (block == nullptr) {
 		FollowGround *ground = follow_ground(row.actor->world, row.actor->profile,
 				required_clearance(lim.capsule_radius, CELL * 0.5, 0.35 / (CELL * 0.5)));
-		ArcValidator *validator = ground != nullptr && !follow.authored ? ground->validator.get() : nullptr;
-		const uint64_t cells_before = validator != nullptr ? validator->cells_checked : 0;
-		const Handle start = validator != nullptr ? validator->locate(p.x, p.y, p.z, 0.4) : NO_HANDLE;
-		// The walk grid lost her floor while she follows (a streamed column republished at another
-		// height): no arc can start, and no local repair can help. Replan from where she is now.
-		follow.unlocated = (validator != nullptr && start == NO_HANDLE) ? follow.unlocated + dt : 0.0;
-		if (follow.unlocated > 0.5 && forced == Escalation::NONE) {
-			follow.unlocated = 0.0;
-			if (follow.monitor.force(Escalation::REPLAN, "the walk grid lost her floor") == Escalation::REPLAN) {
-				++follow_stats.replans;
-				follow_event(row.handle, follow, EVENT_REPLAN, "Replanning: the walk grid lost her floor", p);
-			}
+		validator = ground != nullptr && !follow.authored ? ground->validator.get() : nullptr;
+	} else if (row.ground != nullptr && !follow.authored) {
+		validator = block_validator(*block, *row.ground);
+	}
+	const uint64_t cells_before = validator != nullptr ? validator->cells_checked : 0;
+	const Handle start = validator != nullptr ? validator->locate(p.x, p.y, p.z, 0.4) : NO_HANDLE;
+	// The walk grid lost her floor while she follows (a streamed column republished at another
+	// height): no arc can start, and no local repair can help. Replan from where she is now.
+	follow.unlocated = (validator != nullptr && start == NO_HANDLE) ? follow.unlocated + dt : 0.0;
+	if (follow.unlocated > 0.5 && forced == Escalation::NONE) {
+		follow.unlocated = 0.0;
+		if (follow.monitor.force(Escalation::REPLAN, "the walk grid lost her floor") == Escalation::REPLAN) {
+			++sink.stats.replans;
+			sink_event(sink, row.handle, follow, EVENT_REPLAN, "Replanning: the walk grid lost her floor", p);
 		}
-		neighbours.clear();
-		for (size_t j = 0; j < rows; ++j) {
-			if (j == i || !table[j].usable) {
-				continue;
-			}
-			const Vec3f &other = positions[j];
-			// See oncoming traffic before the pair uses up its braking distance.
-			const double other_speed = table[j].speed;
-			const double braking = std::max(0.1, lim.braking);
-			const double reach = std::max(3.5, (speed + other_speed) * 0.8 +
-					(speed * speed + other_speed * other_speed) / (2.0 * braking));
-			if (std::fabs(double(other.x) - double(p.x)) > reach || std::fabs(double(other.z) - double(p.z)) > reach ||
-					std::fabs(double(other.y) - double(p.y)) > 1.5) {
-				continue;
-			}
-			Neighbour neighbour;
-			neighbour.x = other.x;
-			neighbour.z = other.z;
-			neighbour.vx = velocities[j].x;
-			neighbour.vz = velocities[j].z;
-			neighbour.radius = table[j].actor != nullptr ? table[j].actor->follow.limits.body_radius : lim.body_radius;
-			neighbour.id = j;
-			neighbours.push_back(neighbour);
+	}
+	std::vector<Neighbour> &neighbours = sink.neighbours;
+	neighbours.clear();
+	for (size_t j = 0; j < rows; ++j) {
+		if (j == i || !table[j].usable) {
+			continue;
 		}
-		SteeringOutput out = steer(follow.corridor, follow.s, steering, lim, validator, start, follow.blocked, neighbours);
-		if (validator != nullptr) {
-			follow_stats.cells_checked += validator->cells_checked - cells_before;
+		const Vec3f &other = positions[j];
+		// See oncoming traffic before the pair uses up its braking distance.
+		const double other_speed = table[j].speed;
+		const double braking = std::max(0.1, lim.braking);
+		const double reach = std::max(3.5, (speed + other_speed) * 0.8 +
+				(speed * speed + other_speed * other_speed) / (2.0 * braking));
+		if (std::fabs(double(other.x) - double(p.x)) > reach || std::fabs(double(other.z) - double(p.z)) > reach ||
+				std::fabs(double(other.y) - double(p.y)) > 1.5) {
+			continue;
 		}
-		follow_stats.candidates_validated += uint64_t(std::max(0, out.candidates_validated));
-		// The yield timer runs while avoidance keeps answering zero, whether she still obeys it.
-		follow.yield_time = out.zero_answer ? follow.yield_time + dt : 0.0;
-		// Held within twice the arrival radius of a destination she cannot step any closer to
-		// (every arc refused by the ground, a wall or ponies standing at it): after half a second
-		// that is arrival at the nearest reachable spot, reported as a goal-region alternative,
-		// never a failure and never a plain arrival.
-		const bool held_short = follow.terminal && end_distance <= 2.0 * lim.arrival_radius &&
-				std::fabs(double(p.y) - double(end.y)) <= lim.floor_tolerance && speed < 0.05 && out.v < 0.05 &&
-				(out.reason == REASON_NO_SAFE_ARC || out.reason == REASON_WALL_CONTACT || out.reason == REASON_REPAIR ||
-						out.reason == REASON_NEIGHBOUR);
-		follow.end_blocked = held_short ? follow.end_blocked + dt : 0.0;
-		if (follow.end_blocked > 0.5 && !follow.arrived) {
-			follow.arrived = true;
-			follow.alternative = true;
-			++follow_stats.arrivals;
-			++follow_stats.alternatives;
-			follow_event(row.handle, follow, EVENT_ARRIVED, "Arrived at the nearest reachable spot", p);
+		Neighbour neighbour;
+		neighbour.x = other.x;
+		neighbour.z = other.z;
+		neighbour.vx = velocities[j].x;
+		neighbour.vz = velocities[j].z;
+		neighbour.radius = table[j].actor != nullptr ? table[j].actor->follow.limits.body_radius : lim.body_radius;
+		neighbour.id = j;
+		neighbours.push_back(neighbour);
+	}
+	SteeringOutput out = steer(follow.corridor, follow.s, steering, lim, validator, start, follow.blocked, neighbours);
+	if (validator != nullptr) {
+		sink.stats.cells_checked += validator->cells_checked - cells_before;
+	}
+	sink.stats.candidates_validated += uint64_t(std::max(0, out.candidates_validated));
+	// The yield timer runs while avoidance keeps answering zero, whether she still obeys it.
+	follow.yield_time = out.zero_answer ? follow.yield_time + dt : 0.0;
+	// Held within twice the arrival radius of a destination she cannot step any closer to
+	// (every arc refused by the ground, a wall or ponies standing at it): after half a second
+	// that is arrival at the nearest reachable spot, reported as a goal-region alternative,
+	// never a failure and never a plain arrival.
+	const bool held_short = follow.terminal && end_distance <= 2.0 * lim.arrival_radius &&
+			std::fabs(double(p.y) - double(end.y)) <= lim.floor_tolerance && speed < 0.05 && out.v < 0.05 &&
+			(out.reason == REASON_NO_SAFE_ARC || out.reason == REASON_WALL_CONTACT || out.reason == REASON_REPAIR ||
+					out.reason == REASON_NEIGHBOUR);
+	follow.end_blocked = held_short ? follow.end_blocked + dt : 0.0;
+	if (follow.end_blocked > 0.5 && !follow.arrived) {
+		follow.arrived = true;
+		follow.alternative = true;
+		++sink.stats.arrivals;
+		++sink.stats.alternatives;
+		sink_event(sink, row.handle, follow, EVENT_ARRIVED, "Arrived at the nearest reachable spot", p);
+		out.v = 0.0;
+		out.w = 0.0;
+		out.k = 0.0;
+		out.mode = MODE_STOP;
+		out.reason = REASON_ARRIVED;
+	}
+	const double remaining = std::max(0.0, follow.corridor.length() - follow.s);
+	if (!follow.terminal && remaining < 0.3 && out.v < 0.1 && out.reason == REASON_NONE) {
+		out.reason = (flags & INPUT_FLAG_ROUTE_PENDING) != 0 ? REASON_WAITING_ROUTE : REASON_CORRIDOR_END;
+	}
+
+	// 5. Progress classification and escalation.
+	FollowClass klass = FollowClass::FOLLOWING;
+	if (out.mode == MODE_STEP_TURN || out.reason == REASON_REVERSING) {
+		klass = FollowClass::TURNING;
+	} else if (out.yielding) {
+		klass = FollowClass::YIELDING;
+	} else if (out.reason == REASON_WAITING_ROUTE) {
+		klass = FollowClass::WAITING_ROUTE;
+	}
+	ProgressSample sample;
+	sample.route = follow.route;
+	sample.progress = follow.s;
+	sample.raw_progress = projection.s;
+	sample.intent_progress = follow.intent_progress;
+	sample.x = p.x;
+	sample.z = p.z;
+	sample.yaw = yaw;
+	sample.goal_distance = end_distance;
+	sample.command = out.v;
+	sample.actual = speed;
+	sample.permitted = out.permitted;
+	sample.contact_nx = wall ? nx : 0.0;
+	sample.contact_nz = wall ? nz : 0.0;
+	sample.gained = gained;
+	sample.reason = out.reason;
+	follow.monitor.set_budget_bonus(0.1 * follow.intent_progress);
+	const Escalation entered = follow.monitor.update(dt, klass, sample);
+	switch (entered) {
+		case Escalation::LOCAL_REPAIR:
+			++sink.stats.repairs;
+			sink_event(sink, row.handle, follow, EVENT_REPAIR, std::string("Local repair: ") + follow.monitor.cause(), p);
+			break;
+		case Escalation::REPLAN:
+			++sink.stats.replans;
+			sink_event(sink, row.handle, follow, EVENT_REPLAN,
+					std::string("No route progress after a local repair (") + follow.monitor.cause() + ")", p);
+			break;
+		case Escalation::ALTERNATE:
+			++sink.stats.alternates;
+			sink_event(sink, row.handle, follow, EVENT_ALTERNATE,
+					std::string("Still blocked after a replan (") + follow.monitor.cause() + ")", p);
+			break;
+		case Escalation::FAILED:
+			++sink.stats.failures;
+			follow.failed = true;
+			sink_event(sink, row.handle, follow, EVENT_FAILED,
+					follow.monitor.total_stalled() > follow.tuning.total_stall_limit
+							? "Blocked: stalled too long on this trip"
+							: "Blocked: no progress after a local repair, a replan and an alternate route",
+					p);
 			out.v = 0.0;
 			out.w = 0.0;
 			out.k = 0.0;
 			out.mode = MODE_STOP;
-			out.reason = REASON_ARRIVED;
-		}
-		const double remaining = std::max(0.0, follow.corridor.length() - follow.s);
-		if (!follow.terminal && remaining < 0.3 && out.v < 0.1 && out.reason == REASON_NONE) {
-			out.reason = (flags & INPUT_FLAG_ROUTE_PENDING) != 0 ? REASON_WAITING_ROUTE : REASON_CORRIDOR_END;
-		}
-
-		// 5. Progress classification and escalation.
-		FollowClass klass = FollowClass::FOLLOWING;
-		if (out.mode == MODE_STEP_TURN || out.reason == REASON_REVERSING) {
-			klass = FollowClass::TURNING;
-		} else if (out.yielding) {
-			klass = FollowClass::YIELDING;
-		} else if (out.reason == REASON_WAITING_ROUTE) {
-			klass = FollowClass::WAITING_ROUTE;
-		}
-		ProgressSample sample;
-		sample.route = follow.route;
-		sample.progress = follow.s;
-		sample.raw_progress = projection.s;
-		sample.intent_progress = follow.intent_progress;
-		sample.x = p.x;
-		sample.z = p.z;
-		sample.yaw = yaw;
-		sample.goal_distance = end_distance;
-		sample.command = out.v;
-		sample.actual = speed;
-		sample.permitted = out.permitted;
-		sample.contact_nx = wall ? nx : 0.0;
-		sample.contact_nz = wall ? nz : 0.0;
-		sample.gained = gained;
-		sample.reason = out.reason;
-		follow.monitor.set_budget_bonus(0.1 * follow.intent_progress);
-		const Escalation entered = follow.monitor.update(dt, klass, sample);
-		switch (entered) {
-			case Escalation::LOCAL_REPAIR:
-				++follow_stats.repairs;
-				follow_event(row.handle, follow, EVENT_REPAIR, std::string("Local repair: ") + follow.monitor.cause(), p);
-				break;
-			case Escalation::REPLAN:
-				++follow_stats.replans;
-				follow_event(row.handle, follow, EVENT_REPLAN,
-						std::string("No route progress after a local repair (") + follow.monitor.cause() + ")", p);
-				break;
-			case Escalation::ALTERNATE:
-				++follow_stats.alternates;
-				follow_event(row.handle, follow, EVENT_ALTERNATE,
-						std::string("Still blocked after a replan (") + follow.monitor.cause() + ")", p);
-				break;
-			case Escalation::FAILED:
-				++follow_stats.failures;
-				follow.failed = true;
-				follow_event(row.handle, follow, EVENT_FAILED,
-						follow.monitor.total_stalled() > follow.tuning.total_stall_limit
-								? "Blocked: stalled too long on this trip"
-								: "Blocked: no progress after a local repair, a replan and an alternate route",
-						p);
-				out.v = 0.0;
-				out.w = 0.0;
-				out.k = 0.0;
-				out.mode = MODE_STOP;
-				out.reason = REASON_FAILED;
-				break;
-			default:
-				break;
-		}
-
-		// Output and the record kept for the next tick.
-		write_command(commands, i, true, out.v, out.w, out.mode);
-		state_row[0] = float(follow.s);
-		state_row[1] = float(projection.segment);
-		state_row[2] = float(out.lookahead);
-		state_row[3] = float(remaining);
-		state_row[4] = float(out.reference_curvature);
-		state_row[5] = float(out.reason);
-		state_row[6] = float(out.preferred_vx);
-		state_row[7] = float(out.preferred_vz);
-		preferred[i] = Vec3f(float(out.preferred_vx), 0.0f, float(out.preferred_vz));
-		follow.prev_v = out.v;
-		follow.prev_k = out.k;
-		follow.prev_mode = out.mode;
-		follow.pref_vx = out.preferred_vx;
-		follow.pref_vz = out.preferred_vz;
-		follow.reversal_side = out.reversal_side;
-		follow.reversing = out.reversing;
-		follow.turn_target = out.turn_target;
-		follow.last = out;
-		if (out.mode == MODE_STEP_TURN) {
-			++follow.stepping_turn_steps;
-		} else if (out.reason == REASON_REVERSING) {
-			++follow.reversing_steps;
-		} else if (out.mode == MODE_BRAKE) {
-			++follow.brake_steps;
-		} else if (out.mode == MODE_HOLD) {
-			++follow.hold_steps;
-		}
+			out.reason = REASON_FAILED;
+			break;
+		default:
+			break;
 	}
-	follow_stats.step_us += elapsed_us(started);
-	return true;
+
+	// Output and the record kept for the next tick.
+	write_command(commands, i, true, out.v, out.w, out.mode);
+	state_row[0] = float(follow.s);
+	state_row[1] = float(projection.segment);
+	state_row[2] = float(out.lookahead);
+	state_row[3] = float(remaining);
+	state_row[4] = float(out.reference_curvature);
+	state_row[5] = float(out.reason);
+	state_row[6] = float(out.preferred_vx);
+	state_row[7] = float(out.preferred_vz);
+	preferred[i] = Vec3f(float(out.preferred_vx), 0.0f, float(out.preferred_vz));
+	follow.prev_v = out.v;
+	follow.prev_k = out.k;
+	follow.prev_mode = out.mode;
+	follow.pref_vx = out.preferred_vx;
+	follow.pref_vz = out.preferred_vz;
+	follow.reversal_side = out.reversal_side;
+	follow.reversing = out.reversing;
+	follow.turn_target = out.turn_target;
+	follow.last = out;
+	if (out.mode == MODE_STEP_TURN) {
+		++follow.stepping_turn_steps;
+	} else if (out.reason == REASON_REVERSING) {
+		++follow.reversing_steps;
+	} else if (out.mode == MODE_BRAKE) {
+		++follow.brake_steps;
+	} else if (out.mode == MODE_HOLD) {
+		++follow.hold_steps;
+	}
 }
 
 } // namespace ponynav

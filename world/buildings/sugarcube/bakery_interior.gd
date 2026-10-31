@@ -51,10 +51,28 @@ func visit_point(pony: Node3D) -> Vector3:
 ## residential furnishing or assignment. Geometry and furniture are baked offline.
 func _ready() -> void:
 	super._ready()
+	if MERGE_ROOMS: _merge_rooms.call_deferred()
 	_setup_bakery_range.call_deferred()
 	_floor_seating.call_deferred()
 	_keep_far_shell.call_deferred()
 	_counter_top.call_deferred()
+
+## Perf 0.1.0 (geometry): the baked shop room's ~240 still pieces (floorboard seams, panels,
+## cabinets, sink, oven parts, worktops, the two kept chairs' frames) draw as one mesh per look
+## (about 20) instead of one draw each. Seats, bodies, food displays and anything with a script,
+## group or metadata stay as they are (static_mesh_merge.gd). Runs before the range policy below
+## reads the room, after the chair and counter edits (both are idempotent, so their own deferred
+## calls then find nothing left to do). false = every piece draws on its own (rollback / A-B).
+const MERGE_ROOMS := true
+const STATIC_MERGE := preload("res://world/buildings/static_mesh_merge.gd")
+func _merge_rooms() -> void:
+	if not is_inside_tree(): return
+	_floor_seating()
+	_counter_top()
+	var shadow_floor := STATIC_MERGE.town_shadow_floor(self)
+	for room_name: String in ["BakeryRoom", "TowerRoom"]:
+		var room := get_parent().get_node_or_null(room_name) as Node3D
+		if room != null: STATIC_MERGE.merge(room, [], [], "MergedRoom", shadow_floor)
 
 ## The landmark's outside had a hard 250 m cutoff with no far stand-in, so from across town
 ## Sugarcube Corner simply vanished (dev 2026-10-17). The shell, foundation and ramp now always

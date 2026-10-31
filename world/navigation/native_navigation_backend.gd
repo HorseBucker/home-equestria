@@ -48,8 +48,20 @@ static func set_mode(value: String) -> void:
 	_mode = value
 
 
+## 0.1.0 perf: the loaded classes and the pool size cannot change while the game runs; they are
+## looked up once instead of on every physics tick of every walk-grid service (search_concurrency()
+## read two project settings per call). Rollback: CACHE_LOOKUPS = false.
+const CACHE_LOOKUPS := true
+static var _has_class := -1
+static var _has_step_batch := -1
+static var _has_wander := -1
+static var _concurrency := 0
+
+
 static func native_available() -> bool:
-	return ClassDB.class_exists(CLASS_NAME)
+	if not CACHE_LOOKUPS: return ClassDB.class_exists(CLASS_NAME)
+	if _has_class < 0: _has_class = 1 if ClassDB.class_exists(CLASS_NAME) else 0
+	return _has_class == 1
 
 
 ## True when route searches should run natively ("search" or "follow"). Reports a missing build
@@ -69,10 +81,16 @@ static func search_enabled() -> bool:
 static func follow_enabled() -> bool:
 	if mode() != "follow":
 		return false
-	if native_available() and ClassDB.class_has_method(CLASS_NAME, "step_batch"):
+	if native_available() and _step_batch_available():
 		return true
 	_report_missing()
 	return false
+
+
+static func _step_batch_available() -> bool:
+	if not CACHE_LOOKUPS: return ClassDB.class_has_method(CLASS_NAME, "step_batch")
+	if _has_step_batch < 0: _has_step_batch = 1 if ClassDB.class_has_method(CLASS_NAME, "step_batch") else 0
+	return _has_step_batch == 1
 
 
 static func _report_missing() -> void:
@@ -108,17 +126,22 @@ static func _worker_argument() -> int:
 ## to [1, threads - 1] (WorkerThreadPool::init). Searches are low-priority pool tasks, so this is
 ## how many of them the pool runs side by side; frame-critical engine tasks keep the rest.
 static func search_concurrency() -> int:
+	if CACHE_LOOKUPS and _concurrency > 0: return _concurrency
 	var threads := int(ProjectSettings.get_setting("threading/worker_pool/max_threads", -1))
 	if threads <= 0:
 		threads = OS.get_processor_count()
 	var ratio := float(ProjectSettings.get_setting("threading/worker_pool/low_priority_thread_ratio", 0.3))
-	return clampi(int(threads * ratio), 1, maxi(1, threads - 1))
+	_concurrency = clampi(int(threads * ratio), 1, maxi(1, threads - 1))
+	return _concurrency
 
 
 ## dev 2026-10-20 multithreading: native wander searches (PonyWanderJob on the WorkerThreadPool)
 ## and several searches at once per service. Needs the native search and a build with wander_job.
 static func wander_enabled() -> bool:
-	return search_enabled() and ClassDB.class_exists("PonyWanderJob") and ClassDB.class_has_method(CLASS_NAME, "wander_job")
+	if not search_enabled(): return false
+	if not CACHE_LOOKUPS: return ClassDB.class_exists("PonyWanderJob") and ClassDB.class_has_method(CLASS_NAME, "wander_job")
+	if _has_wander < 0: _has_wander = 1 if ClassDB.class_exists("PonyWanderJob") and ClassDB.class_has_method(CLASS_NAME, "wander_job") else 0
+	return _has_wander == 1
 
 
 ## One native world per walk-grid service (zone). Returns -1 when the class is missing.

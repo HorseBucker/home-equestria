@@ -13,6 +13,12 @@ var _seed := 0.0
 static var _wax_materials: Array[StandardMaterial3D] = []
 static var _wick_material: StandardMaterial3D
 static var _flame_material: StandardMaterial3D
+## Perf 0.1.0 (geometry): a cluster's wax bodies draw as one surface (their four wax colours
+## become vertex colours on one otherwise identical material) and its wicks as a second surface:
+## 2 draws per cluster per pass instead of 2 per candle. Same cylinders, sizes and seeded layout.
+## false = one wax and one wick mesh per candle again (rollback / A-B).
+const MERGE_CANDLES := true
+static var _wax_vertex_material: StandardMaterial3D
 
 ## `count` candles within a small circle, seeded by `rng` (heights 5-16 cm, radii 1.2-2.2 cm).
 func build(count: int, rng: RandomNumberGenerator) -> void:
@@ -23,6 +29,8 @@ func build(count: int, rng: RandomNumberGenerator) -> void:
 	if count == 3: spots = [Vector2(-0.028, 0.012), Vector2(0.026, 0.018), Vector2(0.0, -0.03)]
 	elif count >= 4: spots = [Vector2(-0.03, -0.028), Vector2(0.032, -0.024), Vector2(-0.026, 0.03), Vector2(0.03, 0.032)]
 	var turn := rng.randf() * TAU
+	var wax_parts: Array = []   # [mesh, offset, colour]
+	var wick_parts: Array = []  # [mesh, offset]
 	for i in spots.size():
 		var radius := rng.randf_range(0.012, 0.022)
 		var height := rng.randf_range(0.05, 0.16)
@@ -30,14 +38,20 @@ func build(count: int, rng: RandomNumberGenerator) -> void:
 		var wax := MeshInstance3D.new()
 		var body := CylinderMesh.new(); body.top_radius = radius; body.bottom_radius = radius * 1.04; body.height = height; body.radial_segments = 14
 		wax.mesh = body
-		wax.material_override = _wax_materials[rng.randi() % _wax_materials.size()]
+		var wax_index := rng.randi() % _wax_materials.size()
+		wax.material_override = _wax_materials[wax_index]
 		wax.position = Vector3(at.x, height * 0.5, at.y)
-		_finish(wax)
 		var wick := MeshInstance3D.new()
 		var thread := CylinderMesh.new(); thread.top_radius = 0.0012; thread.bottom_radius = 0.0015; thread.height = 0.012; thread.radial_segments = 5
 		wick.mesh = thread; wick.material_override = _wick_material
 		wick.position = Vector3(at.x, height + 0.005, at.y)
-		_finish(wick)
+		if MERGE_CANDLES:
+			wax_parts.append([body, wax.position, WAX[wax_index]])
+			wick_parts.append([thread, wick.position, Color.WHITE])
+			wax.free(); wick.free()
+		else:
+			_finish(wax)
+			_finish(wick)
 		wicks.append(Vector3(at.x, height + 0.011, at.y))
 		var flame := MeshInstance3D.new()
 		var drop := SphereMesh.new(); drop.radius = 0.0065; drop.height = 0.024; drop.radial_segments = 8; drop.rings = 5
@@ -46,7 +60,50 @@ func build(count: int, rng: RandomNumberGenerator) -> void:
 		flame.visible = false
 		_finish(flame)
 		_flames.append(flame)
+	if MERGE_CANDLES:
+		var merged := ArrayMesh.new()
+		_add_parts(merged, wax_parts, true, _wax_vertex_material)
+		_add_parts(merged, wick_parts, false, _wick_material)
+		var view := MeshInstance3D.new()
+		view.name = "CandleBodies"
+		view.mesh = merged
+		_finish(view)
+		# Ranges measure from the instance: the cluster's farthest candle keeps its own 40 m.
+		var reach := 0.0
+		for part: Array in wax_parts: reach = maxf(reach, (part[1] as Vector3).length())
+		view.visibility_range_end += reach * global_basis.get_scale().x if is_inside_tree() else reach
 	set_process(false)
+
+## One surface from cylinders offset in the cluster frame; `coloured` writes each part's wax colour.
+static func _add_parts(mesh: ArrayMesh, parts: Array, coloured: bool, material: Material) -> void:
+	var vertices := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var tangents := PackedFloat32Array()
+	var uvs := PackedVector2Array()
+	var colors := PackedColorArray()
+	var indices := PackedInt32Array()
+	for part: Array in parts:
+		var arrays: Array = (part[0] as PrimitiveMesh).get_mesh_arrays()
+		var offset: Vector3 = part[1]
+		var base := vertices.size()
+		var source: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		for point: Vector3 in source: vertices.append(point + offset)
+		normals.append_array(arrays[Mesh.ARRAY_NORMAL])
+		tangents.append_array(arrays[Mesh.ARRAY_TANGENT])
+		uvs.append_array(arrays[Mesh.ARRAY_TEX_UV])
+		if coloured:
+			var fill := PackedColorArray(); fill.resize(source.size()); fill.fill(part[2]); colors.append_array(fill)
+		for index: int in arrays[Mesh.ARRAY_INDEX]: indices.append(base + index)
+	var surface: Array = []
+	surface.resize(Mesh.ARRAY_MAX)
+	surface[Mesh.ARRAY_VERTEX] = vertices
+	surface[Mesh.ARRAY_NORMAL] = normals
+	surface[Mesh.ARRAY_TANGENT] = tangents
+	surface[Mesh.ARRAY_TEX_UV] = uvs
+	if coloured: surface[Mesh.ARRAY_COLOR] = colors
+	surface[Mesh.ARRAY_INDEX] = indices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, surface)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, material)
 
 func _finish(piece: MeshInstance3D) -> void:
 	piece.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -101,6 +158,11 @@ static func _materials() -> void:
 		wax.subsurf_scatter_enabled = false
 		wax.rim_enabled = true; wax.rim = 0.2; wax.rim_tint = 0.4
 		_wax_materials.append(wax)
+	# The wax material once more, white, taking each candle's wax colour from its vertices.
+	_wax_vertex_material = _wax_materials[0].duplicate() as StandardMaterial3D
+	_wax_vertex_material.albedo_color = Color.WHITE
+	_wax_vertex_material.vertex_color_use_as_albedo = true
+	_wax_vertex_material.vertex_color_is_srgb = true
 	_wick_material = StandardMaterial3D.new()
 	_wick_material.albedo_color = Color("2a211b")
 	_flame_material = StandardMaterial3D.new()

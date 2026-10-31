@@ -19,7 +19,10 @@ var _hand_material:ShaderMaterial
 var _aura:MeshInstance3D
 var _refresh:=0.
 var _excluded:Array[RID]=[]
+# Perf 0.1.0: _process only runs while the inspector is open (toggle/close).
+func _ready():set_process(active)
 func setup(ui:Node,context:Node):
+	set_process(active)
 	owner_ui=ui;store=context
 	var body:Variant=owner_ui.player_body
 	if is_instance_valid(body):
@@ -50,7 +53,7 @@ func toggle():
 		if "_desktop_wrist" in owner_ui and owner_ui._desktop_wrist:owner_ui._toggle_desktop_wrist(false)
 		if is_instance_valid(owner_ui.player_body) and "controls_locked" in owner_ui.player_body and owner_ui.player_body.controls_locked:return
 	owner_ui._release_case();owner_ui.case.close();owner_ui._close_map();owner_ui.wrist.hide()
-	active=true;_armed=false;_pressed=false;owner_ui._claim("right",true)
+	active=true;_armed=false;_pressed=false;owner_ui._claim("right",true);set_process(true)
 	var hand:Variant=owner_ui.hands.get("right")
 	if is_instance_valid(hand):hand.set_meta("pony_inspection",true)
 	if owner_ui._desktop:
@@ -59,7 +62,7 @@ func toggle():
 			_lock_owned=not owner_ui.player_body.controls_locked;owner_ui.player_body.controls_locked=true
 func close():
 	if not active:return
-	active=false;_clear_hand();_highlight(null);selected=null;panel.press(false);panel.hide();pointer.hide();_aura.hide();owner_ui._claim("right",false);_clear_claim()
+	active=false;set_process(false);_clear_hand();_highlight(null);selected=null;panel.press(false);panel.hide();pointer.hide();_aura.hide();owner_ui._claim("right",false);_clear_claim()
 	if owner_ui._desktop:
 		var other_ui:bool=owner_ui._map_open() or owner_ui.customizer.opened or owner_ui.case.visible
 		Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if other_ui else _old_mouse

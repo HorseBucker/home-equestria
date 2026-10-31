@@ -20,6 +20,31 @@ const FAILED := 4
 static var _air: RefCounted = null
 static var _tried := false
 static var _next_id := 0
+## Loaded in the background as the world starts (0.1.0 perf pass): reading and unpacking the 8.9 MB
+## volume took about 0.75 s on the main thread, a freeze the first time a pegasus flew a long route.
+## The first flight waits only for what is left of that load. Rollback: WARM_IN_BACKGROUND = false.
+const WARM_IN_BACKGROUND := true
+static var _warm_task := -1
+static var _warmed: RefCounted = null
+static var _warm_info: Dictionary = {}
+
+
+## Starts the background load (world/game.gd at world start). Same checks and data as instance().
+static func warm() -> void:
+	if not WARM_IN_BACKGROUND or _tried or _warm_task >= 0: return
+	if BACKEND.mode() == "off" or not ClassDB.class_exists(CLASS_NAME) or not FileAccess.file_exists(DATA): return
+	_warm_task = WorkerThreadPool.add_task(_warm_load, false, "Air volume")
+
+
+## Leaving the world: joins a background load still running (kept for the next world).
+static func join() -> void:
+	if _warm_task >= 0 and not _tried: instance()
+
+
+static func _warm_load() -> void:
+	var air: RefCounted = ClassDB.instantiate(CLASS_NAME)
+	_warm_info = air.load_bytes(FileAccess.get_file_as_bytes(DATA))
+	_warmed = air
 
 
 ## The loaded air volume, or null (reported once, loudly, when native navigation is on).
@@ -29,6 +54,14 @@ static func instance() -> RefCounted:
 	_tried = true
 	if BACKEND.mode() == "off":
 		return null
+	if _warm_task >= 0:
+		WorkerThreadPool.wait_for_task_completion(_warm_task)
+		_warm_task = -1
+		if not bool(_warm_info.get("ok", false)):
+			_report("The baked air volume did not load (%s); flights use their old corridors" % str(_warm_info.get("error", "?")))
+			return null
+		_air = _warmed
+		return _air
 	if not ClassDB.class_exists(CLASS_NAME):
 		_report("%s is not in this build of native/pony_solver for %s; flights use their old corridors" % [CLASS_NAME, OS.get_name()])
 		return null

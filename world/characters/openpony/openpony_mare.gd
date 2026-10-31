@@ -326,6 +326,7 @@ func play(clip: String) -> void:
 
 
 func apply_gaze(angles: Vector2) -> void:
+	_shown_eyes = Vector3(INF, INF, INF)
 	for material in _eye_layers:
 		if material.has_meta("show_iris"):
 			material.set_shader_parameter("gaze_uv",show_gaze_uv(angles))
@@ -338,8 +339,18 @@ static func show_gaze_uv(angles: Vector2) -> Vector2:
 	return Vector2(clampf(angles.x*.40,-.12,.12),clampf(-angles.y*.25,-.10,.10))
 
 
+## The last update_show_eyes values: the same gaze and closure again set nothing (0.1.0 perf pass;
+## each set re-uploads the material and the eye mesh's blend weights). Rollback: SKIP_SAME_EYES = false.
+const SKIP_SAME_EYES := true
+var _shown_eyes := Vector3(INF, INF, INF)
+var _shown_right := Vector2(INF, INF)
+
 func update_show_eyes(left_angles: Vector2, right_angles: Vector2, lid_closure: float) -> void:
 	if not show_eyes_enabled: return
+	var shown := Vector3(left_angles.x, left_angles.y, lid_closure)
+	if SKIP_SAME_EYES and shown == _shown_eyes and right_angles == _shown_right: return
+	_shown_eyes = shown
+	_shown_right = right_angles
 	for material in _eye_layers:
 		if material.has_meta("show_iris"):
 			material.set_shader_parameter("gaze_uv",show_gaze_uv(left_angles if material.get_meta("left_eye") else right_angles))

@@ -69,6 +69,7 @@ var mood := ""                       # a held mood face ("" none): asleep/sad st
 var viseme := "X"
 var gaze := Vector2.ZERO             # UV units, + = his left / up
 var _gaze_now := Vector2.ZERO
+var _gaze_set := Vector2(INF, INF)
 var pucker := 0.0                    # a kiss in progress (pony_affection asks through the actor)
 var mouth_open := 0.0                # eating, fire breath
 
@@ -171,6 +172,9 @@ func advance(delta: float, _resting: bool, interest: float = 0.0, speaking := fa
 	target["EyeClosed"] = maxf(float(target.get("EyeClosed", 0.0)), blink)
 	_apply(target, delta, speaking)
 	_gaze_now = _gaze_now.lerp(gaze, minf(1.0, delta * 12.0))
+	# Every rendered frame, so only a changed gaze is sent (0.1.0 perf pass): a settled lerp repeats it.
+	if _gaze_now == _gaze_set: return
+	_gaze_set = _gaze_now
 	for material in eye_materials:
 		material.set_shader_parameter("gaze", _gaze_now)
 

@@ -30,6 +30,15 @@ var _timer := 0.0
 var _pony_marker_clock := 0.0
 var _previous_mouse_mode := Input.MOUSE_MODE_VISIBLE
 var _selected: Dictionary = {}
+## Rollback switch (0.1.0 perf pass, 2026-10-31): the map's ~380 canvas draw calls went out every
+## frame although the map redraws a few times a second at most; it now renders into a texture on
+## the frames it redraws. false draws it straight onto the HUD layer as before.
+const CACHED_MAP := true
+var _map_host: SubViewportContainer
+var _map_viewport: SubViewport
+
+func _map_redrawn() -> void:
+	if _map_viewport != null: _map_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 func _ready() -> void:
 	layer = 110
@@ -42,7 +51,20 @@ func _ready() -> void:
 	panel.add_child(_card)
 	title = STYLE.label("", "Heading", 26)
 	panel.add_child(title)
-	map = MAP_VIEW.new(); map.preferences_path = preferences_path; panel.add_child(map)
+	map = MAP_VIEW.new(); map.preferences_path = preferences_path
+	if CACHED_MAP:
+		# Drawn into its own texture, re-rendered only on the frames the map redraws (its draw
+		# signal); otherwise the window shows the last image. Themes do not cross into a
+		# SubViewport, so the map carries the menu theme itself.
+		_map_host = SubViewportContainer.new(); _map_host.stretch = true; panel.add_child(_map_host)
+		_map_viewport = SubViewport.new(); _map_viewport.transparent_bg = true
+		_map_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+		_map_host.add_child(_map_viewport)
+		map.theme = STYLE.theme()
+		_map_viewport.add_child(map)
+		map.draw.connect(_map_redrawn)
+	else:
+		panel.add_child(map)
 	map.marker_selected.connect(func(marker): _selected = marker; _update_status())
 	map.expand_requested.connect(func(): set_expanded(true))
 	toolbar = HFlowContainer.new(); panel.add_child(toolbar)
@@ -165,7 +187,12 @@ func _layout() -> void:
 	# The map under the toolbar's rows (one in a wide window, more in a narrow one), above the
 	# status, sized now so that framing the world on opening fits it.
 	var top := toolbar.position.y + maxf(38.0, rows) + 8.0 if expanded else 8.0
-	map.position = Vector2(8, top)
+	if _map_host != null:
+		_map_host.position = Vector2(8, top)
+		_map_host.size = panel.size - Vector2(16, top + 38.0)
+		map.position = Vector2.ZERO
+	else:
+		map.position = Vector2(8, top)
 	map.size = panel.size - Vector2(16, top + 38.0)
 	if not expanded and not map.zoom_locked: map.zoom = map.size.x / 4400.0
 	status.position = Vector2(14, panel.size.y - 30); status.size = Vector2(panel.size.x - 28, 26)

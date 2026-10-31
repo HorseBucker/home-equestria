@@ -28,6 +28,9 @@ var _history_bytes := 0
 var _records := {}
 var _dirty := {}
 
+## Perf 0.1.0: _process runs only while dabs or a stroke's ending are queued (dab/finish wake it).
+func _ready() -> void: set_process(not _dabs.is_empty() or _ending)
+
 func bind(value: Node, use_working := true) -> void:
 	world = value; terrain = value.terrain
 	load_saved(use_working)
@@ -44,8 +47,8 @@ func begin(invert := false) -> bool:
 	_ending = false; return true
 
 func dab(pos: Vector2) -> void:
-	if not _stroke.is_empty() and pos.is_finite() and _dabs.size()<8: _dabs.append(pos)
-func finish() -> void: _ending=true
+	if not _stroke.is_empty() and pos.is_finite() and _dabs.size()<8: _dabs.append(pos); set_process(true)
+func finish() -> void: _ending=true; set_process(true)
 func settled() -> bool: return not busy and _stroke.is_empty() and _dabs.is_empty()
 
 func _process(_delta: float) -> void:
@@ -56,6 +59,7 @@ func _process(_delta: float) -> void:
 		if not _stroke.before.is_empty():
 			_push_undo(_stroke);_redo.clear()
 		_stroke={};_ending=false;updated.emit()
+	if _dabs.is_empty() and not _ending: set_process(false)
 
 func _ensure(loc:Vector2i)->Dictionary:
 	if _records.has(loc):return _records[loc]

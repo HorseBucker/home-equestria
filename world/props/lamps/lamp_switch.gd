@@ -18,7 +18,9 @@ func _unhandled_input(event:InputEvent)->void:
 		if not target.is_empty():
 			target.target.toggle();SFX.play_at(target.target, "prop_lamp");get_viewport().set_input_as_handled()
 func _physics_process(_delta:float)->void:
-	if not is_instance_valid(inventory) or inventory._desktop:return
+	if not is_instance_valid(inventory):return
+	# Perf 0.1.0: desktop switches lamps by key; a rig is made for one mode (game_player_rig.gd).
+	if inventory._desktop:set_physics_process(false);return
 	for side:String in ["left","right"]:
 		var sample:Dictionary=inventory.hand_sample(side)
 		var pulled:bool=bool(sample.get("active",false)) and float(sample.get("trigger",0.0))>(.45 if _trigger[side] else .75)

@@ -77,6 +77,10 @@ static func for_bed(bed: Node3D) -> Node3D:
 	rest.call("refresh")
 	return rest
 
+## Perf 0.1.0: an empty bed's tick (four beds in town, every tick) skips the cuddle tending, which
+## with no occupant, guest or marked mare only advances its timers (done here). false: always tend.
+const SHARED_BED_IDLE_SKIP := true
+
 func _physics_process(delta: float) -> void:
 	extension = move_toward(extension, 1.0 if opened else 0.0, delta / OPEN_SECONDS)
 	_scan -= delta
@@ -84,6 +88,11 @@ func _physics_process(delta: float) -> void:
 		_scan = 0.5
 		refresh()
 	if not can_open() or seats.size() < 2 or not is_instance_valid(seats[1]): return
+	if SHARED_BED_IDLE_SKIP and _guest.is_empty() and _marked.is_empty() and seats[0].free_for() and seats[1].free_for():
+		# Nobody on it, no guest, nobody marked: _tend would only advance these timers.
+		_away += delta; _upright += delta; _join_in = 1.5
+		opened = false
+		return
 	_tend(delta)
 	# Open while anybody uses it: exits and hops then use the floor beside the bed.
 	opened = not seats[0].free_for() or not seats[1].free_for() or not _guest.is_empty()

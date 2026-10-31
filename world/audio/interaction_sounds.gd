@@ -64,6 +64,17 @@ var _underwater := 0.0
 var _foreground: Dictionary = {}
 var _scope: WeakRef
 var _rng := RandomNumberGenerator.new()
+## Perf 0.1.0: every play() of an Ogg Vorbis clip builds a new decoder (about 210 us measured,
+## 4.5 headless), about 40 hoofsteps a second in a crowd. A short one-shot clip is decoded once on a
+## worker thread into the same samples at its own sampling rate (AudioStreamWAV, 16-bit PCM); later
+## plays take about 1 us. Volume, pitch, distance and timing go through the same path. Until its
+## decode is ready the Ogg clip plays as before. false = always play the Ogg clip.
+const PCM_ONE_SHOTS := true
+const PCM_MAX_SECONDS := 1.5
+const PCM_BUDGET_FRAMES := 44100 * 120   # all decoded clips together (at most ~10 MB mono)
+var _pcm: Dictionary = {}        # source AudioStream -> AudioStreamWAV, or null (plays the source)
+var _pcm_jobs: Dictionary = {}   # WorkerThreadPool task id -> [source stream, result holder]
+var _pcm_frames := 0
 var _metrics := {"played": 0, "distance_drops": 0, "cooldown_drops": 0, "capacity_drops": 0, "invalid_drops": 0, "steals": 0, "stale_loops": 0}
 
 static var _cached_mixer: WeakRef
@@ -323,7 +334,7 @@ func emit_event(event: String, at: Vector3, source_id: int, parameters: Dictiona
 		if _cooldowns.size() >= 512: _cooldowns.erase(_cooldowns.keys()[0])
 	_voices[index] = _spatial_shots[index] if bool(spec.spatial) else _flat_shots[index]
 	var voice: Node = _voices[index]
-	voice.stream = _stream(cue, spec, str(params.material))
+	voice.stream = _pcm_for(_stream(cue, spec, str(params.material)))
 	if voice.stream == null: _metrics.invalid_drops += 1; return false
 	_configure(voice, spec, params)
 	if voice is Node3D: voice.global_position = at
@@ -332,6 +343,56 @@ func emit_event(event: String, at: Vector3, source_id: int, parameters: Dictiona
 	voice.play(); _metrics.played += 1
 	if index not in _active_shots: _active_shots.append(index)
 	return true
+
+## The decoded PCM copy of a one-shot clip once ready; queues its decode the first time.
+func _pcm_for(stream: AudioStream) -> AudioStream:
+	if not PCM_ONE_SHOTS or not stream is AudioStreamOggVorbis: return stream
+	if _pcm.has(stream):
+		var ready: Variant = _pcm[stream]
+		return ready if ready != null else stream
+	_pcm[stream] = null
+	if stream.get_length() > PCM_MAX_SECONDS or _pcm_frames >= PCM_BUDGET_FRAMES: return stream
+	var holder: Array = []
+	var task := WorkerThreadPool.add_task(_decode_pcm.bind(stream, holder), false, "one-shot pcm")
+	_pcm_jobs[task] = [stream, holder]
+	return stream
+
+func _collect_pcm(wait: bool) -> void:
+	for task: int in _pcm_jobs.keys():
+		if not wait and not WorkerThreadPool.is_task_completed(task): continue
+		WorkerThreadPool.wait_for_task_completion(task)
+		var job: Array = _pcm_jobs[task]
+		_pcm_jobs.erase(task)
+		var holder: Array = job[1]
+		if holder.size() == 2 and _pcm_frames < PCM_BUDGET_FRAMES:
+			_pcm[job[0]] = holder[0]; _pcm_frames += int(holder[1])
+
+## Worker thread: the clip's own playback renders it once at its sampling rate (a resample step of
+## exactly 1), then the same frames become a PCM WAV. Mono when both channels carry the same signal.
+static func _decode_pcm(stream: AudioStreamOggVorbis, holder: Array) -> void:
+	if stream.packet_sequence == null: return
+	var rate: float = stream.packet_sequence.sampling_rate
+	var server: float = AudioServer.get_mix_rate()
+	if not rate > 0.0 or not server > 0.0: return
+	var playback: AudioStreamPlayback = stream.instantiate_playback()
+	if playback == null: return
+	playback.start(0.0)
+	var frames: PackedVector2Array = playback.mix_audio(server / rate, ceili(stream.get_length() * rate) + 64)
+	if frames.is_empty(): return
+	var mono := true
+	for i in range(0, frames.size(), 5):
+		if frames[i].x != frames[i].y: mono = false; break
+	var data := frames.to_byte_array()
+	var header := PackedByteArray(); header.resize(44)
+	# RIFF/WAVE, IEEE float, 2 channels, 32 bits: the frames' own layout.
+	header.encode_u32(0, 0x46464952); header.encode_u32(4, 36 + data.size()); header.encode_u32(8, 0x45564157)
+	header.encode_u32(12, 0x20746d66); header.encode_u32(16, 16); header.encode_u16(20, 3); header.encode_u16(22, 2)
+	header.encode_u32(24, int(rate)); header.encode_u32(28, int(rate) * 8); header.encode_u16(32, 8); header.encode_u16(34, 32)
+	header.encode_u32(36, 0x61746164); header.encode_u32(40, data.size())
+	var wav := AudioStreamWAV.load_from_buffer(header + data, {"compress/mode": 0, "edit/trim": false,
+		"edit/normalize": false, "edit/loop_mode": 0, "force/mono": mono, "force/8_bit": false, "force/max_rate": false})
+	if wav == null or wav.get_length() <= 0.0: return
+	holder.append(wav); holder.append(frames.size())
 
 ## The playing voice of `cue` farthest from the listener, when it is farther than `at`; else -1.
 func _farthest_voice(cue: String, at: Vector3) -> int:
@@ -427,6 +488,7 @@ func _release_id(source_id: int) -> void:
 	_foreground.erase(source_id)
 
 func _process(delta: float) -> void:
+	if not _pcm_jobs.is_empty(): _collect_pcm(false)
 	var now: float = Time.get_ticks_msec() * .001
 	var context_source: Node = _context_owner.get_ref() if _context_owner != null else null
 	if not is_instance_valid(context_source) or not context_source.is_inside_tree() or now - _context_time > SOURCE_TTL:
@@ -464,10 +526,12 @@ func reset_world() -> void:
 func diagnostics() -> Dictionary:
 	var result: Dictionary = _metrics.duplicate()
 	result["loops"] = _loops.size(); result["cooldowns"] = _cooldowns.size()
+	result["pcm_clips"] = _pcm.values().filter(func(v: Variant) -> bool: return v != null).size(); result["pcm_frames"] = _pcm_frames
 	result["catalogue"] = _catalogue.size(); result["one_shot_capacity"] = _voices.size(); result["loop_capacity"] = _loop_players.size()
 	return result
 
 func _exit_tree() -> void:
+	_collect_pcm(true)
 	reset_world()
 
 ## Original synthesized foley, not recordings. Smooth attack/release prevents clicks.

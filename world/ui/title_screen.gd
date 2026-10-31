@@ -183,6 +183,7 @@ func _ready() -> void:
 		if not await _ask_play_mode(): return
 	var iface := XRServer.find_interface("OpenXR")
 	xr_active = iface != null and iface.is_initialized()
+	if game_scene == GAME and not xr_active: await _ask_quality()
 	seated = xr_active and preload("res://world/launch_config.gd").seated()
 	if preload("res://world/launch_config.gd").require_vr() and not xr_active:
 		preload("res://world/launch_config.gd").fail_required_vr(get_tree())
@@ -223,6 +224,17 @@ func _ask_play_mode() -> bool:
 	if mode == "off": return true
 	launch.restart_in_vr(get_tree())
 	return false
+
+## First desktop launch: offer the machine check (world/ui/quality_prompt.gd). Opt-in; asked once.
+func _ask_quality() -> void:
+	var settings: Node = get_tree().root.get_node_or_null("Settings")
+	if settings == null or bool(settings.get_value("setup/quality_asked")) or DisplayServer.get_name() == "headless": return
+	var prompt: CanvasLayer = preload("res://world/ui/quality_prompt.gd").new()
+	add_child(prompt)
+	var pick := str(await prompt.chosen)
+	prompt.queue_free()
+	if pick != "": settings.set_value("video/quality", pick)
+	settings.set_value("setup/quality_asked", true)
 
 func _build_card() -> void:
 	_card_active = true

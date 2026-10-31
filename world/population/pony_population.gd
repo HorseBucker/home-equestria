@@ -159,8 +159,12 @@ func home_house(id: String) -> Node3D:
 	if not config.assignments.has(id) or not is_inside_tree(): return null
 	_assign_houses()
 	var place: String = houses.get(id, "")
+	var known: Variant = _house_by_place.get(place) if ASSIGN_ONCE_PER_FRAME else null
+	if is_instance_valid(known) and (known as Node3D).is_inside_tree() and (known as Node3D).call(&"place_id") == place: return known as Node3D
 	for house: Node3D in get_tree().get_nodes_in_group("house_interiors"):
-		if house.place_id() == place: return house
+		if house.place_id() == place:
+			_house_by_place[place] = house
+			return house
 	return null
 
 ## Residents who live in a house, by its place id.
@@ -171,17 +175,38 @@ func residents_of(place_id: String) -> Array:
 	result.sort()
 	return result
 
+## 0.1.0 perf pass: home_house() runs _assign_houses for every caller (about 15 per beat at night),
+## and each pass reconfigured every house. Its inputs only change between frames (houses is
+## written here alone; the town group changes on load/stream), so one pass per frame serves all
+## callers of that frame. Rollback: ASSIGN_ONCE_PER_FRAME = false.
+const ASSIGN_ONCE_PER_FRAME := true
+var _assign_frame := -1
+var _house_by_place := {}
+
 func _assign_houses() -> void:
+	if ASSIGN_ONCE_PER_FRAME and _houses_loaded:
+		var frame := Engine.get_process_frames()
+		if frame == _assign_frame: return
+		_assign_frame = frame
 	var town: Array = get_tree().get_nodes_in_group("house_interiors")
 	var path := config_path.get_base_dir().path_join("homes.json")
 	if not _houses_loaded:
 		_houses_loaded = true
 		var stored: Variant = JSON.parse_string(FileAccess.get_file_as_string(path)) if FileAccess.file_exists(path) else null
-		if stored is Dictionary: houses = stored
+		if stored is Dictionary: houses = stored; _houses_version += 1
 	if town.is_empty(): return
 	# Dedicated homes choose reservation only after this world's saved addresses load.
-	for house: Node3D in town:
-		if house.has_method("configure_owner"): house.configure_owner(houses)
+	if not CONFIGURE_ON_CHANGE or not _configured_for(town):
+		_configure_always.clear()
+		for house: Node3D in town:
+			if CONFIGURE_ON_CHANGE and not house.tree_exiting.is_connected(_on_house_exiting):
+				house.tree_exiting.connect(_on_house_exiting, CONNECT_ONE_SHOT)
+			if house.has_method("configure_owner"):
+				house.configure_owner(houses)
+				if house.has_method(&"_adopt_legacy_move_in"): _configure_always.append(house)
+	else:
+		for house: Node3D in _configure_always:
+			if is_instance_valid(house): house.configure_owner(houses)
 	var ids: Array = config.residents(HOME_REGION)
 	# Authored homes outside Ponyville (Zecora's hut) participate in the same
 	# bed/house assignment service without moving their residents into town.
@@ -258,7 +283,34 @@ func _assign_houses() -> void:
 	for house: Node3D in town:
 		if house.has_method("set_sleepers"): house.set_sleepers(residents_of(house.place_id()))
 	if changed:
+		_houses_version += 1
 		preload("res://world/save_file.gd").write(path, houses)
+
+## 0.1.0 perf pass: configure_owner() sets each dedicated home's reserved_for from the saved
+## addresses alone (Golden Oak, the cottage, the tower, the boutique), so it is re-run only when
+## those inputs change: the houses dictionary (changed here, replaced, or resized) or the set of
+## houses in town (its size, or any configured house leaving the tree, which also covers one
+## leaving while another arrives). Homes whose configure_owner also does timed work (the
+## Cloudominium's legacy move-in check, itself throttled to 5 s) are still called every pass.
+## Same metadata, same timing. Rollback: CONFIGURE_ON_CHANGE = false reconfigures every house on
+## every pass.
+const CONFIGURE_ON_CHANGE := true
+var _houses_version := 0
+var _configured_stamp: Array = []
+var _configure_always: Array[Node3D] = []
+var _town_left := false
+
+func _on_house_exiting() -> void:
+	_town_left = true
+
+func _configured_for(town: Array) -> bool:
+	var same := not _town_left and _configured_stamp.size() == 5 and is_same(_configured_stamp[0], houses) \
+		and int(_configured_stamp[1]) == houses.size() and int(_configured_stamp[2]) == _houses_version \
+		and int(_configured_stamp[3]) == _house_signature and int(_configured_stamp[4]) == town.size()
+	if not same:
+		_configured_stamp = [houses, houses.size(), _houses_version, _house_signature, town.size()]
+		_town_left = false
+	return same
 
 ## `ground`: for a sky-home pony (Rainbow Dash) her place down in town instead of her cloud:
 ## where she spends the day and where the morning flight lands (dev 2026-09-25: she never left
@@ -281,10 +333,32 @@ func home_position(id: String, ground := false) -> Vector3:
 	# Authored map spawns/hot spots override automatic neighbourhoods when their
 	# zone is available. Saved live positions still win in candidate_position().
 	if is_instance_valid(host) and host.has_method("_resident_authored_home"):
-		var ids := config.residents(region_id); ids.sort()
+		var ids := _sorted_residents(region_id)
 		var authored: Vector3 = host._resident_authored_home(id, region_id, ids.find(id))
 		if authored.is_finite(): return authored
 	return _homes.get(id, Vector3.INF)
+
+## 0.1.0 perf pass: home_position() listed and sorted every region's residents per call (~29 us of
+## a 29 us lookup for ponies without a house). The sorted list is kept per region while
+## config.assignments hashes the same (_refresh_homes, run just before, keeps _home_signature
+## equal to that hash). Read only by callers. Rollback: REGION_IDS_CACHE = false.
+const REGION_IDS_CACHE := true
+var _region_ids := {}
+var _region_ids_for := 0
+var _region_ids_config: RefCounted
+
+func _sorted_residents(region_id: String) -> Array:
+	if not REGION_IDS_CACHE:
+		var fresh := config.residents(region_id); fresh.sort()
+		return fresh
+	if _region_ids_for != _home_signature or _region_ids_config != config:
+		_region_ids = {}; _region_ids_for = _home_signature; _region_ids_config = config
+	var ids: Variant = _region_ids.get(region_id)
+	if ids == null:
+		var listed := config.residents(region_id); listed.sort()
+		_region_ids[region_id] = listed
+		return listed
+	return ids as Array
 
 func candidate_position(id: String) -> Vector3:
 	if "balloon" in host and is_instance_valid(host.balloon) and host.balloon.owns(id):return host.balloon.position_for(id)

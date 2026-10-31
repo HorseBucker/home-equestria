@@ -19,6 +19,18 @@ var _head_rest_inverse := Transform3D.IDENTITY
 var follow_head := 0.0
 const FOLLOW_SHARE := [0.6, 1.0] # mChest, mNeck.
 const PROFILE := preload("res://tools/crowd_cpu_profile.gd")
+## Unchanged links are not rewritten (0.1.0 perf pass): a pose write makes the hair rig re-skin, and
+## a still body and head handed it the same four bones every tick. A bone is written again once its
+## target leaves Transform3D.is_equal_approx of the last written one (a hundredth of a millimetre),
+## so the hair never trails by more than that. The mane chain is written whole when any of it, or
+## the pelvis below it, changed. Rollback: SKIP_UNCHANGED = false.
+const SKIP_UNCHANGED := true
+var _pelvis_written := Transform3D()
+var _head_written: Array[Transform3D] = [Transform3D(), Transform3D(), Transform3D()]
+var _pelvis_valid := false
+var _head_valid := false
+## The pelvis moved since the mane chain was last written: its locals must be rewritten.
+var _pelvis_moved := true
 
 func bind(body_sk: Skeleton3D, head_sk: Skeleton3D, hair_sk: Skeleton3D,
 		tail_offset_world := Vector3.ZERO, mane_offset_world := Vector3.ZERO) -> void:
@@ -42,15 +54,28 @@ func bind(body_sk: Skeleton3D, head_sk: Skeleton3D, hair_sk: Skeleton3D,
 	head.skeleton_updated.connect(_head_updated)
 
 func _body_updated() -> void:
-	if not enabled or not is_instance_valid(hair) or not hair.is_inside_tree(): return
+	if not enabled or not is_instance_valid(hair) or not hair.is_inside_tree():
+		_pelvis_valid = false; _head_valid = false
+		return
 	var started := Time.get_ticks_usec() if PROFILE.enabled else 0
 	var world := body.global_transform * body.get_bone_global_pose(body_hips) * pelvis_offset
-	hair.set_bone_global_pose(hair_pelvis,hair.global_transform.affine_inverse()*world)
+	var target := hair.global_transform.affine_inverse()*world
+	if not (SKIP_UNCHANGED and _pelvis_valid and target.is_equal_approx(_pelvis_written)):
+		hair.set_bone_global_pose(hair_pelvis,target)
+		_pelvis_written = target
+		_pelvis_valid = true
+		_pelvis_moved = true
 	if PROFILE.enabled: PROFILE.record("hair_link", started)
 
 func _head_updated() -> void:
-	if not enabled or not is_instance_valid(hair) or not hair.is_inside_tree(): return
+	if not enabled or not is_instance_valid(hair) or not hair.is_inside_tree():
+		_pelvis_valid = false; _head_valid = false
+		return
 	var started := Time.get_ticks_usec() if PROFILE.enabled else 0
+	var targets: Array[Transform3D] = []
+	var changed := not SKIP_UNCHANGED or not _head_valid or _pelvis_moved \
+		or head_pairs.size() != _head_written.size()
+	var into_hair := hair.global_transform.affine_inverse()
 	for i in head_pairs.size():
 		var pair := head_pairs[i]
 		var posed := head.get_bone_global_pose(pair.x)
@@ -61,5 +86,13 @@ func _head_updated() -> void:
 			var motion := posed * _head_rest_inverse
 			posed = motion * skull_frame * motion.affine_inverse() * posed
 		var world := head.global_transform * posed * Transform3D(Basis.IDENTITY, head_offsets[i])
-		hair.set_bone_global_pose(pair.y,hair.global_transform.affine_inverse()*world)
+		var target := into_hair*world
+		targets.append(target)
+		if not changed and not target.is_equal_approx(_head_written[i]): changed = true
+	if changed:
+		# Parent first (mChest, mNeck, mHead): each local pose reads its freshly written parent.
+		for i in head_pairs.size(): hair.set_bone_global_pose(head_pairs[i].y, targets[i])
+		_head_written = targets
+		_head_valid = true
+		_pelvis_moved = false
 	if PROFILE.enabled: PROFILE.record("hair_link", started)

@@ -345,8 +345,15 @@ func _unprofiled_physics_process(delta: float) -> void:
 	_sync_snoot()
 	_advance_scratching(delta)
 	var near := false
+	var nose := nose_world() if FAR_HAND_REACH > 0.0 else Vector3.INF
 	for side in _hands:
 		if not is_instance_valid(_hands[side]): continue
+		if _hand_far(side, nose):
+			# Nothing below can happen this far out; what it would have left behind for a far hand.
+			_visible_samples.erase(side)
+			_visible_ready[side] = false
+			_latched[side] = false
+			continue
 		_visible_samples.erase(side)
 		if _hands[side].get_meta("pony_inspection",false) or _hands[side].get_meta("inventory_busy",false):
 			_visible_ready[side]=false;continue
@@ -385,6 +392,22 @@ func _unprofiled_physics_process(delta: float) -> void:
 	finger_near = near
 	_advance_press(delta)
 	_advance_blush(delta)
+
+
+## A hand whose physics body and tracked controller are both farther than FAR_HAND_REACH from her
+## nose (0.1.0 perf pass): the boop gates (pointing, fingertip within 5.5 cm, contact) and the 25 cm
+## nose hold cannot pass, so the inventory's hand sample, controller reads and contact lists are not
+## asked for. Her visible-hand ready flag restarts as cleared: a hand coming in sets it again on its
+## way through 7.5 cm, as before. Rollback: FAR_HAND_REACH = 0.0.
+const FAR_HAND_REACH := 0.8
+
+func _hand_far(side: String, nose: Vector3) -> bool:
+	if FAR_HAND_REACH <= 0.0 or not nose.is_finite(): return false
+	var reach := FAR_HAND_REACH * FAR_HAND_REACH
+	if (_hands[side] as Node3D).global_position.distance_squared_to(nose) < reach: return false
+	var controller: Variant = _controllers.get(side)
+	return not (is_instance_valid(controller) and controller is Node3D \
+		and (controller as Node3D).global_position.distance_squared_to(nose) < reach)
 
 
 func _advance_scratching(delta: float) -> void:

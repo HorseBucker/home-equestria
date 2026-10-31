@@ -172,6 +172,15 @@ var _gesture_left := 0.0
 var _action_left := 0.0
 var _crowd: Node
 var _crowd_visible := true
+## 0.1.0 perf pass: the per-frame pass sets its two tree parameters only when they change, keeps
+## the Affection node and his head bone instead of looking them up every frame, and between HERO and
+## FAR (4-45 m, where the ponies run baked clips on the physics tick) plays his tree and skeleton on
+## the physics tick instead of every rendered frame. Rollback: NEAR_PHYSICS_RATE = false.
+const NEAR_PHYSICS_RATE := true
+var _talk_set := -1.0
+var _scale_set := INF
+var _affection: Node
+var _head_bone := -2
 
 
 ## The navigator is added before this body enters the tree, and its _ready (children first) reads
@@ -599,6 +608,14 @@ func set_sim_tier(tier: int, _phase: int = 0) -> void:
 	# Far away nothing reads his pose closely: freeze the skeleton work, keep the body moving.
 	tree.active = tier != SimTier.FAR
 	_look.active = tier == SimTier.HERO
+	if NEAR_PHYSICS_RATE:
+		# HERO keeps the per-frame tree and modifier pass (the look modifier runs there); NEAR has no
+		# active modifier and FAR no tree.
+		var hero := tier == SimTier.HERO
+		tree.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_IDLE if hero \
+			else AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_PHYSICS
+		skeleton.modifier_callback_mode_process = Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_IDLE if hero \
+			else Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 
 func set_detail_divisor(_divisor: int, _phase: int = 0) -> void: pass
 func is_logic_tick() -> bool: return true
@@ -701,7 +718,12 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= 9.8 * delta
 	var was_air := _air_time > 0.25
 	var fall_speed := -velocity.y
-	move_and_slide()
+	if _slide_still(wanted):
+		_slide_rested += 1
+	else:
+		move_and_slide()
+		_slide_rested = 0
+		_slide_rest = global_position
 	if is_on_floor() and was_air: audio_landed.emit(global_position, fall_speed)
 	_hold_heightmap(delta)
 	_ground_velocity = get_real_velocity()
@@ -713,6 +735,21 @@ func _physics_process(delta: float) -> void:
 	if not grounded(): state = Motion.UNSUPPORTED
 	elif actual_speed > 0.05: state = Motion.MOVING
 	else: state = Motion.STANDING
+
+## Standing still on a still floor (0.1.0 perf pass), move_and_slide only repeated its floor snap
+## and casts against the room: no motion, same floor, same contacts. He then keeps his place and floor
+## state for up to SLIDE_RECHECK ticks between real calls. Any velocity, push, jump, wanted speed,
+## moved position (a teleport, a carry) or moving floor slides as before, and the recheck finds a
+## vanished floor within 1/15 s. Rollback: SLIDE_RECHECK = 0.
+const SLIDE_RECHECK := 3
+var _slide_rested := 0
+var _slide_rest := Vector3.INF
+
+func _slide_still(wanted: float) -> bool:
+	return _slide_rested < SLIDE_RECHECK and wanted == 0.0 and _speed == 0.0 and _jump_request <= 0.0 \
+		and velocity.length_squared() < 1e-8 and is_on_floor() and global_position == _slide_rest \
+		and get_platform_velocity() == Vector3.ZERO and get_platform_angular_velocity() == Vector3.ZERO
+
 
 func _turn_toward(direction: Vector3, delta: float) -> float:
 	var forward := -global_basis.z; forward.y = 0.0
@@ -769,7 +806,9 @@ func _process(delta: float) -> void:
 	_choose_base()
 	var speaking := is_speaking()
 	_talk_mix = move_toward(_talk_mix, 1.0 if speaking and _base_clip in ["idle", "sit", "sit_chair"] and not gesture_playing() else 0.0, delta * 3.0)
-	tree.set("parameters/talk/blend_amount", _talk_mix)
+	if _talk_mix != _talk_set:
+		_talk_set = _talk_mix
+		tree.set("parameters/talk/blend_amount", _talk_mix)
 	if speaking:
 		_speech_time += delta
 		expressions.viseme = LipSync.viseme_at(_cues, _speech_time) if not _cues.is_empty() else "X"
@@ -793,7 +832,8 @@ func _choose_base() -> void:
 	var clip := "idle"
 	var clip_scale := 1.0
 	var posture_clip: String = posture.clip()
-	var affection := get_node_or_null("Affection")
+	if not is_instance_valid(_affection): _affection = get_node_or_null("Affection")
+	var affection := _affection
 	if _held or carry.blend > 0.5: clip = "carried"
 	elif thrown.active() or (_air_time > 0.35 and velocity.y < -1.0): clip = "fall"
 	elif posture_clip != "": clip = posture_clip
@@ -809,7 +849,9 @@ func _choose_base() -> void:
 	if clip != _base_clip:
 		_base_clip = clip
 		tree.set("parameters/base/transition_request", clip)
-	tree.set("parameters/speed/scale", clip_scale)
+	if clip_scale != _scale_set:
+		_scale_set = clip_scale
+		tree.set("parameters/speed/scale", clip_scale)
 
 ## Where he looks: an action target, then his conversation partner, then the player close by.
 func _gaze_point() -> Vector3:
@@ -830,7 +872,8 @@ func _gaze_point() -> Vector3:
 
 ## Slide the drawn irises the rest of the way the head did not turn.
 func _eye_gaze(point: Vector3) -> void:
-	var head_bone := skeleton.find_bone("Head")
+	if _head_bone == -2: _head_bone = skeleton.find_bone("Head")
+	var head_bone := _head_bone
 	if head_bone < 0: return
 	var head_frame: Transform3D = skeleton.global_transform * skeleton.get_bone_global_pose(head_bone)
 	var eye_centre := head_frame.origin + Vector3.UP * 0.16 * body_scale

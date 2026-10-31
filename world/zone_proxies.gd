@@ -14,6 +14,7 @@ var _native_applied: Dictionary = {}
 const GRASSY_CATALOGUE := "res://world/foliage/grassy_fields/catalogue_grassy.json"
 
 func bind(value: Node) -> void:
+	set_process(true)
 	manager = value
 	manager.zone_loaded.connect(_loaded)
 	manager.zone_unloaded.connect(_unloaded)
@@ -62,7 +63,8 @@ func _process(_delta: float) -> void:
 func _profiled_process(_delta: float) -> void:
 	if not is_instance_valid(manager): return
 	if _pending.is_empty():
-		if _queue.is_empty(): return
+		# Perf 0.1.0: every proxy is in (the queue is only filled by bind()): stop polling.
+		if _queue.is_empty(): set_process(false); return
 		# Bring the nearest still-missing proxy in first; each request owns its textures.
 		if is_instance_valid(manager.anchor):
 			var pos: Vector3 = manager.anchor.global_position

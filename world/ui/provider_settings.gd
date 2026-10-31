@@ -830,6 +830,8 @@ func fetch_models() -> void:
 	_catalog.fetch(_llm_connection())
 
 func _notification(what: int) -> void:
+	# Perf 0.1.0: the status poll (_process) runs only while this page is shown.
+	if what == NOTIFICATION_READY or what == NOTIFICATION_VISIBILITY_CHANGED: set_process(is_visible_in_tree())
 	if what == NOTIFICATION_VISIBILITY_CHANGED and not is_visible_in_tree():
 		if is_instance_valid(_catalog): _catalog.cancel()
 		if is_instance_valid(_route_catalog): _route_catalog.cancel()

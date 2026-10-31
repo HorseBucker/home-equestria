@@ -354,6 +354,19 @@ public:
 			std::vector<Vec3f> &preferred, std::string &error);
 	std::vector<FollowEvent> take_follow_events();
 	const FollowState *follow_state(const ActorHandle &actor) const;
+
+	// 0.1.0 perf: follow_step() steps its follower rows in contiguous blocks on this parallel-for
+	// when one is installed (navigation_parallel.cpp installs Godot's WorkerThreadPool in the game
+	// build; the standalone tests have none and stay serial). Every block has its own ground
+	// access and validator copies (pure memo caches over the same immutable snapshot) and collects
+	// its counters and events, merged in row order afterwards: the same commands, states, events
+	// and counters as the serial step. Rollback: parallel_follow = false.
+	using ParallelFor = void (*)(void (*job)(void *, uint32_t), void *data, uint32_t count);
+	static ParallelFor parallel_for;
+	static bool parallel_follow;
+	// Fewer follower rows than this step serially (the pool's wake-up costs more than it saves).
+	static size_t parallel_min_rows;
+	static constexpr size_t PARALLEL_MAX_BLOCKS = 8;
 	const FollowCounters &follow_counters() const { return follow_stats; }
 	size_t follow_ground_entries() const { return follow_grounds.size(); }
 
@@ -401,11 +414,69 @@ private:
 		GroundProfile profile;
 		double required = 0.0;
 		std::shared_ptr<const Snapshot> snapshot;
+		std::shared_ptr<ClearanceCache> cache;
 		std::unique_ptr<GroundAccess> access;
 		std::unique_ptr<ArcValidator> validator;
 		uint64_t used = 0;
 	};
 	FollowGround *follow_ground(uint32_t world, const GroundProfile &profile, double required);
+
+	// One follow_step() call's inputs and per-row table, shared read-only by the row steps.
+	struct FollowRow {
+		bool usable = false;
+		double speed = 0.0;
+		Actor *actor = nullptr;
+		ActorHandle handle;
+		FollowGround *ground = nullptr; // pre-resolved for a parallel step
+	};
+	struct FollowBatch {
+		const Vec3f *positions = nullptr;
+		const Vec3f *velocities = nullptr;
+		const float *headings = nullptr;
+		const float *inputs = nullptr;
+		size_t input_count = 0;
+		size_t rows = 0;
+		double delta = 0.0;
+		const std::vector<FollowRow> *table = nullptr;
+		std::vector<float> *commands = nullptr;
+		std::vector<float> *state = nullptr;
+		std::vector<Vec3f> *preferred = nullptr;
+	};
+	// What a row step reports (merged into follow_stats/follow_events in row order).
+	struct FollowSink {
+		FollowCounters stats;
+		std::vector<FollowEvent> events;
+		std::vector<Neighbour> neighbours;
+	};
+	// A block's own copy of one follow ground (same world, profile, clearance and snapshot).
+	struct FollowBlockGround {
+		uint32_t world = 0;
+		GroundProfile profile;
+		double required = 0.0;
+		std::shared_ptr<const Snapshot> snapshot;
+		std::unique_ptr<GroundAccess> access;
+		std::unique_ptr<ArcValidator> validator;
+	};
+	struct FollowBlock {
+		std::vector<size_t> rows;
+		FollowSink sink;
+		std::vector<std::unique_ptr<FollowBlockGround>> grounds;
+	};
+	struct FollowParallelJob {
+		NavigationService *service = nullptr;
+		const FollowBatch *batch = nullptr;
+		size_t blocks = 0;
+	};
+	static void follow_block_job(void *data, uint32_t index);
+	ArcValidator *block_validator(FollowBlock &block, const FollowGround &ground);
+	void follow_row(const FollowBatch &batch, size_t i, FollowSink &sink, FollowBlock *block);
+	static void sink_event(FollowSink &sink, const ActorHandle &actor, const FollowState &follow, int32_t kind,
+			const std::string &reason, const Vec3f &at);
+	static void merge_counters(FollowCounters &into, const FollowCounters &from);
+	std::vector<FollowBlock> follow_blocks;
+	FollowSink follow_serial_sink;
+	std::vector<FollowRow> follow_table;
+	std::vector<const Actor *> follow_seen;
 	void follow_event(const ActorHandle &actor, const FollowState &follow, int32_t kind, const std::string &reason,
 			const Vec3f &at);
 	std::vector<std::unique_ptr<FollowGround>> follow_grounds;

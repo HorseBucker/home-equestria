@@ -77,6 +77,7 @@ var _selected_far := -1.0
 var _selected_sea := NAN
 var _lod_camera := Vector3.INF
 var _sky_tint := Color(-1, -1, -1, -1)
+var _ocean_time_written := NAN
 ## Dry land (2026-10-23 GPU pass, dev: "we're never gonna see it from ponyville"): the sea is an
 ## infinite plane at sea level, so its finest patches were drawn under the town's ground (155-184k
 ## triangles at 230-300 m). Per quadtree level, 1 where a node and DRY_BORDER around it are all at
@@ -251,7 +252,11 @@ func _process(delta: float) -> void:
 	if eye != _lod_camera:
 		_lod_camera = eye
 		material.set_shader_parameter("lod_camera", eye)
-	material.set_shader_parameter("ocean_time", fft.time)
+	# Only when the waves stepped (perf 0.1.0): inland the clock stands still, and every write
+	# re-uploads the material.
+	if fft.time != _ocean_time_written:
+		_ocean_time_written = fft.time
+		material.set_shader_parameter("ocean_time", fft.time)
 	var env := get_viewport().world_3d.environment if get_viewport().world_3d != null else null
 	if env != null and env.fog_light_color != _sky_tint:
 		_sky_tint = env.fog_light_color

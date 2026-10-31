@@ -131,6 +131,8 @@ func _ready() -> void:
 	if "--perf-stereo" in preload("res://world/dev_tools.gd").user_args():
 		await _run_perf_stereo()
 		return
+	# Pegasus flight routes load off the main thread while the world loads (native_air.gd).
+	preload("res://world/characters/locomotion/native_air.gd").warm()
 	world_context=preload("res://world/ai/world_context.gd").new()
 	world_context.name="WorldContext";add_child(world_context)
 	# Durable story encounters (docs/plans/AI_CONTEXT_AND_INTERRUPTION_RESILIENCE_2026_10_02.md).
@@ -473,6 +475,7 @@ func _exit_tree() -> void:
 	preload("res://world/characters/hybrid_mare/pony_touch_body.gd").discard_pending()
 	preload("res://world/sky/color_grade.gd").finish()
 	preload("res://world/characters/lip_sync.gd").join_all()
+	preload("res://world/characters/locomotion/native_air.gd").join()
 	if ZoneManager.container != null and is_instance_valid(ZoneManager.container) and is_ancestor_of(ZoneManager.container):
 		ZoneManager.reset()
 

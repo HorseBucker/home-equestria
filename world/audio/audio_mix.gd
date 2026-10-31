@@ -10,6 +10,9 @@ var _underwater := 0.0
 var _duck_db := 0.0
 var _peak_clock := 0.0
 var _voice_hold := 0.0
+var _written_db := 0.0
+var _written_cutoff := 18000.0
+var _written_wet := 0.0
 
 static func ensure_buses() -> void:
 	for bus: String in ROUTES:
@@ -55,14 +58,21 @@ func step(delta: float, indoor: float, underwater: float, foreground: bool) -> v
 			if peak > -48.0: _voice_hold = .35
 	var target_db: float = -7.0 if foreground or _voice_hold > 0.0 else 0.0
 	_duck_db = lerpf(_duck_db, target_db, 1.0 - exp(-delta * (12.0 if target_db < _duck_db else 2.5)))
-	if _ambience_bus >= 0: AudioServer.set_bus_volume_db(_ambience_bus, _duck_db)
+	# Perf 0.1.0: settled values are not rewritten (a bus volume write takes the audio server's
+	# lock every frame). Steps below these tolerances are inaudible; the target is still reached.
+	if _ambience_bus >= 0 and absf(_duck_db - _written_db) >= .005:
+		_written_db = _duck_db
+		AudioServer.set_bus_volume_db(_ambience_bus, _duck_db)
 	var cutoff: float = lerpf(lerpf(18000.0, 12500.0, _indoor), 850.0, _underwater)
 	var wet: float = lerpf(_indoor * .085, .025, _underwater)
-	for filter: AudioEffectLowPassFilter in _filters: filter.cutoff_hz = cutoff
-	for reverb: AudioEffectReverb in _reverbs: reverb.wet = wet
+	if absf(cutoff - _written_cutoff) >= .5 or absf(wet - _written_wet) >= .00005:
+		_written_cutoff = cutoff; _written_wet = wet
+		for filter: AudioEffectLowPassFilter in _filters: filter.cutoff_hz = cutoff
+		for reverb: AudioEffectReverb in _reverbs: reverb.wet = wet
 
 func reset() -> void:
 	_indoor = 0.0; _underwater = 0.0; _duck_db = 0.0; _voice_hold = 0.0
+	_written_db = 0.0; _written_cutoff = 18000.0; _written_wet = 0.0
 	if _ambience_bus >= 0: AudioServer.set_bus_volume_db(_ambience_bus, 0.0)
 	for filter: AudioEffectLowPassFilter in _filters: filter.cutoff_hz = 18000.0
 	for reverb: AudioEffectReverb in _reverbs: reverb.wet = 0.0

@@ -266,6 +266,9 @@ public:
 			const Vector3 &p_sole, double p_max_flex_degrees, const Vector3 &p_target, const Basis &p_sole_basis,
 			const Vector3 &p_pole, double p_epsilon, double p_budget);
 	PackedFloat64Array apply_limits(Array p_pose);
+	// pony_joint_limits.gd constrain() for one bone (0.1.0 perf pass): reads only the bound limits,
+	// so it never waits for a kicked solve.
+	Basis constrain_basis(int32_t p_index, const Basis &p_basis) const;
 	// pony_locomotion.gd _update_contacts() in three phases around its probes (hoof_contacts.cpp).
 	void bind_contact_legs(const PackedInt32Array &p_bones, const PackedFloat64Array &p_end_heights, const Array &p_sole_bases);
 	PackedVector3Array contacts_begin(const Array &p_source_pose, const Array &p_feet, const Transform3D &p_global,

@@ -65,9 +65,12 @@ func _physics_step(delta: float) -> void:
 	_timer -= delta
 	if _timer > 0.0 or population == null or clock == null: return
 	_timer = CHECK
+	var prof := CPU_PROFILE.enabled
+	var lap := Time.get_ticks_usec() if prof else 0
 	var day := _day_key()
 	var kit_state: Node = KIT_STATE.for_node(self)
 	if kit_state != null: kit_state.advance_day(day)
+	if prof: lap = _lap("day_kit_state", lap)
 	var hours := _card_hours()
 	var live: Dictionary = {}
 	var busy: Dictionary = {}
@@ -83,26 +86,36 @@ func _physics_step(delta: float) -> void:
 				"action": null, "ctx": {}, "sidetracked": false, "essence": {}, "shown_on": null}
 			card.index = mini(_resumed_index(id, day), card.steps.size())
 			cards[id] = card
+		if prof: lap = _lap("day_cards", lap)
 		if alive:
 			if not card.essence.is_empty(): _essence_to_body(id, card)
 			if card.shown_on != actor: _publish(id, actor, card)
 			_step(id, actor, card, hours)
+			if prof: lap = _lap("day_step", lap)
 			var picker: RefCounted = _fidgets.get(id)
 			if picker == null:
 				picker = FIDGETS.new()
 				_fidgets[id] = picker
 			picker.tick(actor, id, CHECK, not _idle_ok(id, card))
+			if prof: lap = _lap("day_fidgets", lap)
 			live[id] = actor
 			if card.action != null: busy[id] = true
 		else:
 			if card.action != null: _body_to_essence(id, card)
 			_step_essence(id, card, hours)
+			if prof: lap = _lap("day_essence", lap)
 	chats.tick(live, busy, CHECK)
+	if prof: lap = _lap("day_chats", lap)
 	for id: String in cards.keys():
 		if not population.config.assignments.has(id):
 			_end_card(id, cards[id])
 			cards.erase(id)
 			_fidgets.erase(id)
+
+## Records `label` from `since` and returns the next checkpoint (only under CPU_PROFILE.enabled).
+static func _lap(label: String, since: int) -> int:
+	CPU_PROFILE.record(label, since)
+	return Time.get_ticks_usec()
 
 ## Where each resident is in today's card, for the save (game_saves.gd "day_plans"). A step
 ## running at save time starts again on load; earlier ones are not redone.
@@ -229,7 +242,9 @@ func _step(id: String, actor: Node3D, card: Dictionary, hours: float) -> void:
 				_set_busy(id, false)
 				_publish(id, actor, card)
 			return   # at it in place: the step and its clock wait for the chat
+		var tick_at := Time.get_ticks_usec() if CPU_PROFILE.enabled else 0
 		var result: String = running.tick(card.ctx, CHECK)
+		if tick_at > 0: CPU_PROFILE.record("day_tick:" + str(card.steps[card.index].get("handler", "")) if card.index < card.steps.size() else "day_tick:?", tick_at)
 		if result != "running":
 			if result == "done": _remember(id, actor, card.steps[card.index])
 			running.release(card.ctx)
@@ -254,6 +269,7 @@ func _step(id: String, actor: Node3D, card: Dictionary, hours: float) -> void:
 		card.index += 1
 		_publish(id, actor, card)
 		return
+	var start_at := Time.get_ticks_usec() if CPU_PROFILE.enabled else 0
 	var action: RefCounted = _handler(str(step.handler))
 	if action == null:
 		card.index += 1; return
@@ -270,6 +286,7 @@ func _step(id: String, actor: Node3D, card: Dictionary, hours: float) -> void:
 		# what this handler owns (exact "day:<id>" owner), so a newer owner keeps her.
 		action.stop(ctx)
 		card.index += 1
+	if start_at > 0: CPU_PROFILE.record("day_start:" + str(step.handler), start_at)
 	_publish(id, actor, card)
 
 ## Handlers whose "stay" phase is only standing (or sitting) about at a place: she may fidget

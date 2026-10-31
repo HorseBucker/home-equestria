@@ -16,6 +16,7 @@ var _material: ShaderMaterial
 var _ripple: MeshInstance3D
 var _ripple_material: ShaderMaterial
 var _ripple_age := 2.0
+var _surface_written := NAN
 var _previous_feet := Vector3.INF
 var _was_in_water := false
 var _water_travel := 0.0
@@ -74,7 +75,10 @@ func _physics_process(delta: float) -> void:
 	var depth := surface - eye.y if has_water else -INF
 	# Centimetre hysteresis avoids flickering when bobbing at the surface.
 	submerged = depth > (-0.015 if submerged else 0.015)
-	if has_water:
+	# Only on change: every write re-uploads the material (perf 0.1.0; standing in the shallows
+	# rewrote the same height 60 times a second).
+	if has_water and surface != _surface_written:
+		_surface_written = surface
 		_material.set_shader_parameter("surface_y", surface)
 	var in_water := has_water and feet.y < surface - 0.08
 	_water_sound_wait = maxf(0.0, _water_sound_wait - delta)

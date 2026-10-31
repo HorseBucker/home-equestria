@@ -28,6 +28,16 @@ var population: Node
 var clock: Node
 var _state: Dictionary = {}   # id -> {night, chosen, phase, actor, bed_time, wake_time, retries, until}
 var _timer := 0.0
+## Perf 0.1.0: population.home_house() re-runs the house assignment over every house on each call
+## (65-150 us). Bedtime asked it for every resident once a second, a 3-6 ms tick at night. A found
+## house is reused while it is still in the tree and still her assigned address; each pony's lookup
+## refreshes every HOME_CACHE_SECONDS to twice that (staggered), and every unloaded essence's home
+## also when a house streams in or out. A missing house is never cached. 0.0 = ask every time.
+const HOME_CACHE_SECONDS := 6.0
+var _home_cache := {}          # id -> [house, refresh at (ms)]
+var _essence_home_cache := {}  # id -> [home point, refresh at (ms), house count]
+var _bedtimes := {}            # id -> [night, bedtime(id, night)]: fixed for that night
+var _house_count := -1
 
 func setup(people: Node) -> void:
 	add_to_group("night_rest")
@@ -48,6 +58,7 @@ func _physics_process(delta: float) -> void:
 	_timer -= delta
 	if _timer > 0.0 or population == null or clock == null: return
 	_timer = CHECK_SECONDS
+	_house_count = get_tree().get_node_count_in_group(&"house_interiors")
 	var night := _night_key()
 	var hours: float = float(clock.hours)
 	if hours > 7.5 and hours < 20.0: _bring_down_unloaded()
@@ -63,7 +74,7 @@ func _physics_process(delta: float) -> void:
 			# first, or she lay asleep for good (Rainbow Dash stayed on her cloud).
 			_wake(id, entry, actor)
 		if entry.is_empty() or int(entry.night) != night:
-			var times := bedtime(id, night)
+			var times := _bedtime(id, night)
 			entry = {"night": night, "chosen": false, "decided": false, "phase": "", "actor": actor,
 				"bed_time": times.x, "wake_time": times.y, "retries": 0, "until": 0.0}
 			_state[id] = entry
@@ -83,7 +94,7 @@ func _essence_nights(night: int) -> void:
 	if core == null: return
 	for id: String in core.state.residents:
 		var resident: Dictionary = core.state.residents[id]
-		var times := bedtime(id, night)
+		var times := _bedtime(id, night)
 		var sleeping := _is_night({"bed_time": times.x, "wake_time": times.y})
 		if not sleeping:
 			if resident.get("asleep", false): resident.erase("asleep")
@@ -99,10 +110,51 @@ func _essence_nights(night: int) -> void:
 		var home: Vector3 = _sky_spots.get(id, Vector3.INF) if cloud else Vector3.INF
 		if home.is_finite(): ESSENCE.remember(population, "home:" + id, home)
 		elif cloud: home = ESSENCE.known(population, "home:" + id)
-		if not home.is_finite(): home = ESSENCE.home(population, id)
+		if not home.is_finite(): home = _essence_home(id)
 		if not home.is_finite(): continue   # nowhere known: she curls up where she is
 		var speed: float = ESSENCE.FLY_SPEED if SKY_HOMES.has(id) else ESSENCE.WALK_SPEED
 		ESSENCE.walk(resident, home, speed, CHECK_SECONDS)
+
+func _bedtime(id: String, night: int) -> Vector2:
+	var row: Array = _bedtimes.get(id, [])
+	if row.is_empty() or int(row[0]) != night:
+		row = [night, bedtime(id, night)]
+		_bedtimes[id] = row
+	return row[1]
+
+func _cache_until(id: String) -> int:
+	return Time.get_ticks_msec() + int(HOME_CACHE_SECONDS * 1000.0 * (1.0 + float(absi(hash(id)) % 1000) / 1000.0))
+
+## For other once-a-few-seconds readers (house_lamps.gd): the same cached lookups.
+func cached_home_house(id: String) -> Node3D:
+	return _home_house(id) if population != null and population.has_method("home_house") else null
+
+func cached_essence_home(id: String) -> Vector3:
+	return _essence_home(id) if population != null else Vector3.INF
+
+## population.home_house(id) through the cache above.
+func _home_house(id: String) -> Node3D:
+	var row: Array = _home_cache.get(id, [])
+	if HOME_CACHE_SECONDS > 0.0 and not row.is_empty() and Time.get_ticks_msec() < int(row[1]):
+		var cached: Variant = row[0]
+		var houses: Variant = population.get("houses")
+		if is_instance_valid(cached) and (cached as Node).is_inside_tree() and houses is Dictionary \
+				and str((houses as Dictionary).get(id, "")) == str(cached.place_id()) \
+				and not (population.has_method("is_overnight_visitor") and population.is_overnight_visitor(id)):
+			return cached
+	var house: Node3D = population.home_house(id)
+	if house != null: _home_cache[id] = [house, _cache_until(id)]
+	else: _home_cache.erase(id)
+	return house
+
+## ESSENCE.home(population, id) through the cache above (an unloaded pony: nopony sees her walk).
+func _essence_home(id: String) -> Vector3:
+	var row: Array = _essence_home_cache.get(id, [])
+	if HOME_CACHE_SECONDS > 0.0 and not row.is_empty() and Time.get_ticks_msec() < int(row[1]) and int(row[2]) == _house_count:
+		return row[0]
+	var at: Vector3 = ESSENCE.home(population, id)
+	_essence_home_cache[id] = [at, _cache_until(id), _house_count]
+	return at
 
 ## One schedule per family, so a filly does not get an independent 03:00 bedtime.
 static func bedtime(id: String, night: int) -> Vector2:
@@ -170,7 +222,7 @@ func _step(id: String, entry: Dictionary, actor: Node3D) -> void:
 	# Her walk-in Cloudominium takes the ordinary house path below; house travel flies her up to
 	# its door (world/characters/navigation/house_travel.gd sky_trip).
 	if SKY_HOMES.has(id) and _sky_house(id) == null and _sky_step(id, entry, actor): return
-	var house: Node3D = population.home_house(id) if population.has_method("home_house") else null
+	var house: Node3D = _home_house(id) if population.has_method("home_house") else null
 	entry["shared_bed"] = house != null and house.bed_shared(id)
 	var bed_ok: bool = house != null and house.has_method("ensure_bed") and house.ensure_bed(id) != null
 	# A save/streamed actor can already be on her mattress. Sending her to the floor-side
@@ -398,7 +450,7 @@ func _sky_sleep_spot(id: String) -> Vector3:
 ## Her walk-in Cloudominium (world/buildings/cloudominium/home.gd) once it is built and hers.
 func _sky_house(id: String) -> Node3D:
 	if not SKY_HOMES.has(id) or population == null or not population.has_method("home_house"): return null
-	var house: Node3D = population.home_house(id)
+	var house: Node3D = _home_house(id)
 	return house if house != null and house.has_method("sky_home") else null
 
 ## Up at her sky home: inside the Cloudominium, near its door, or on its cloud.

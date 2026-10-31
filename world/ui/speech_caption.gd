@@ -155,6 +155,9 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_RESIZED and preview: queue_redraw()
+	# Perf 0.1.0: a hidden preview (the settings page's sample caption) stops processing
+	# (_process) until it is shown again, instead of returning early every frame.
+	if what == NOTIFICATION_VISIBILITY_CHANGED and preview and is_visible_in_tree(): set_process(true)
 
 
 func _draw() -> void:
@@ -215,7 +218,9 @@ func _read_settings() -> void:
 
 
 func _process(delta: float) -> void:
-	if preview and not is_visible_in_tree(): return
+	if preview and not is_visible_in_tree():
+		set_process(false)
+		return
 	var still := STYLE.still()
 	_alpha = move_toward(_alpha, 1.0 if _showing else 0.0, 1.0 if still else delta * FADE)
 	if not _showing and _alpha <= 0.0:

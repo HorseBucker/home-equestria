@@ -19,6 +19,8 @@ static func material() -> ShaderMaterial:
 static func set_amount(mesh: GeometryInstance3D, amount: float) -> void:
 	if not is_instance_valid(mesh): return
 	if amount <= 0.0:
+		# A batched shelf book (shelf_books.gd STOCK_BATCH) draws only while outlined.
+		if mesh.has_meta(&"batched_hidden"): mesh.visible = false
 		if mesh.material_overlay == material():
 			mesh.material_overlay = mesh.get_meta("outline_previous") if mesh.has_meta("outline_previous") else null
 			if mesh.has_meta("outline_previous"): mesh.remove_meta("outline_previous")
@@ -27,6 +29,7 @@ static func set_amount(mesh: GeometryInstance3D, amount: float) -> void:
 		if mesh.material_overlay != null: mesh.set_meta("outline_previous", mesh.material_overlay)
 		mesh.material_overlay = material()
 	mesh.set_instance_shader_parameter("outline_amount", clampf(amount, 0.0, 1.0))
+	if mesh.has_meta(&"batched_hidden"): mesh.visible = true
 
 ## The visible meshes that make up `target` (itself and its children), skipping huge ones.
 static func meshes(target: Node3D) -> Array[GeometryInstance3D]:
@@ -34,7 +37,10 @@ static func meshes(target: Node3D) -> Array[GeometryInstance3D]:
 	if not is_instance_valid(target): return result
 	for node: Node in [target] + target.find_children("*", "GeometryInstance3D", true, false):
 		if result.size() >= MAX_MESHES: break
-		if not (node is MeshInstance3D) or not (node as Node3D).is_visible_in_tree(): continue
+		if not (node is MeshInstance3D): continue
+		# Batched shelf books hide their own mesh but are still the thing being aimed at.
+		var batched: bool = node.has_meta(&"batched_hidden") and node.get_parent() is Node3D and (node.get_parent() as Node3D).is_visible_in_tree()
+		if not batched and not (node as Node3D).is_visible_in_tree(): continue
 		var mesh: MeshInstance3D = node
 		if mesh.mesh == null: continue
 		var size: Vector3 = mesh.get_aabb().size * mesh.global_basis.get_scale().abs()

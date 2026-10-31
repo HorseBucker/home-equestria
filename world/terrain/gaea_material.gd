@@ -21,6 +21,54 @@ const SAND_TO_STONE := """	{
 		}
 	}
 """
+## Rollback switch (perf 0.1.0 GPU pass): near the camera Terrain3D blends the four control
+## corners of each pixel, and each corner fetches its albedo+normal (anisotropic) for up to two
+## texture ids. Neighbouring corners usually ask for the very same fetch (same id, same detile
+## cell, so the same uv and gradients). The fetch is reused when its inputs are bit-identical,
+## so it returns exactly what a new fetch would: the image cannot change. Measured on desktop
+## Forward+ only (the Quest's mobile GPU keeps the stock shader).
+const SAMPLE_REUSE := true
+const FETCH_HELPER := """
+// perf 0.1.0 (gaea_material.gd SAMPLE_REUSE): reuse an albedo+normal fetch whose inputs (layer,
+// uv, gradients) equal one of the last two fetches of this pixel. Same inputs, same texels.
+const bool TERRAIN_SAMPLE_REUSE = true;
+void terrain_fetch(const vec2 uv, const int id, const vec4 dd, const int slot, out vec4 alb, out vec4 nrm, inout material mat) {
+	vec3 key = vec3(uv, float(id));
+	if (TERRAIN_SAMPLE_REUSE && all(equal(mat.fetch_key0, key)) && all(equal(mat.fetch_dd0, dd))) {
+		alb = mat.fetch_alb0; nrm = mat.fetch_nrm0;
+	} else if (TERRAIN_SAMPLE_REUSE && all(equal(mat.fetch_key1, key)) && all(equal(mat.fetch_dd1, dd))) {
+		alb = mat.fetch_alb1; nrm = mat.fetch_nrm1;
+	} else {
+		alb = textureGrad(_texture_array_albedo, vec3(uv, float(id)), dd.xy, dd.zw);
+		nrm = textureGrad(_texture_array_normal, vec3(uv, float(id)), dd.xy, dd.zw);
+		if (slot == 0) { mat.fetch_key0 = key; mat.fetch_dd0 = dd; mat.fetch_alb0 = alb; mat.fetch_nrm0 = nrm; }
+		else { mat.fetch_key1 = key; mat.fetch_dd1 = dd; mat.fetch_alb1 = alb; mat.fetch_nrm1 = nrm; }
+	}
+}
+"""
+const FETCH_FIELDS := """	float total_weight;
+	vec3 fetch_key0; vec4 fetch_dd0; vec4 fetch_alb0; vec4 fetch_nrm0;
+	vec3 fetch_key1; vec4 fetch_dd1; vec4 fetch_alb1; vec4 fetch_nrm1;
+};"""
+const FETCH_ORIGINAL := """		vec4 alb = textureGrad(_texture_array_albedo, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);
+		vec4 nrm = textureGrad(_texture_array_normal, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);"""
+const MAT_INIT := "\tmaterial mat = material(vec4(0.0), vec4(0.0), 0., 0., 0.);"
+const MAT_INIT_FETCH := "\tmaterial mat = material(vec4(0.0), vec4(0.0), 0., 0., 0., vec3(-1.0), vec4(0.0), vec4(0.0), vec4(0.0), vec3(-1.0), vec4(0.0), vec4(0.0), vec4(0.0));"
+
+## Optional perf rewrites of the generated native shader (rollback switch above).
+static func _perf_edits(source: String) -> String:
+	var desktop := RenderingServer.get_current_rendering_method() == "forward_plus"
+	if SAMPLE_REUSE and desktop and source.count(FETCH_ORIGINAL) == 2 and source.count("\tfloat total_weight;\n};") == 1 \
+			and source.count(MAT_INIT) == 1 and source.count("void accumulate_material(") == 1:
+		source = source.replace("\tfloat total_weight;\n};", FETCH_FIELDS)
+		source = source.replace("void accumulate_material(", FETCH_HELPER + "\nvoid accumulate_material(")
+		var first := source.find(FETCH_ORIGINAL)
+		source = source.substr(0, first) + "\t\tvec4 alb; vec4 nrm;\n\t\tterrain_fetch(id_uv, id, id_dd, 0, alb, nrm, mat);" + source.substr(first + FETCH_ORIGINAL.length())
+		source = source.replace(FETCH_ORIGINAL, "\t\tvec4 alb; vec4 nrm;\n\t\tterrain_fetch(id_uv, id, id_dd, 1, alb, nrm, mat);")
+		source = source.replace(MAT_INIT, MAT_INIT_FETCH)
+	elif SAMPLE_REUSE and desktop:
+		push_warning("Terrain3D shader layout changed: terrain fetch reuse not applied")
+	return source
 
 static func load_grass_palette() -> void:
 	var selection: Dictionary=JSON.parse_string(FileAccess.get_file_as_string("res://world/terrain/grass_palette.json"))
@@ -54,6 +102,7 @@ static func apply(terrain: Node) -> void:
 	var ids_marker:="\tivec2 texture_ids[4] = ivec2[4]("
 	assert(source.count(ids_marker)==1,"Terrain3D shader adapter requires review for this version")
 	source=source.replace(ids_marker,SAND_TO_STONE+ids_marker)
+	source=_perf_edits(source)
 	var shader:=Shader.new();shader.code=source;material.shader_override=shader
 	if _bank==null:
 		_bank=load(DATA+"surfaces.res")

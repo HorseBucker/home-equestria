@@ -48,7 +48,10 @@ static func _set_interior_range(context: Node3D, open:bool) -> void:
 		if open:
 			gi.visibility_range_end=own
 		else:
-			gi.visibility_range_end=(context._range_cap as float) if own<=0.0 or own>(context._range_cap as float) else own
+			# A merged room mesh (static_mesh_merge.gd) measures from its own origin: its pieces keep
+			# their reach on top of the cap, so none stops sooner than it did unmerged.
+			var reach:float=float(gi.get_meta(&"range_reach")) if gi.has_meta(&"range_reach") else 0.0
+			gi.visibility_range_end=((context._range_cap as float)+reach) if own<=0.0 or own>(context._range_cap as float)+reach else own
 			gi.visibility_range_end_margin=2.0
 			gi.visibility_range_fade_mode=GeometryInstance3D.VISIBILITY_RANGE_FADE_DISABLED
 

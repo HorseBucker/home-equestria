@@ -11,7 +11,10 @@ func _ready() -> void:
 	process_physics_priority = -45
 
 func _physics_process(_delta: float) -> void:
-	if not is_instance_valid(inventory) or inventory._desktop: return
+	if not is_instance_valid(inventory): return
+	# Perf 0.1.0: the desktop rig lights candles by key (_unhandled_input); its tick has nothing to do.
+	# A rig is made for one mode (game_player_rig.gd makes a new lighter with each player).
+	if inventory._desktop: set_physics_process(false); return
 	for side: String in ["left", "right"]:
 		var sample: Dictionary = inventory.hand_sample(side)
 		var pulled: bool = sample.get("active", false) and float(sample.get("trigger", 0.0)) > (0.45 if _trigger[side] else 0.75)

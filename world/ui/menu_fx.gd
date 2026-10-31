@@ -60,6 +60,7 @@ func _lift(button: BaseButton, up: bool) -> void:
 ## A few sparkles where the pointer pressed (the button's middle for keys and sticks).
 func burst_at(at: Vector2, count := 7) -> void:
 	if STYLE.still(): return
+	set_process(true)
 	for i in count:
 		var angle := randf() * TAU
 		_sparks.append({"at": at, "velocity": Vector2.from_angle(angle) * randf_range(70.0, 170.0) + Vector2(0, -30),
@@ -73,12 +74,21 @@ func _burst(button: BaseButton) -> void:
 	burst_at(mouse if rect.grow(4).has_point(mouse) else rect.get_center(), 6 if button.size.x < 80 else 8)
 
 
+## Perf 0.1.0: processing follows the menu's visibility (this node is the last child of its root,
+## so it shares it) and any sparkles still flying; a hidden menu costs nothing per frame.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_READY or what == NOTIFICATION_VISIBILITY_CHANGED:
+		set_process(is_visible_in_tree() or not _sparks.is_empty())
+
+
 func _process(delta: float) -> void:
 	_scan_left -= delta
 	if _scan_left <= 0.0:
 		_scan_left = 0.5
 		if is_instance_valid(_root) and _root.is_visible_in_tree(): scan()
-	if _sparks.is_empty(): return
+	if _sparks.is_empty():
+		if not is_visible_in_tree(): set_process(false)
+		return
 	for spark in _sparks:
 		spark.age += delta
 		spark.at += spark.velocity * delta

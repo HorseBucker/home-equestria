@@ -390,8 +390,15 @@ func _coat_ao(mi: MeshInstance3D) -> Texture2D:
 	return HEAD_AO if mi.name == "Head" else null
 
 
+## The impostor's stand/stride flip-book on the physics tick instead of every rendered frame
+## (0.1.0 perf pass): its frames last 0.08-0.3 s, so a 1/60 s step cannot be seen, and a FAR
+## crowd of pictures no longer keeps _process running every frame (16 ponies x ~2 us per frame).
+## Rollback: IMPOSTOR_ON_PHYSICS = false (animated in _process as before).
+const IMPOSTOR_ON_PHYSICS := true
+
 func _unprofiled_process(delta: float) -> void:
-	if _impostor_shown: _animate_impostor(delta)
+	var animate := _impostor_shown and not IMPOSTOR_ON_PHYSICS
+	if animate: _animate_impostor(delta)
 	if _far_mesh_waiting:
 		_poll_far_mesh()
 	if _near_waiting:
@@ -399,10 +406,10 @@ func _unprofiled_process(delta: float) -> void:
 	if park_hidden_rig_meshes and _rig_watched.is_empty() and _tick >= 3:
 		set_rig_parking(true)
 	if _lod_timer > 0.0:
-		if not (_impostor_shown or _far_mesh_waiting or _near_waiting): set_process(false)
+		if not (animate or _far_mesh_waiting or _near_waiting): set_process(false)
 		return
 	_lod_timer = 0.25
-	if not (_impostor_shown or _far_mesh_waiting or _near_waiting): set_process(false)
+	if not (animate or _far_mesh_waiting or _near_waiting): set_process(false)
 	var camera := preload("res://world/player_view.gd").camera(self)
 	if camera == null: return
 	var distance := global_position.distance_to(camera.global_position)
@@ -451,6 +458,7 @@ var _face_delta := 0.0
 var _carry_reaction := preload("res://world/characters/locomotion/carry_reaction.gd").new()
 
 func _physics_process(delta: float) -> void:
+	if _impostor_shown and IMPOSTOR_ON_PHYSICS: _animate_impostor(delta)
 	if not CROWD_PROFILE.enabled:
 		_hybrid_physics(delta)
 		return
@@ -553,6 +561,19 @@ func _rest_skeletons() -> Array[Skeleton3D]:
 	if head_skeleton != null: rigs.append(head_skeleton)
 	if hair_skeleton != null: rigs.append(hair_skeleton)
 	return rigs
+
+
+## Back from a hidden spell with parked rigs (pony_locomotion.gd HIDDEN_RIG_PARK): the tail springs
+## did not integrate meanwhile, so their remembered body velocity and rump turn are from before she
+## was hidden. Read against her motion now, that gap would be one big acceleration and whip the tail
+## on the first frame she is seen; start the springs' history afresh instead (as on their first
+## step). The NEAR stand's body life catches up on the time it skipped (pony_idle_body.gd catch_up).
+func _rigs_unparked() -> void:
+	if tail_motion != null and tail_motion.has_method(&"reset_history"):
+		tail_motion.reset_history()
+	if idle_body != null:
+		_update_idle_body()
+		idle_body.catch_up()
 
 
 ## A slow "z Z z" drifting up from a sleeping pony.

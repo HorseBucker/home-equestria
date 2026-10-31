@@ -500,7 +500,9 @@ func _navigator_tick(delta: float) -> void:
 			house_travel.walk(self, _contact_approach)
 		return
 	if prof: lap = _cpu_lap("nav_pre_guards", lap)
-	var map := pony.get_world_3d().navigation_map
+	# Neither _plan() nor the wander picker reads the map any more (walk grid routes); the agent
+	# creates the world's map itself. 0.1.0 perf: no World3D lookup every logic tick.
+	var map := RID()
 	if not is_instance_valid(_service):
 		for node in get_tree().get_nodes_in_group("pony_navigation"):
 			if node is WalkGridService and (not is_instance_valid(_service) or node.bounds.get_center().distance_to(pony.global_position) < _service.bounds.get_center().distance_to(pony.global_position)):
@@ -721,6 +723,15 @@ func _direct_profile_hash() -> int:
 	_direct_profile_values.clearance = float(profile.clearance)
 	return _direct_profile_values.hash()
 
+## 0.1.0 perf: the last refused certified-only direct leg (see _direct_leg). Rollback:
+## DIRECT_REFUSAL_CACHE = false.
+const DIRECT_REFUSAL_CACHE := true
+var _direct_refused_at := Vector3.INF
+var _direct_refused_goal := Vector3.INF
+var _direct_refused_profile := 0
+var _direct_refused_trails := false
+var _direct_refused_snapshot: Dictionary = {}
+
 func _direct_leg(allow_unknown := true) -> bool:
 	var destination:Vector3=house_travel.goal if house_travel.active() else _live_goal
 	var toward := destination - pony.global_position; toward.y = 0.0
@@ -736,6 +747,13 @@ func _direct_leg(allow_unknown := true) -> bool:
 			and pony.global_position.distance_to(Geometry3D.get_closest_point_to_segment(pony.global_position, path[0], path[1])) < .2 \
 			and is_same(snapshot, _direct_snapshot):
 		return true
+	# A certified-only leg refused from this very spot, toward this goal, on this same published
+	# ground is refused again (the check reads nothing else): an outing waiting for its route
+	# re-ran it on every logic beat while standing still.
+	if not allow_unknown and DIRECT_REFUSAL_CACHE and pony.global_position == _direct_refused_at \
+			and destination == _direct_refused_goal and profile_hash == _direct_refused_profile \
+			and trails == _direct_refused_trails and is_same(snapshot, _direct_refused_snapshot):
+		return false
 	var direct := pony.global_position + toward.limit_length(2.4)
 	direct.y = lerpf(pony.global_position.y, destination.y, minf(2.4 / toward.length(), 1.0))
 	if _service.steering_segment_clear(pony.global_position, direct, pony.profile, trails):
@@ -743,6 +761,12 @@ func _direct_leg(allow_unknown := true) -> bool:
 	elif allow_unknown and _service.segment_unknown_or_clear(pony.global_position, direct, pony.profile, trails):
 		_unknown_pursuit = true
 	else:
+		if not allow_unknown:
+			_direct_refused_at = pony.global_position
+			_direct_refused_goal = destination
+			_direct_refused_profile = profile_hash
+			_direct_refused_trails = trails
+			_direct_refused_snapshot = snapshot
 		return false
 	path = PackedVector3Array([pony.global_position, direct]); _waypoint = 1; _reset_lookahead()
 	_path_serial += 1
@@ -836,6 +860,7 @@ func map_layers() -> MapLayers:
 func _cancel_queries() -> void:
 	_contact_approach = Vector3.INF
 	_direct_snapshot = {}
+	_direct_refused_snapshot = {}
 	_direct_serial = -1
 	if is_instance_valid(_service):
 		_service.cancel_request(_request)

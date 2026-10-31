@@ -305,8 +305,17 @@ func _build_furniture() -> void:
 	home.waypoints.append(home.to_local(spot.global_position))
 	_build_decor()
 	# Indoor props use the shared furnishing visibility range.
-	for prop: Node in get_children():
+	var props: Array[Node] = get_children()
+	# Perf 0.1.0 (geometry): the set's own furniture (sofa, armchair, desk, chest, tables, rugs,
+	# cage, lamp...) stands under ShowInterior, so the loop above never reached it and it drew from
+	# any distance (65 surfaces still in range 265 m away, 2026-10-23 inventory). It now fades out
+	# at the same PROP_RANGE as every other indoor prop. false = set furniture without a range.
+	var show_set := get_node_or_null("ShowInterior")
+	if RANGE_SET_PROPS and show_set != null: props.append_array(show_set.get_children())
+	for prop: Node in props:
 		if prop.is_in_group("house_furniture"): HOUSE.limit_range(prop, HOUSE.PROP_RANGE, true)
+
+const RANGE_SET_PROPS := true
 
 ## Plan spots (the set's metres) for the bed and stove, and the set's own furniture.
 const BED_PLAN := Vector2(2.45, 1.55)

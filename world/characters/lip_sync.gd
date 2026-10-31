@@ -5,8 +5,10 @@ extends RefCounted
 ##
 ## Primary: Rhubarb Lip Sync (Daniel Wolf, MIT) run as a subprocess on the wav; see
 ## rhubarb_path() for where it is looked for (bin/rhubarb/README.md for bundling). The phonetic recogniser takes ~0.2x realtime
-## (0.6 s for a 3.5 s line) and is language-independent; with the line's text
-## the pocketSphinx recogniser is used instead (English, more accurate).
+## (0.6-0.9 s for a 3.5 s line) and is language-independent. It is the default for every line: the
+## voice waits for the cues, and the English pocketSphinx recogniser (with the line's text) took about
+## 9 s for a 3.4 s line, the lag before a pony answered (2026-10-31). ENGLISH_RECOGNISER = true
+## brings it back.
 ## Fallback when the binary is missing: loudness windows mapped to X/B/C/D, so
 ## the mouth still flaps.
 ##
@@ -53,6 +55,8 @@ static func rhubarb_path() -> String:
 	return ""
 
 
+const ENGLISH_RECOGNISER := false
+
 ## Blocking. `wav_path` is res://, user:// or an absolute path.
 static func analyse(wav_path: String, dialog := "") -> Array:
 	var baked := chatter_cues(wav_path)
@@ -65,7 +69,7 @@ static func analyse(wav_path: String, dialog := "") -> Array:
 	var out_path := ProjectSettings.globalize_path("user://lipsync_%s.json" % stamp)
 	var args := PackedStringArray(["-f", "json", "--extendedShapes", "GHX", "-q", "-o", out_path])
 	var dialog_path := ""
-	if dialog.strip_edges() != "":
+	if ENGLISH_RECOGNISER and dialog.strip_edges() != "":
 		dialog_path = ProjectSettings.globalize_path("user://lipsync_%s.txt" % stamp)
 		var df := FileAccess.open(dialog_path, FileAccess.WRITE)
 		df.store_string(dialog)

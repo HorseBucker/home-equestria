@@ -276,6 +276,16 @@ var _mixer_hold := 0.0
 ## head cost nothing until she wakes, moves, or comes within hero range.
 const REST_FREEZE_SECONDS := 2.0
 var _rest_frozen := false
+## Off-screen clip-tier ponies (0.1.0 perf pass). PonyCrowd hides the model pivot of a pony outside
+## the view (crowd_hidden): nothing of her draws or casts a shadow, yet her three rigs still ran
+## their modifier passes (live head, eyes, mouth, tail, idle breath) and her NEAR gait clip still
+## posed every bone each step, about 100-150 us per NEAR pony per physics tick for a picture nobody
+## sees. While hidden her rigs run no passes (manual, like a frozen sleeper) and a looping gait's
+## clock runs without posing (as FAR already did); her logic, navigation, root motion and footfall
+## sounds carry on unchanged. Shown again, PonyCrowd poses the clip and set_crowd_hidden() hands the
+## rigs back with one pass in that same frame, before it is drawn. HERO ponies are not parked.
+## Rollback: HIDDEN_RIG_PARK = false.
+const HIDDEN_RIG_PARK := true
 var _asleep_seconds := 0.0
 ## _clip_age at which the last animation.play() crossfade ends. The hand-off clip is removed
 ## only after that: removing a clip the mixer is still fading out makes every advance fail with
@@ -328,6 +338,22 @@ var _heightmap_supported := false
 ## profile's calibration follow it; contacts still come from the real hooves.
 var body_scale := 1.0
 var _corner_speed := INF
+## Corner rays only while she wants to move (0.1.0 perf pass): standing with no request, the four
+## rays of _terrain_corner_speed() feed minf(0, ...) and change nothing. _corner_stale makes the
+## first step she wants to move measure at once, solve tick or not. Rollback: CORNER_IDLE_SKIP = false.
+const CORNER_IDLE_SKIP := true
+var _corner_stale := true
+## Settled stand (0.1.0 perf pass): a HERO pony standing on a still floor slides her capsule by
+## exactly zero every step. After two such slides in a row, only every SETTLED_MOVE_RECHECK-th
+## step slides again (10 Hz floor recheck); between them the last slide's result is kept (velocity,
+## floor and wall state). Never while held, airborne, turning, on a moving support or on the
+## full-rate path (touch, carry, flight, the player's own pony). Rollback: SETTLED_MOVE_SKIP = false.
+const SETTLED_MOVE_SKIP := true
+const SETTLED_MOVE_RECHECK := 6
+var _settled_moves := 0
+var _settled_skips := 0
+var _settled_velocity := Vector3.ZERO
+var _settled_at := Vector3.INF
 var _leg_cache: Array[Dictionary] = []
 ## Last well-defined bend direction per leg; a fully extended leg (gallop kick) has
 ## no measurable bend and must not flip its knee from tick to tick.
@@ -366,9 +392,14 @@ func set_body_scale(scale_factor: float) -> void:
 
 func _apply_body_scale() -> void:
 	if pivot == null: return
+	_set_pivot_scaled(pivot.transform)
+
+
+## `pivot.transform = t` then _apply_body_scale() in one write (0.1.0 perf pass): every pivot write
+## re-notifies her whole model subtree, and the solver wrote it twice per step. Same transform.
+func _set_pivot_scaled(t: Transform3D) -> void:
 	_clip_pivot_settled = false
 	_posture_pivot_settled = false
-	var t := pivot.transform
 	t.basis = t.basis.orthonormalized().scaled_local(Vector3.ONE * body_scale)
 	pivot.transform = t
 
@@ -978,8 +1009,14 @@ func _physics_process(delta: float) -> void:
 	# The gait follows the caller's request capped by the hill, never by the slope's
 	# speed scaling: a hill slows the trot, it does not turn it into a walk.
 	_gait_request = minf(_gait_request, hill_cap)
-	if solve_tick:
-		_corner_speed = _terrain_corner_speed()
+	if solve_tick or _corner_stale:
+		# Standing with nothing asked of her, the four corner rays only feed minf(0, ...): skip them
+		# and measure on the first step she wants to move instead (CORNER_IDLE_SKIP).
+		if CORNER_IDLE_SKIP and wanted_speed <= 0.0 and _command_speed <= 0.0:
+			_corner_stale = true
+		else:
+			_corner_speed = _terrain_corner_speed()
+			_corner_stale = false
 	wanted_speed = minf(wanted_speed, _corner_speed)
 	if solve_tick:
 		_blocked = not _safe_ahead(maxf(wanted_speed, _command_speed))
@@ -1060,7 +1097,25 @@ func _physics_process(delta: float) -> void:
 			velocity.y = minf(velocity.y, 0.0)
 	var vertical_speed_before_move := velocity.y
 	if prof: lap = _cpu_lap("hero_steer", lap)
-	if not _move_player_step(delta): move_and_slide()
+	# Standing still on a still floor (SETTLED_MOVE_SKIP): the capsule's slide has moved her by
+	# exactly nothing for two steps in a row, so between rechecks keep that result instead of
+	# sliding again (each slide also re-sends every mesh of her a new world transform).
+	var still := SETTLED_MOVE_SKIP and not _held and velocity.x == 0.0 and velocity.z == 0.0 \
+		and velocity.y == -0.25 and _yaw_rate == 0.0 and is_on_floor() and not _heightmap_supported \
+		and not needs_full_rate()
+	if still and global_position == _settled_at and _settled_moves >= 2 and _settled_skips < SETTLED_MOVE_RECHECK - 1:
+		_settled_skips += 1
+		velocity = _settled_velocity
+	else:
+		if not _move_player_step(delta): move_and_slide()
+		_settled_skips = 0
+		if still and global_position == previous_position and is_on_floor() and get_platform_velocity() == Vector3.ZERO:
+			_settled_moves += 1
+			_settled_velocity = velocity
+			_settled_at = global_position
+		else:
+			_settled_moves = 0
+			_settled_at = Vector3.INF
 	if prof: lap = _cpu_lap("hero_move_and_slide", lap)
 	if not _held and not was_grounded and is_on_floor():
 		audio_landed.emit(global_position, maxf(0.0, -vertical_speed_before_move))
@@ -1106,12 +1161,16 @@ func _physics_process(delta: float) -> void:
 	if prof: lap = _cpu_lap("hero_state_timing", lap)
 	# Read a clean source pose every tick; the modifier's deferred write is never input.
 	source_pose = _sample_source_pose()
+	if prof: lap = _cpu_lap("hero_pose_sample_gait", lap)
 	_update_secondary(delta)
+	if prof: lap = _cpu_lap("hero_pose_sample_secondary", lap)
 	secondary.apply_pose(source_pose, joint_limits)
+	if prof: lap = _cpu_lap("hero_pose_sample_apply", lap)
 	if activity_mouth_pose != null: activity_mouth_pose.apply_source(source_pose, delta)
 	carry.apply_pose(source_pose, delta)
 	hoof_hold.apply_source(source_pose,delta)
 	_update_eyes()
+	if prof: lap = _cpu_lap("hero_pose_sample_layers", lap)
 	# Geometry lids ride the lid bones; the shader lid stays behind them. Open lids on an
 	# unanimated lid rig already sit at rest in the sampled pose.
 	if eyelids.closure != 0.0 or not _lids_static or carry.blend > 0.0:
@@ -1592,7 +1651,8 @@ func _advance_clip(delta: float) -> void:
 	# Only the settled, looping baked gait has no signals, method tracks or posture timing.
 	# Keep its clock exact while hidden, including changes of playback speed, so a gait switch
 	# and the hand-back to HERO inherit the current phase. Crossfades still evaluate normally.
-	if sim_tier == SimTier.FAR and (has_meta(PonyCrowd.HIDDEN) or coarse_motion) and not needs_full_rate() \
+	if ((sim_tier == SimTier.FAR and (has_meta(PonyCrowd.HIDDEN) or coarse_motion)) \
+				or (HIDDEN_RIG_PARK and sim_tier == SimTier.NEAR and has_meta(PonyCrowd.HIDDEN))) and not needs_full_rate() \
 			and (posture == null or not posture.active()) and _clip_blend >= 1.0 \
 			and _clip_age > _clip_blend_end and BAKED_GAITS.GAITS.has(_clip_gait) \
 			and animation.current_animation == _baked_name(_clip_gait) \
@@ -1673,6 +1733,18 @@ func _rest_skeletons() -> Array[Skeleton3D]:
 	return [skeleton]
 
 
+## PonyCrowd hid (true) or showed (false) her model pivot; the rigs follow (HIDDEN_RIG_PARK).
+func set_crowd_hidden(hidden: bool) -> void:
+	if not HIDDEN_RIG_PARK or skeleton == null:
+		return
+	_update_rig_rates(not hidden)
+
+
+## Rigs back on the per-tick pass after a hidden spell (subclasses reset what integrated over it).
+func _rigs_unparked() -> void:
+	pass
+
+
 func _set_rest_frozen(frozen: bool) -> void:
 	if not frozen:
 		_asleep_seconds = 0.0
@@ -1698,6 +1770,10 @@ const POSE_ONLY_MODIFIERS: Array[String] = ["res://world/characters/hybrid_mare/
 func _update_rig_rates(wake := false) -> void:
 	var far := sim_tier == SimTier.FAR
 	_rig_rest_affection = false
+	var was_parked := _hidden_parked
+	_hidden_parked = HIDDEN_RIG_PARK and sim_tier != SimTier.HERO and has_meta(PonyCrowd.HIDDEN)
+	if was_parked and not _hidden_parked:
+		_rigs_unparked()
 	# Runs on every FAR logic tick: the rigs and each rig's non-pose-only modifiers are cached
 	# (rebuilt on a tier or freeze change, a freed rig, or a rig whose children changed), and only
 	# their `active` flags are read here (and an active AffectionPose's rest state), so a modifier
@@ -1715,7 +1791,7 @@ func _update_rig_rates(wake := false) -> void:
 		if not is_instance_valid(rig):
 			_rig_cache_valid = false
 			continue
-		var manual := _rest_frozen
+		var manual := _rest_frozen or _hidden_parked
 		var rest_affection := false
 		if not manual and far:
 			if rig.get_child_count() != _rig_children[i]:
@@ -1733,7 +1809,7 @@ func _update_rig_rates(wake := false) -> void:
 						continue
 					manual = false
 					break
-		if manual and not _rest_frozen and rest_affection: _rig_rest_affection = true
+		if manual and not _rest_frozen and not _hidden_parked and rest_affection: _rig_rest_affection = true
 		var mode := Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_MANUAL if manual \
 			else Skeleton3D.MODIFIER_CALLBACK_MODE_PROCESS_PHYSICS
 		if rig.modifier_callback_mode_process == mode:
@@ -1751,6 +1827,8 @@ var _rig_cache: Array[Skeleton3D] = []
 var _rig_watch: Array = []
 var _rig_children := PackedInt32Array()
 var _rig_cache_valid := false
+## The rigs are parked because PonyCrowd hides her (HIDDEN_RIG_PARK).
+var _hidden_parked := false
 
 ## Rollback switch (dev 2026-10-20 perf pass): false keeps every active AffectionPose on the
 ## per-tick pass, as before.
@@ -2220,6 +2298,9 @@ func _update_contacts(delta: float) -> void:
 
 ## _update_contacts() in PonySolverNative for a pony that is not held: the same foot state bit
 ## for bit. The terrain probes stay here; the native code runs the math between them.
+## _update_contacts_native() reads its 20 timing values through one step_timing.contact_timing()
+## call (0.1.0 perf pass; the same values bit for bit). Rollback: CONTACT_TIMING_BATCH = false.
+const CONTACT_TIMING_BATCH := true
 func _update_contacts_native(delta: float) -> void:
 	if _native_contact_profile != profile:
 		_native_contact_profile = profile
@@ -2233,19 +2314,27 @@ func _update_contacts_native(delta: float) -> void:
 		_native.bind_contact_legs(bones, heights, bases)
 	var predict := maxf(actual_speed, _turn_step_speed) > 0.02
 	var timing := PackedFloat64Array()
-	for i in 4:
-		var airborne := step_timing.leg_airborne(i)
-		timing.append(step_timing.stride_offset(i, actual_speed) * _blend)
-		timing.append(1.0 if airborne else 0.0)
-		timing.append(1.0 if airborne and predict else 0.0)
-		timing.append(minf(0.45, step_timing.touchdown_seconds(i)) if airborne and predict else 0.0)
-		timing.append(step_timing.leg_contact_weight(i) if _blend > 0.0 else 1.0)
+	if CONTACT_TIMING_BATCH:
+		timing = step_timing.contact_timing(_blend, predict)
+	else:
+		for i in 4:
+			var airborne := step_timing.leg_airborne(i)
+			timing.append(step_timing.stride_offset(i, actual_speed) * _blend)
+			timing.append(1.0 if airborne else 0.0)
+			timing.append(1.0 if airborne and predict else 0.0)
+			timing.append(minf(0.45, step_timing.touchdown_seconds(i)) if airborne and predict else 0.0)
+			timing.append(step_timing.leg_contact_weight(i) if _blend > 0.0 else 1.0)
+	var prof := LOCO_CPU.enabled
+	var lap := Time.get_ticks_usec() if prof else 0
 	var references: PackedVector3Array = _native.contacts_begin(source_pose, feet, global_transform,
 		pivot.transform, _model_frame, delta, timing, PackedFloat64Array([actual_speed, _yaw_rate]))
+	if prof: lap = _cpu_lap("contacts_begin", lap)
 	var hits: Array = [_probe(references[0]), _probe(references[1]), _probe(references[2]), _probe(references[3])]
+	if prof: lap = _cpu_lap("contacts_probe4", lap)
 	var planted: Array = _native.contacts_plant(feet, hits, PackedInt32Array([state, Motion.STANDING, Motion.STOPPING]),
 		PackedFloat64Array([_blend, _spawn_settle, body_scale, profile.hip_height, step_timing.seconds_since_switch(),
 			profile.gait_blend_seconds]))
+	if prof: lap = _cpu_lap("contacts_plant", lap)
 	if not (planted[2] as PackedVector3Array).is_empty():
 		_hoof_plants.plant_native(self, planted[2])
 	var points: PackedVector3Array = planted[0]
@@ -2255,6 +2344,7 @@ func _update_contacts_native(delta: float) -> void:
 		if resample[i]:
 			contacts[i] = _probe(points[i])
 	_native.contacts_finish(feet, contacts, delta, PackedInt32Array([state, Motion.STANDING]), global_transform, _model_frame)
+	if prof: _cpu_lap("contacts_resample_finish", lap)
 
 
 ## The rest of _update_body() in PonySolverNative: the same ten rays (through its probe, in
@@ -2268,11 +2358,10 @@ func _update_body_native(delta: float) -> void:
 		_native.bind_body(soles)
 	var result: Array = _native.update_body(global_transform, _body_tilt, _model_frame, _body_offset, secondary.offset,
 		PackedFloat64Array([delta, _body_height, profile.hip_height, profile.max_slope_degrees, secondary.roll, floor_mask]))
-	pivot.transform = result[0]
 	_body_tilt = result[1]
 	_body_height = result[2]
 	_slope_angle = result[3]
-	_apply_body_scale()
+	_set_pivot_scaled(result[0])
 
 
 ## Forecast the root through a constant-rate turn. Mid-heading translation is the chord of
@@ -2303,8 +2392,7 @@ func _update_body(delta: float) -> void:
 		_body_height = move_toward(_body_height, 0.0, delta * 0.3)
 		_body_tilt = _body_tilt.slerp(Quaternion.IDENTITY, 1.0 - exp(-delta / 0.18))
 		var center := carry.pivot_center
-		pivot.transform = Transform3D(Basis(_body_tilt), center - _body_tilt * center + _body_offset + Vector3.UP * _body_height)
-		_apply_body_scale()
+		_set_pivot_scaled(Transform3D(Basis(_body_tilt), center - _body_tilt * center + _body_offset + Vector3.UP * _body_height))
 		return
 	if _native_body and _native != null and _native_probe:
 		_update_body_native(delta)
@@ -2342,12 +2430,11 @@ func _update_body(delta: float) -> void:
 			count += 1
 	var want_height := clampf(height_sum / maxi(count, 1), -profile.hip_height * 0.45, profile.hip_height * 0.45)
 	_body_height = lerpf(_body_height, want_height, weight)
-	pivot.transform = tilted
-	pivot.position.y += _body_height
+	var placed := tilted
+	placed.origin.y += _body_height
 	var give_rotation := Basis.from_euler(Vector3(_body_offset.z * 0.7, 0.0, -_body_offset.x * 0.8 + secondary.roll))
 	var give := Transform3D(give_rotation, center - give_rotation * center + _body_offset + secondary.offset)
-	pivot.transform *= give
-	_apply_body_scale()
+	_set_pivot_scaled(placed * give)
 
 
 func _solve_pose(delta: float) -> void:

@@ -34,6 +34,14 @@ var _pitch := 0.0
 var _breath := 0.0
 ## Largest roll applied (radians) since the last read; tests and traces.
 var applied_roll := 0.0
+## Parked rigs (0.1.0 perf pass): while PonyCrowd hides her and her rigs are parked
+## (pony_locomotion.gd HIDDEN_RIG_PARK), a pass that still comes (a pose write on the parked rig
+## re-runs the modifiers) is skipped: nothing of her draws. Shown again, catch_up() does at once
+## what the skipped passes would have done (fade and easing over the time she was hidden), so the
+## first frame seen is the body life she would have shown all along. Rollback: HIDDEN_SKIP = false.
+const HIDDEN_SKIP := true
+## Physics frame of the last pass that ran (catch_up's clock).
+var _last_pass_frame := -1
 
 
 func bind(skeleton: Skeleton3D) -> void:
@@ -50,7 +58,27 @@ func bind(skeleton: Skeleton3D) -> void:
 		_leg_parents.append(skeleton.get_bone_parent(bone))
 
 
+## Back on screen after a parked spell (hybrid_mare.gd _rigs_unparked, after `wanted` is current):
+## the fade moves on by the time she was hidden, and the eased weight and breath move toward the
+## secondary's values as the skipped passes would have, so nothing eases in once she is seen.
+func catch_up() -> void:
+	if not HIDDEN_SKIP or _last_pass_frame < 0: return
+	var elapsed := float(Engine.get_physics_frames() - _last_pass_frame) / float(Engine.physics_ticks_per_second)
+	_last_pass_frame = Engine.get_physics_frames()
+	if elapsed <= 0.0: return
+	fade = move_toward(fade, 1.0 if wanted else 0.0, elapsed / FADE_SECONDS)
+	var secondary: RefCounted = pony.secondary if is_instance_valid(pony) else null
+	if secondary == null: return
+	var ease := 1.0 - exp(-elapsed / 0.08)
+	var offset: Vector3 = secondary.offset
+	_roll = lerpf(_roll, float(secondary.roll), ease)
+	_pitch = lerpf(_pitch, offset.z * PITCH_PER_METRE, ease)
+	_breath = lerpf(_breath, float(secondary.breath), ease)
+
+
 func _process_modification_with_delta(delta: float) -> void:
+	if HIDDEN_SKIP and is_instance_valid(pony) and pony.get(&"_hidden_parked") == true: return
+	_last_pass_frame = Engine.get_physics_frames()
 	fade = move_toward(fade, 1.0 if wanted else 0.0, delta / FADE_SECONDS)
 	if fade <= 0.0 or _hips < 0 or not is_instance_valid(pony): return
 	var started := Time.get_ticks_usec() if PROFILE.enabled else 0

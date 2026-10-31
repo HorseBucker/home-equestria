@@ -411,8 +411,16 @@ func _open_saves() -> void:
 	_in_save_menu = true
 
 
+## Perf 0.1.0: the idle-pause check (minutes long) runs four times a second, not every frame.
+## Input events still stamp _last_input_msec as they arrive. 0.0 = every frame.
+const IDLE_CHECK_SECONDS := 0.25
+var _idle_check_left := 0.0
+
 func _process(_delta: float) -> void:
-	_check_idle()
+	_idle_check_left -= _delta
+	if _idle_check_left <= 0.0:
+		_idle_check_left = IDLE_CHECK_SECONDS
+		_check_idle()
 	if not _in_save_menu: return
 	if is_instance_valid(save_menu) and save_menu.opened: return
 	_in_save_menu = false

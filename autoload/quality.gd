@@ -759,11 +759,13 @@ static func _matches(text: String, pattern: String) -> bool:
 	return regex.search(text) != null
 
 
-## The pick for this machine.
+## The pick for this machine: High, Medium, Low or Very Low, never Ultra (dev 2026-10-31: Ultra is
+## only ever the player's own choice, on any GPU).
 static func pick_for_this_machine() -> String:
 	var memory: Dictionary = OS.get_memory_info()
-	return pick_default_quality(RenderingServer.get_video_adapter_name(), RenderingServer.get_video_adapter_type(),
+	var pick := pick_default_quality(RenderingServer.get_video_adapter_name(), RenderingServer.get_video_adapter_type(),
 		int(memory.get("physical", 0)), int(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)))
+	return PRESET_NAMES[Preset.HIGH] if pick == PRESET_NAMES[Preset.ULTRA] else pick
 
 
 ## Viewport-level knobs. Everything Environment-shaped is applied by
@@ -847,8 +849,10 @@ func _apply_viewport_settings(android: bool = OS.has_feature("android")) -> void
 	# The sun's shadow map is entirely separate from the positional atlas above.
 	# Only setting the atlas left the directional shadow at its default size
 	# stretched over a 100 m+ range, which is what made shadow edges pixelated.
+	# 16-bit depth, as SkyController's twilight budget sets it right after every preset change
+	# (perf 0.1.0): asking for 32-bit here freed and reallocated the whole map twice per change.
 	RenderingServer.directional_shadow_atlas_set_size(
-		cfg["directional_shadow_size"], false)
+		cfg["directional_shadow_size"], true)
 
 
 func _unhandled_input(event: InputEvent) -> void:

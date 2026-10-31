@@ -12,6 +12,7 @@ var _label: Label
 var _hold := 0.0
 
 func _ready() -> void:
+	set_process(_pony != null) # Perf 0.1.0: only while a pony is held (_lock/_release).
 	layer = 90
 	_label = Label.new()
 	_label.add_theme_font_size_override("font_size", 28)
@@ -55,6 +56,7 @@ func _lock(pony: Node3D) -> void:
 		_was_wandering = bool(nav.get("wander_enabled"))
 		nav.stay(); nav.set("command_owner", "debug:measure")
 	_label.visible = true
+	set_process(true)
 
 func _release() -> void:
 	if is_instance_valid(_pony):
@@ -64,6 +66,7 @@ func _release() -> void:
 			nav.set("wander_enabled", _was_wandering)
 	_pony = null
 	_label.visible = false
+	set_process(false)
 
 func _process(delta: float) -> void:
 	if _pony == null: return

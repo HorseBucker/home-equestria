@@ -28,6 +28,12 @@ const DENSITY_SECONDS := 2.0
 var _density_eye := Vector3.INF
 var _density_value := 0.0
 var _density_age := 0.0
+## Perf 0.1.0: the clock, quality and weather nodes are looked up once (again only if freed), a
+## swarm's fade parameter is written only when it changes (it holds at 1 for minutes), and the
+## finished-swarm sweep allocates nothing on frames where no swarm finished.
+var _clock: Node
+var _quality: Node
+var _weather: Node
 
 func _ready() -> void:
 	_rng.randomize()
@@ -38,7 +44,8 @@ func _process(delta: float) -> void:
 	var camera := _camera()
 	if camera == null: return
 	var eye := camera.global_position
-	var quality := get_node_or_null("/root/Quality")
+	if not is_instance_valid(_quality): _quality = get_node_or_null("/root/Quality")
+	var quality := _quality
 	var tier_scale: float = float(quality.get_value("firefly_scale", 1.0)) if quality != null else 1.0
 	# dev 2026-10-20 perf pass: the place density (biome weights, terrain height and a walk over
 	# every world region) ran every frame, also by day when the target is zero anyway. It is now
@@ -48,6 +55,7 @@ func _process(delta: float) -> void:
 	var target := 0
 	if share > 0.0: target = int(round(share * _place_density(eye, delta)))
 	else: _density_eye = Vector3.INF   # the next evening starts from a fresh reading
+	var finished := false
 	for swarm in _swarms:
 		swarm.age += delta
 		var node: MultiMeshInstance3D = swarm.node
@@ -55,16 +63,24 @@ func _process(delta: float) -> void:
 		if not swarm.fading_out and (swarm.age > swarm.life or far or _swarms.size() > target):
 			swarm.fading_out = true; swarm.age = 0.0
 		var fade := clampf(swarm.age / FADE_SECONDS, 0.0, 1.0)
-		node.set_instance_shader_parameter("fade", 1.0 - fade if swarm.fading_out else fade)
-	for swarm in _swarms.filter(func(s): return s.fading_out and s.age >= FADE_SECONDS):
-		(swarm.node as Node).queue_free(); _swarms.erase(swarm)
+		var shown: float = 1.0 - fade if swarm.fading_out else fade
+		if shown != float(swarm.get("shown", -1.0)):
+			swarm.shown = shown
+			node.set_instance_shader_parameter("fade", shown)
+		if swarm.fading_out and swarm.age >= FADE_SECONDS: finished = true
+	if finished:
+		for swarm in _swarms.filter(func(s): return s.fading_out and s.age >= FADE_SECONDS):
+			(swarm.node as Node).queue_free(); _swarms.erase(swarm)
 	_spawn_in -= delta
 	if _spawn_in <= 0.0 and _live() < target:
 		_spawn_in = _rng.randf_range(2.0, 6.0)
 		_try_spawn(camera)
 
 func _live() -> int:
-	return _swarms.filter(func(s): return not s.fading_out).size()
+	var live := 0
+	for swarm in _swarms:
+		if not swarm.fading_out: live += 1
+	return live
 
 func _camera() -> Camera3D:
 	if camera_source.is_valid():
@@ -74,17 +90,22 @@ func _camera() -> Camera3D:
 
 ## 0 by day, 1 from about 20:30 to 04:30, ramping at dusk and dawn.
 func _night() -> float:
-	var clock := get_node_or_null("/root/TimeOfDay")
-	if clock == null: return 0.0
-	var h := float(clock.hours)
+	if not is_instance_valid(_clock): _clock = get_node_or_null("/root/TimeOfDay")
+	if _clock == null: return 0.0
+	var h := float(_clock.hours)
 	return maxf(smoothstep(19.0, 20.5, h), 1.0 - smoothstep(4.5, 5.5, h))
 
+func _weather_node() -> Node:
+	if not is_instance_valid(_weather) or not _weather.is_inside_tree() or _weather.get_parent() != get_parent():
+		_weather = get_parent().get_node_or_null("Weather")
+	return _weather
+
 func _season() -> float:
-	var weather := get_parent().get_node_or_null("Weather")
+	var weather := _weather_node()
 	return float(SEASON_SHARE.get(str(weather.season), 1.0)) if weather != null else 1.0
 
 func _dry() -> float:
-	var weather := get_parent().get_node_or_null("Weather")
+	var weather := _weather_node()
 	if weather == null or not (weather.params is Dictionary): return 1.0
 	var p: Dictionary = weather.params
 	var wet := maxf(float(p.get("rain", 0.0)), maxf(float(p.get("snow", 0.0)), float(p.get("hail", 0.0))))

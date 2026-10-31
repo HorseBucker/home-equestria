@@ -165,6 +165,81 @@ static func _real_book(anchor: Node3D, book: Dictionary, at: Vector3, key: Strin
 	body.set_meta("shelf_size", size)
 	if not item.is_empty(): BOOK.build(body, item, size, anchor.get_tree() if anchor.is_inside_tree() else null)
 	anchor.add_child(body)
+	_batch_slot(anchor, body)
+
+# --- Resting stock drawn in batches (0.1.0 perf pass, 2026-10-31) -----------------------------
+## Each resting shelf book drew 2-3 times (cover, pages, back art): about 840 of Golden Oak's 953
+## surfaces. A bookcase now draws its resting books as one MultiMesh per book size (cover colour
+## per instance, 2 draws). Each slot keeps its own body, Book mesh, metadata and groups; the Book
+## mesh is only hidden, and shown again while it carries the hover outline (interact_outline.gd
+## BATCHED meta), drawn exactly over its batched copy. The back cover art faces the neighbouring
+## book on a shelf and is not batched. Rollback: STOCK_BATCH = false.
+const STOCK_BATCH := true
+const BATCHED := &"batched_hidden"
+static var _stock_material: StandardMaterial3D
+
+static func _batch_slot(anchor: Node3D, slot: Node3D) -> void:
+	if not STOCK_BATCH: return
+	var mesh := slot.get_node_or_null("Book") as MeshInstance3D
+	if mesh != null:
+		mesh.set_meta(BATCHED, true)
+		mesh.visible = false
+	var redo := _queue_stock.bind(anchor)
+	if not slot.visibility_changed.is_connected(redo): slot.visibility_changed.connect(redo)
+	_queue_stock(anchor)
+
+static func _queue_stock(anchor: Node3D) -> void:
+	if not is_instance_valid(anchor) or anchor.has_meta(&"stock_pending"): return
+	anchor.set_meta(&"stock_pending", true)
+	_rebuild_stock.call_deferred(anchor)
+
+static func _rebuild_stock(anchor: Node3D) -> void:
+	if not is_instance_valid(anchor): return
+	anchor.remove_meta(&"stock_pending")
+	var groups := {}   # size key -> [size, transforms, colours]
+	for child: Node in anchor.get_children():
+		if not child.is_in_group("shelf_slots") or not (child as Node3D).visible: continue
+		var mesh := child.get_node_or_null("Book") as MeshInstance3D
+		if mesh == null or not mesh.has_meta(BATCHED): continue
+		var size: Vector3 = child.get_meta("shelf_size", BOOK.SIZE)
+		var key := "%.3f_%.3f_%.3f" % [size.x, size.y, size.z]
+		if not groups.has(key): groups[key] = [size, [], []]
+		(groups[key][1] as Array).append((child as Node3D).transform * mesh.transform)
+		(groups[key][2] as Array).append(LIBRARY.cover_color(str(child.get_meta("item_id", ""))))
+	for old: Node in anchor.get_children():
+		if old.has_meta(&"stock_batch"): anchor.remove_child(old); old.queue_free()
+	for key: String in groups:
+		var entry: Array = groups[key]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_colors = true
+		mm.mesh = _stock_mesh(entry[0])
+		mm.instance_count = (entry[1] as Array).size()
+		for i in mm.instance_count:
+			mm.set_instance_transform(i, entry[1][i])
+			mm.set_instance_color(i, entry[2][i])
+		var mmi := MultiMeshInstance3D.new()
+		mmi.name = "ShelfStock"
+		mmi.set_meta(&"stock_batch", true)
+		mmi.multimesh = mm
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		anchor.add_child(mmi)
+
+## The same box mesh BOOK.build uses for this size, with a vertex-colour cover (the instance colour)
+## matching cover_material: albedo from colour in sRGB, roughness 0.62.
+static func _stock_mesh(size: Vector3) -> ArrayMesh:
+	var key := "stock_%.3f_%.3f_%.3f" % [size.x, size.y, size.z]
+	if BOOK._meshes.has(key): return BOOK._meshes[key]
+	if _stock_material == null:
+		_stock_material = StandardMaterial3D.new()
+		_stock_material.vertex_color_use_as_albedo = true
+		_stock_material.vertex_color_is_srgb = true
+		_stock_material.roughness = 0.62
+	var out: ArrayMesh = BOOK.mesh(size).duplicate()
+	out.surface_set_material(0, _stock_material)
+	out.surface_set_material(1, BOOK.page_material())
+	BOOK._meshes[key] = out
+	return out
 
 ## A generous, orientation-independent return target. Approach the visible front,
 ## not the back of a wall; geometry blocks returning through another room.
@@ -233,6 +308,9 @@ static func return_book(slot: Node3D, inventory: RefCounted, token: String) -> b
 	if previous != null: slot.remove_child(previous); previous.free()
 	var size: Vector3 = slot.get_meta("shelf_size", BOOK.SIZE)
 	BOOK.build(slot, item_id, size, slot.get_tree())
+	if STOCK_BATCH:
+		var built := slot.get_node_or_null("Book") as MeshInstance3D
+		if built != null: built.set_meta(BATCHED, true); built.visible = false
 	slot.show()
 	slot.collision_layer = 1 << 17
 	slot.add_to_group("shelf_books")

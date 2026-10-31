@@ -8,6 +8,11 @@ const SHELVES := preload("res://world/buildings/golden_oak/furniture_shelves.gd"
 const ARCHITECTURE := preload("res://world/buildings/golden_oak/furniture_architecture.gd")
 const REFERENCE := preload("res://world/buildings/golden_oak/reference_furniture.gd")
 const GUEST_REST := preload("res://world/relationships/shared_bed.gd")
+const STATIC_MERGE := preload("res://world/buildings/static_mesh_merge.gd")
+## Perf 0.1.0 (geometry): still decoration (stairs, rails, lanterns, carved bays, table roots,
+## fireplace, telescope) draws as one merged mesh per look instead of ~350 surfaces.
+## false = every piece draws on its own again (rollback / A-B).
+const MERGE_STATIC := true
 
 var radius := 5.0
 var floor_y := 0.0
@@ -166,6 +171,9 @@ func _spike_basket() -> Node3D:
 func _star_blanket(bed: Node3D) -> void:
 	var gold := KIT.material("efd98c")
 	var top := float(bed.get_meta("mattress_top", 0.6))
+	# Perf 0.1.0: the nine identical star prisms draw as one mesh (was nine draws per pass).
+	# Same vertices and material; MERGE_STATIC false keeps nine separate stars.
+	var holder := Node3D.new() if MERGE_STATIC else bed
 	for index: int in 9:
 		var polygon := PackedVector2Array()
 		var centre := Vector2(-0.55 + (index % 3) * 0.5, -0.18 + (index / 3) * 0.32)
@@ -175,7 +183,18 @@ func _star_blanket(bed: Node3D) -> void:
 			polygon.append(centre + Vector2(sin(angle), cos(angle)) * reach)
 		if Geometry2D.is_polygon_clockwise(polygon):
 			polygon.reverse()
-		ARCHITECTURE.prism(bed, "BlanketStar", polygon, top + 0.045, 0.004, gold, false)
+		ARCHITECTURE.prism(holder, "BlanketStar", polygon, top + 0.045, 0.004, gold, false)
+	if holder == bed:
+		return
+	var stars := SurfaceTool.new()
+	for star: MeshInstance3D in holder.get_children():
+		stars.append_from(star.mesh, 0, Transform3D.IDENTITY)
+	stars.set_material(gold)
+	var view := MeshInstance3D.new()
+	view.name = "BlanketStars"
+	view.mesh = stars.commit()
+	bed.add_child(view)
+	holder.free()
 
 func _build_breakfast() -> void:
 	var table := _kit.prop("round-cafe-table", Vector3(2.85, 0, 2.0))
@@ -209,6 +228,9 @@ func _limit_render_cost() -> void:
 	for visual: GeometryInstance3D in find_children("*", "GeometryInstance3D", true, false):
 		visual.visibility_range_end = 45.0
 		visual.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	if MERGE_STATIC:
+		# The carved bays are plain static furniture; their books are bodies and never merge.
+		STATIC_MERGE.merge(self, ["house_furniture", "book_shelves"], [preload("res://world/buildings/golden_oak/reference_surface.gdshader")], "MergedDecoration")
 
 func ensure_bed(id: String = "") -> Node3D:
 	var key := id.to_lower()

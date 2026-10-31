@@ -11,7 +11,11 @@ var _pressed := false
 ## Seconds between redraws while the page moves on its own (the menu card's drift and twinkle,
 ## world/ui/menu_card.gd); 0 redraws only on change. Hosts turn it on while a card shows;
 ## Reduced motion keeps it off.
-var tick := 0.0
+## Perf 0.1.0: the panel processes only while it has a tick to run (idle panels cost nothing).
+var tick := 0.0:
+	set(value):
+		tick = value
+		set_process(value > 0.0)
 var _tick_left := 0.0
 ## The page in layout pixels (PIXELS unless a host reshapes it, resize()) and rendered pixels per
 ## layout pixel. Pixels handed to and from the panel (ray_to_pixel, point_at) are rendered ones.
@@ -19,6 +23,7 @@ var pixels := PIXELS
 var resolution := 1.0
 
 func _ready() -> void:
+	set_process(tick > 0.0)
 	viewport = SubViewport.new()
 	viewport.size = PIXELS
 	viewport.disable_3d = true

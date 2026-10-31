@@ -160,7 +160,16 @@ func cancel_desktop_activity()->void:
 func release_all()->void:
 	for side:String in held.keys():release(side)
 	if is_instance_valid(ship):ship.set_controls(0,0,Vector2.ZERO)
+## Perf 0.1.0: with nothing held and the player's view farther than this from the basket no hand
+## can reach a rope (reach is under a metre from the eye); the tick only re-zeroed controls that
+## are already zero, so it is skipped. Grip memory resets exactly as when unavailable.
+## INF: always run the full tick.
+const FAR_SKIP:=12.0
 func _physics_process(_delta:float)->void:
+	if held.is_empty() and is_instance_valid(ship) and is_instance_valid(inventory) and is_instance_valid(inventory.camera) \
+			and ship.lift==0.0 and ship.vent==0.0 and ship.steering==Vector2.ZERO \
+			and inventory.camera.global_position.distance_squared_to(ship.global_position)>FAR_SKIP*FAR_SKIP:
+		pressed={"left":true,"right":true};return
 	if not available():release_all();pressed={"left":true,"right":true};return
 	var up:=0.0;var down:=0.0;var aim:=Vector2.ZERO
 	if inventory._desktop:

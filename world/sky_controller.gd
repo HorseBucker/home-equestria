@@ -105,6 +105,33 @@ var _lamp_level := -1.0
 var _dream_state: Dictionary = {}
 var debug_lighting: Node
 
+# --- Reflection cubemap cadence (perf 0.1.0) ----------------------------------
+## The sky's radiance cubemap (sky reflections on materials) was re-rendered every frame,
+## 0.23-0.28 ms of GPU at every spot including interiors, because the sky shader read TIME and
+## POSITION and the cloud drift was written to the material each frame. Those per-frame values
+## now reach the shader as global uniforms (_push_sky_frame), which do not dirty the cubemap, so
+## it refreshes when the sky itself changes (the sun steps at 4 Hz in _on_time_changed, palette
+## and weather writes) and at least every RADIANCE_REFRESH_SEC. The visible sky still moves
+## every frame. Rollback: SKY_RADIANCE_THROTTLE = false re-renders the cubemap every frame again.
+const SKY_RADIANCE_THROTTLE := true
+const RADIANCE_REFRESH_SEC := 0.25
+## The global uniforms shaders/sky.gdshader reads (project.godot [shader_globals] declares them;
+## _ensure_sky_globals adds any a stale project settings file lacks before the shader compiles).
+const SKY_GLOBALS := {
+	&"sky_time": [RenderingServer.GLOBAL_VAR_TYPE_FLOAT, 0.0],
+	&"sky_eye": [RenderingServer.GLOBAL_VAR_TYPE_VEC3, Vector3.ZERO],
+	&"sky_cloud_offset": [RenderingServer.GLOBAL_VAR_TYPE_VEC2, Vector2.ZERO],
+	&"sky_cloud_shape": [RenderingServer.GLOBAL_VAR_TYPE_VEC3, Vector3(0.45, 1.0, 0.0)],
+}
+const PLAYER_VIEW := preload("res://world/player_view.gd")
+var _sky_time := 0.0
+var _sky_clock_usec := 0
+var _sky_time_rollover := 3600.0
+var _radiance_age := 0.0
+## Last value written per sky material parameter by _sky_param: every write re-renders the
+## cubemap, so unchanged values are not written again.
+var _sky_params: Dictionary = {}
+
 
 func set_debug_lighting(mode: String) -> void:
 	if not is_instance_valid(debug_lighting) or not _dream_state.is_empty(): return
@@ -159,9 +186,68 @@ func _ready() -> void:
 	Quality.preset_changed.connect(_on_quality_changed)
 	_apply_quality()
 	_apply_time()
+	_sky_time_rollover = maxf(float(ProjectSettings.get_setting("rendering/limits/time/time_rollover_secs", 3600.0)), 1.0)
+	# Before every frame, after all scripts ran, and also while the tree is paused (TIME ran on).
+	if not RenderingServer.frame_pre_draw.is_connected(_push_sky_frame):
+		RenderingServer.frame_pre_draw.connect(_push_sky_frame)
+
+
+func _exit_tree() -> void:
+	if RenderingServer.frame_pre_draw.is_connected(_push_sky_frame):
+		RenderingServer.frame_pre_draw.disconnect(_push_sky_frame)
+
+
+## Per-frame sky inputs as global uniforms (see SKY_RADIANCE_THROTTLE): the clock that replaced
+## TIME (same seconds, scaled by Engine.time_scale like the renderer's), the player's camera
+## position that replaced POSITION, and the clouds' drift and weather shape. Also keeps the
+## reflection cubemap no older than RADIANCE_REFRESH_SEC.
+func _push_sky_frame() -> void:
+	if _sky_material == null or not is_inside_tree() or not _dream_state.is_empty(): return
+	var now := Time.get_ticks_usec()
+	var step := float(now - _sky_clock_usec) * 0.000001 if _sky_clock_usec > 0 else 0.0
+	_sky_clock_usec = now
+	_sky_time = fmod(_sky_time + step * Engine.time_scale, _sky_time_rollover)
+	RenderingServer.global_shader_parameter_set(&"sky_time", _sky_time)
+	var camera := PLAYER_VIEW.camera(self)
+	if camera != null and camera.is_inside_tree():
+		# The rendered (physics-interpolated) camera position, as POSITION was.
+		RenderingServer.global_shader_parameter_set(&"sky_eye", camera.get_global_transform_interpolated().origin)
+	RenderingServer.global_shader_parameter_set(&"sky_cloud_offset", _cloud_offset)
+	RenderingServer.global_shader_parameter_set(&"sky_cloud_shape", _cloud_now)
+	_radiance_age += step
+	if SKY_RADIANCE_THROTTLE and _radiance_age < RADIANCE_REFRESH_SEC: return
+	# Cubemap-only copies of the cloud state (its overcast greying), then one write that marks
+	# the cubemap dirty even when nothing else changed (stars, flat-cloud drift in reflections).
+	_sky_param(&"cloud_coverage", _cloud_now.x)
+	_sky_param(&"cloud_darkness", _cloud_now.z)
+	_sky_material.set_shader_parameter(&"exposure", _sky_params.get(&"exposure", 1.0))
+	_radiance_age = 0.0
+
+
+## Writes a sky material parameter only when it changed (each write re-renders the cubemap).
+func _sky_param(param: StringName, value: Variant) -> void:
+	if _sky_material == null: return
+	if _sky_params.has(param) and _sky_params[param] == value: return
+	_sky_params[param] = value
+	_sky_material.set_shader_parameter(param, value)
+	_radiance_age = 0.0
+
+
+## The renderer loads [shader_globals] from project settings at boot; a build whose settings
+## predate these entries would fail to compile the sky shader, so add what is missing first.
+## (RenderingServer's own global list/type getters are editor-only and error at runtime.)
+static var _sky_globals_added := false
+static func _ensure_sky_globals() -> void:
+	if _sky_globals_added: return
+	_sky_globals_added = true
+	for global_name: StringName in SKY_GLOBALS:
+		if ProjectSettings.has_setting("shader_globals/" + String(global_name)): continue
+		var entry: Array = SKY_GLOBALS[global_name]
+		RenderingServer.global_shader_parameter_add(global_name, int(entry[0]) as RenderingServer.GlobalShaderParameterType, entry[1])
 
 
 func _build_environment() -> void:
+	_ensure_sky_globals()
 	_sky_material = ShaderMaterial.new()
 	_sky_material.shader = load("res://shaders/sky.gdshader")
 	_sky_material.set_shader_parameter("cloud_texture", load("res://world/sky/clouds_tile.png"))
@@ -173,7 +259,8 @@ func _build_environment() -> void:
 	# Realtime skies are locked to 256 by the renderer; anything else is ignored.
 	sky.radiance_size = Sky.RADIANCE_SIZE_256
 	# The sun moves continuously, so the radiance map has to keep up or indirect
-	# light lags behind the visible sky at sunrise/sunset.
+	# light lags behind the visible sky at sunrise/sunset. Realtime keeps the fast filter; with
+	# no TIME/POSITION in the shader it re-renders only when dirtied (SKY_RADIANCE_THROTTLE).
 	sky.process_mode = Sky.PROCESS_MODE_REALTIME
 
 	var env := Environment.new()
@@ -327,13 +414,10 @@ func _update_volume_clouds(delta: float) -> void:
 		if first: _cloud_now = _cloud_goal
 	# Integrate the drift (m/s) into an offset; the wind eases in over a few seconds.
 	_cloud_wind_now = move_toward(_cloud_wind_now, _cloud_wind, delta * 0.5)
+	# Offset and _cloud_now reach the shader as globals in _push_sky_frame (no cubemap re-render).
 	_cloud_offset += _cloud_drift_day * _cloud_wind_now * delta
-	_sky_material.set_shader_parameter("cloud_offset", _cloud_offset)
 	var goal := _cloud_goal if _cloud_weather.x < 0.0 else _cloud_weather
 	_cloud_now = _cloud_now.move_toward(goal, delta / 60.0)
-	_sky_material.set_shader_parameter("cloud_coverage", _cloud_now.x)
-	_sky_material.set_shader_parameter("cloud_density", _cloud_now.y)
-	_sky_material.set_shader_parameter("cloud_darkness", _cloud_now.z)
 
 func _build_grassy_clouds() -> void:
 	var clouds := GrassyFieldsCloudsRef.new()
@@ -579,10 +663,10 @@ func _apply_time() -> void:
 		_apply_twilight_shadow_budget()
 
 	if _sky_material != null:
-		_sky_material.set_shader_parameter("daylight", daylight)
-		_sky_material.set_shader_parameter("golden", golden)
+		_sky_param(&"daylight", daylight)
+		_sky_param(&"golden", golden)
 		# Never fully dark: the night sky has to stay readable enough to walk by.
-		_sky_material.set_shader_parameter("exposure", lerpf(0.55, 1.0, daylight))
+		_sky_param(&"exposure", lerpf(0.55, 1.0, daylight))
 
 	var fog_color := FOG_NIGHT_COLOR.lerp(FOG_DAY_COLOR, daylight)
 	fog_color = fog_color.lerp(FOG_GOLDEN_COLOR, golden * 0.75) * _pcol("fog_tint")

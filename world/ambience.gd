@@ -196,7 +196,7 @@ func _process(delta: float) -> void:
 	_update_forest(delta, daylight)
 	var night_gain := (1.0 - smoothstep(.05, .4, daylight)) * _biome_gains.z * outdoor_gain * (1.0 - underwater)
 	if is_instance_valid(_weather) and str(_weather.get("season")) == "winter": night_gain = 0.0
-	_crickets.volume_db = crickets_db + linear_to_db(maxf(night_gain, .00001))
+	_set_db(_crickets, crickets_db + linear_to_db(maxf(night_gain, .00001)))
 	if night_gain <= .005 and _crickets.playing: _crickets.stop()
 	elif night_gain > .005 and not _crickets.playing: _crickets.play(_rng.randf() * 5.0)
 	_update_creak(delta)
@@ -210,7 +210,7 @@ func _process(delta: float) -> void:
 		if not is_instance_valid(host) or not host.is_visible_in_tree():
 			bird.stop(); _bird_hosts.erase(bird); _schedule_bird(bird)
 		else:
-			bird.volume_db = float(_bird_levels.get(bird, bird_db)) + linear_to_db(maxf(outdoor_gain * (1.0-underwater), .00001))
+			_set_db(bird, float(_bird_levels.get(bird, bird_db)) + linear_to_db(maxf(outdoor_gain * (1.0-underwater), .00001)))
 	if not _has_stepper:
 		var flat := Vector3(listener.global_position.x, 0.0, listener.global_position.z)
 		if _last_listener.is_finite():
@@ -241,7 +241,7 @@ func _update_wind(delta: float, daylight: float) -> void:
 	var fade := minf(2.0, _wind_duration*.25)
 	var envelope := smoothstep(0.0, fade, _wind_elapsed) * smoothstep(0.0, fade, _wind_duration-_wind_elapsed)
 	# A quiet air/leaf bed, softer after dark; no repeating pitched whoosh.
-	_wind.volume_db = wind_db - (1.0-daylight)*2.0 + linear_to_db(maxf(envelope*_biome_gains.x*outdoor_gain*(1.0-underwater), .00001))
+	_set_db(_wind, wind_db - (1.0-daylight)*2.0 + linear_to_db(maxf(envelope*_biome_gains.x*outdoor_gain*(1.0-underwater), .00001)))
 
 
 func _daylight() -> float:
@@ -268,7 +268,13 @@ func _update_forest(delta: float, daylight: float) -> void:
 	if is_instance_valid(_weather):
 		var weather_params: Dictionary = _weather.get("params")
 		weather_gain = 1.0 - float(weather_params.get("rain", 0.0)) * .8
-	_forest.volume_db = forest_db + linear_to_db(maxf(daylight * _biome_gains.y * _forest_gain * outdoor_gain * (1.0-underwater) * weather_gain, .00001))
+	_set_db(_forest, forest_db + linear_to_db(maxf(daylight * _biome_gains.y * _forest_gain * outdoor_gain * (1.0-underwater) * weather_gain, .00001)))
+
+
+## Perf 0.1.0: the beds' levels settle and then hold; a volume write on a playing player rebuilds
+## its bus mix details (an allocation each), so a change under 0.01 dB is not written. Inaudible.
+static func _set_db(player: Node, db: float) -> void:
+	if absf(float(player.get("volume_db")) - db) >= .01: player.set("volume_db", db)
 
 
 func _bird_perch() -> Dictionary:
