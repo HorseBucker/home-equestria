@@ -3,7 +3,8 @@ const CONTROLS := preload("res://world/ai/speech_controls.gd")
 const PLACES := preload("res://world/navigation/place_directory.gd")
 const MEET_TIME := preload("res://world/life/appointments/meet_time.gd")
 ## Data only. Never turn model text into method names, code, paths or coordinates.
-const TYPES := ["look_at", "approach", "call_pony", "send_pony", "follow", "go_to", "step", "lead", "stay", "cancel", "resume_routine", "sit", "stand", "lie_down", "fly_to", "hover", "land", "loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "sit_on_seat", "go_home", "air_show", "relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "kiss_player", "wake_up", "teleport_to_ponyville", "send_letter", "give_house", "magic_show", "take_off", "put_on", "meet", "meet_cancel"]
+const AGREED_KINDS := ["dating", "date", "outing", "move_in", "engagement", "marriage"]
+const TYPES := ["look_at", "approach", "call_pony", "send_pony", "follow", "go_to", "step", "lead", "stay", "cancel", "resume_routine", "sit", "stand", "lie_down", "fly_to", "hover", "land", "loop_de_loop", "barrel_roll", "circle_over", "sonic_rainboom", "sit_on_seat", "go_home", "air_show", "relationship_offer", "relationship_answer", "agreed", "request_space", "buck_player", "cuddle", "kiss_player", "wake_up", "teleport_to_ponyville", "send_letter", "give_house", "magic_show", "take_off", "put_on", "meet", "meet_cancel"]
 const SPEECH_LIMIT := 2880
 const STEP_DIRECTIONS := ["forward", "back", "left", "right", "away", "aside"]
 const STEP_SPELLINGS := {"forwards": "forward", "ahead": "forward", "backward": "back", "backwards": "back", "backward_s": "back",
@@ -13,7 +14,7 @@ const FIELDS := {
 	"teleport_to_ponyville": [], "give_house": [], "magic_show": [], "take_off": ["kind"], "put_on": ["kind"],
 	"meet": ["location_id", "day", "time"], "meet_cancel": [],
 	"call_pony": ["pony_id"], "send_pony": ["pony_id", "target_id"],
-	"request_space": [], "buck_player": [], "cuddle": [], "kiss_player": [], "wake_up": [], "send_letter": [], "relationship_offer": ["kind", "activity", "location_id"], "relationship_answer": ["offer_id", "accept"],
+	"request_space": [], "buck_player": [], "cuddle": [], "kiss_player": [], "wake_up": [], "send_letter": [], "relationship_offer": ["kind", "activity", "location_id"], "relationship_answer": ["offer_id", "accept"], "agreed": ["kind"],
 	"look_at": ["target_id", "duration_s"], "approach": ["target_id", "distance_m"],
 	"follow": ["target_id", "formation", "distance_m"], "go_to": ["location_id", "pace"],
 	"step": ["direction", "distance_m"],
@@ -47,7 +48,7 @@ const SIGNATURES := {
 	"step": [["direction", "aside"], ["distance_m", 1.5]],
 	"lead": [["target_id", null], ["location_id", null], ["wait_distance_m", 6.0]], "cancel": [["action_id", "current"]],
 	"fly_to": [["location_id", null]], "hover": [["duration_s", 10.0]], "circle_over": [["target_id", "player"]],
-	"relationship_offer": [["kind", null], ["activity", "walk"], ["location_id", ""]], "relationship_answer": [["offer_id", null], ["accept", null]],
+	"relationship_offer": [["kind", null], ["activity", "walk"], ["location_id", ""]], "relationship_answer": [["offer_id", null], ["accept", null]], "agreed": [["kind", null]],
 	"take_off": [["kind", null]], "put_on": [["kind", null]],
 	"meet": [["location_id", null], ["day", "today"], ["time", null]]}
 const PLAYER_NAMES := ["me", "you", "anon", "him", "the player", "anonymous"]
@@ -97,6 +98,7 @@ const TAG_HELP := {
 	"go_home": "[go_home] go home to rest a while (say goodbye first)",
 	"relationship_offer": "[relationship_offer: KIND, ACTIVITY] ask Anon for a relationship step (ACTIVITY walk/fishing/orchard/meal/visit, or place plus a LOCATION)",
 	"relationship_answer": "[relationship_answer: OFFER_ID, yes] or no: answer Anon's invitation",
+	"agreed": "[agreed: KIND] you both said yes to a step: Anon asked you for it in his own words and you accept, or he said yes to your offer (KIND dating/date/outing/move_in/engagement/marriage)",
 	"request_space": "[request_space] ask Anon to give you some space", "buck_player": "[buck_player] buck Anon away (only real, lasting anger at unwelcome contact)",
 	"cuddle": "[cuddle] cuddle up to Anon", "kiss_player": "[kiss_player] kiss Anon",
 	"send_letter": "[send_letter] write a quick note on a scroll and send it to Princess Celestia with your green fire",
@@ -192,7 +194,7 @@ static func decode_tags(text: String, actor: String, turn: int, context: Diction
 	speech = speech.replace("  ", " ").strip_edges()
 	if speech.length() > SPEECH_LIMIT: return {"error": "Speech exceeds 2880 characters; use complete sentences within the limit"}
 	for action: Dictionary in actions:
-		if action.type in ["relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "teleport_to_ponyville", "give_house", "meet", "meet_cancel"] and CONTROLS.sanitize(speech).is_empty():
+		if action.type in ["relationship_offer", "relationship_answer", "agreed", "request_space", "buck_player", "cuddle", "teleport_to_ponyville", "give_house", "meet", "meet_cancel"] and CONTROLS.sanitize(speech).is_empty():
 			return {"error": "This action requires spoken words before it can finish"}
 	return {"speech": speech, "actions": actions, "impression": preload("res://world/ai/impressions/pony_impressions.gd").sanitize(impression),
 		"dropped": dropped, "tags": true, "control_only": not silent and actions.is_empty() and CONTROLS.sanitize(speech).is_empty() and not text.strip_edges().is_empty()}
@@ -295,7 +297,7 @@ static func decode(text: String, actor: String, turn: int, context: Dictionary, 
 		var error := validate(action, context)
 		if error != "": return {"error": error}
 		if action.id in ids: return {"error": "Duplicate action IDs in reply"}
-		if action.type in ["relationship_offer","relationship_answer","request_space","buck_player","cuddle","teleport_to_ponyville","give_house","meet","meet_cancel"] and CONTROLS.sanitize(value.speech).is_empty():return {"error":"This action requires spoken words before it can finish"}
+		if action.type in ["relationship_offer","relationship_answer","agreed","request_space","buck_player","cuddle","teleport_to_ponyville","give_house","meet","meet_cancel"] and CONTROLS.sanitize(value.speech).is_empty():return {"error":"This action requires spoken words before it can finish"}
 		ids.append(action.id)
 		var channel := "gaze" if action.type == "look_at" else ("grant" if action.type in ["give_house", "magic_show"] else "wardrobe" if action.type in ["take_off", "put_on"] else "plan" if action.type in ["meet", "meet_cancel"] else "movement")
 		if channel in channels: return {"error": "One intention per channel per reply"}
@@ -337,6 +339,14 @@ static func validate(action: Variant, context: Dictionary) -> String:
 			var pending: Dictionary=context.get("relationship",{}).get("pending",{})
 			if pending.is_empty() or pending.get("by")!="player" or pending.get("id")!=action.get("offer_id"): return "No matching player invitation"
 			if not action.get("accept") is bool: return "Invitation answer must be boolean"
+		"agreed":
+			# AI-directed agreement (dev 2026-10-31): her reply decides, in any wording; the game still
+			# checks the step is allowed (player_bonds.gd agree).
+			var relationship: Dictionary = context.get("relationship", {})
+			var open: Dictionary = relationship.get("pending", {})
+			if action.get("kind") not in AGREED_KINDS: return "Unknown relationship step"
+			if not open.is_empty() and open.get("kind") != action.get("kind"): return "Answer or finish the existing invitation first"
+			if open.is_empty() and action.get("kind") not in relationship.get("offers", []): return "Relationship milestone not eligible"
 		"meet":
 			var clock := _clock(context)
 			var when := MEET_TIME.parse(str(action.get("day", "today")), str(action.get("time", "")), int(clock.day), float(clock.hours))

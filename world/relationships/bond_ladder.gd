@@ -90,7 +90,10 @@ static func _love_row(f: Dictionary) -> Dictionary:
 	# A crush: the bar is time together until one of you is ready to ask (player_bonds READY_TOGETHER_S).
 	var ready_s := maxf(1.0, float(f.get("ready_s", 3600.0)))
 	var together := minf(float(f.get("together_s", 0.0)), ready_s)
-	var row := _row(names, 0, roundi(together / 60.0), roundi(ready_s / 60.0), "Ask each other out" if together >= ready_s else "")
+	# Asking is in any words; her AI decides (dev 2026-10-31). Say what still blocks it, if anything.
+	var waiting := "Ask each other out" if together >= ready_s else "You can ask now, in your own words"
+	if not bool(f.get("can_ask", true)): waiting = "Trust %d/20 to ask" % mini(19, int(f.get("trust", 0.0)))
+	var row := _row(names, 0, roundi(together / 60.0), roundi(ready_s / 60.0), waiting)
 	row.unit = "min together"
 	return row
 

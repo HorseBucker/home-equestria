@@ -1,6 +1,6 @@
 # Home: Equestria
 
-A VR (and desktop) life-sim in Ponyville. Current version: **0.1.0-maredev** ([what's new](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev)).
+A VR (and desktop) life-sim in Ponyville. Current version: **0.1.1-maredev** ([what's new](https://github.com/homedevanon/home-equestria/releases/tag/0.1.1-maredev)).
 
 ### New here? Get the Universal Launcher
 
@@ -22,8 +22,8 @@ On 0.0.4-maredev or newer: press Update on the title screen or in the pause menu
 
 | You want to... | Download |
 |---|---|
-| Install by hand on Windows | Windows from MEGA, **or** both `windows.zip` parts from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev) |
-| Install by hand on Linux | Linux from MEGA, **or** both `linux.tar.gz` parts from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev) |
+| Install by hand on Windows | Windows from MEGA, **or** both `windows.zip` parts from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev), then press Update in game |
+| Install by hand on Linux | Linux from MEGA, **or** both `linux.tar.gz` parts from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev), then press Update in game |
 | Edit the game from source | `Source code` (or clone the repo) **plus** all three `source-data` zips from the [0.1.0-maredev release](https://github.com/homedevanon/home-equestria/releases/tag/0.1.0-maredev), extracted into the repo root next to `project.godot` (they hold the ground, foliage and other generated data git leaves out) |
 
 MEGA (0.1.0-maredev full game):

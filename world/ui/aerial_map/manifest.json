@@ -2593,11 +2593,15 @@
     }
   ],
   "north": "-Z",
-  "capture_date": "2026-10-04",
-  "assembled_at": "2026-10-04T07:40:06.355143+00:00",
-  "capture_sha256": "3775cfa99897a82b7d35bcff764d141db81cc31271f03a86b0777c14b9b6d208",
+  "capture_date": "2026-10-31",
+  "assembled_at": "2026-10-31T21:07:43.355589+00:00",
+  "capture_sha256": "12757b6212a06cb0ceb3b8d04e55d7c4277803ae51c6175a48f8c0c3943f4bed",
   "source_tiles": 261,
   "lighting": "fixed sun, ambient and AgX; no fog; frozen water and wind",
+  "grade": {
+    "saturation": 0.65,
+    "brightness": 0.95
+  },
   "overlap_pixels": 64,
   "assembly": "world-aligned linear feather across the overlap; no warping"
 }

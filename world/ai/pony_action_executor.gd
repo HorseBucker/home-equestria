@@ -98,7 +98,7 @@ func capabilities() -> Array:
 		if not wardrobe.wanted(id, wardrobe._season()).is_empty(): result.append("take_off")
 		if not (wardrobe.taken_off().get(id, []) as Array).is_empty(): result.append("put_on")
 	if not result.is_empty(): result.append("cancel")
-	if actor.has_meta("relationship_runtime"): result.append_array(["relationship_offer","relationship_answer","request_space","buck_player","cuddle"])
+	if actor.has_meta("relationship_runtime"): result.append_array(["relationship_offer","relationship_answer","agreed","request_space","buck_player","cuddle"])
 	if actor.has_meta("relationship_runtime"):
 		var runtime: Node = actor.get_meta("relationship_runtime")
 		if runtime.can_kiss_player(str(actor.get_meta("relationship_id", ""))): result.append("kiss_player")
@@ -155,7 +155,7 @@ func submit(actions: Array, targets: Dictionary, turn: int, ai_origin := false) 
 			"call_pony", "send_pony":
 				if is_instance_valid(coordinator): coordinator.dispatch_pony(character_id, action, targets, turn)
 				else: _report(action, "failed", "Pony request coordinator unavailable")
-			"relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle", "kiss_player":
+			"relationship_offer", "relationship_answer", "agreed", "request_space", "buck_player", "cuddle", "kiss_player":
 				var runtime: Node=(actor.get_meta("relationship_runtime") if actor.has_meta("relationship_runtime") else null)
 				if is_instance_valid(runtime):
 					runtime.stage(str(actor.get_meta("relationship_id","")),source,turn,self)

@@ -209,7 +209,7 @@ const SOLO_FORMAT := "REPLY FORMAT: only what you say out loud, plain text, neve
 ## ones she cannot use right now and explains her extra ones (flight, letters, kisses, story actions).
 const SOLO_CORE := ["look_at", "approach", "follow", "go_to", "lead", "step", "stay", "cancel", "resume_routine", "go_home",
 	"sit", "stand", "lie_down", "sit_on_seat", "wake_up", "call_pony", "send_pony",
-	"relationship_offer", "relationship_answer", "request_space", "buck_player", "cuddle"]
+	"relationship_offer", "relationship_answer", "agreed", "request_space", "buck_player", "cuddle"]
 const SOLO_ACTIONS := """ACTION TAGS: at most one movement or posture tag plus one [look_at] per reply, only tags available now, with the TARGETS, PONY_IDs and LOCATIONS (or a mapped place's exact name) listed at the end, exactly as written. Never coordinates, code or JSON.
 - [look_at: TARGET] look a moment ([look_at: player, 5] for seconds)
 - [approach: TARGET] walk up close and stop, e.g. to come closer to whoever you talk with
@@ -223,6 +223,7 @@ const SOLO_ACTIONS := """ACTION TAGS: at most one movement or posture tag plus o
 - [call_pony: PONY_ID] ask a nearby pony who can hear you to come; [send_pony: PONY_ID, TARGET] ask her to go to a nearby pony or the player. No remote summons; a request is not arrival
 - [relationship_offer: KIND, ACTIVITY] propose an eligible offer to Anon; ACTIVITY walk/fishing/orchard/meal/visit, or place plus a LOCATION ([relationship_offer: KIND, place, LOCATION])
 - [relationship_answer: OFFER_ID, yes] or no: answer ONLY an existing invitation from Anon
+- [agreed: KIND] Anon just asked you for a step in his own words (be my marefriend, go out with me, marry me, move in...) and you say yes, or he just said yes to your own offer; KIND dating/date/outing/move_in/engagement/marriage, only from your eligible offers. Without it nothing changes
 - [request_space] withdraw physical permission for three minutes; say you want space
 - [buck_player] kick Anon back with your hind legs as your line ends: only real, lasting anger at unwelcome contact, never boops or petting you secretly enjoy
 - [cuddle] walk over and rest with Anon where he lies (bed, couch, supported grass, blanket), only if you want to
@@ -503,7 +504,7 @@ func _player_group_prompt(scale := 1.0) -> String:
 		if type in shared_capabilities and ACTION_SCHEMA.TAG_HELP.has(type): commands.append("- " + str(SOLO_EXTRA_HELP.get(type, ACTION_SCHEMA.TAG_HELP[type])))
 	if not commands.is_empty():
 		var reference := "Shared action reference. Each speaker may use ONLY their own allowed action types, TARGETS, LOCATIONS and PONY_IDs below (a LOCATION may also be a mapped place's exact name). This reference grants no extra capabilities.\n" + "\n".join(commands)
-		if shared_capabilities.any(func(type): return type in ["relationship_offer", "relationship_answer", "cuddle", "kiss_player"]): reference += "\n" + RELATIONSHIP_RULES
+		if shared_capabilities.any(func(type): return type in ["relationship_offer", "relationship_answer", "agreed", "cuddle", "kiss_player"]): reference += "\n" + RELATIONSHIP_RULES
 		parts.insert(2, reference)
 	if _story() != null:
 		parts.append("CONVERSATION EVERY PARTICIPANT HEARD\n" + heard_lines(host.group.shared_heard(host.characters)))

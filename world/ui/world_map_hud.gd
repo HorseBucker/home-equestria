@@ -167,7 +167,7 @@ func set_expanded(open: bool) -> void:
 		map.save_preferences()
 	map.compact = not open; map._dragging = false
 	_layout()
-	if open and not map.zoom_locked: map.frame_world()
+	if open: map.frame_player()
 	else: map.follow()
 	expanded_changed.emit(open)
 

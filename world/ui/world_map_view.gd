@@ -14,6 +14,9 @@ const AERIAL := preload("res://world/ui/aerial_map_layer.gd")
 const INK := Color("142331")
 const GOLD := Color("ffdc8c")
 const CYAN := Color("73ecff")
+# Opening the map shows about this far around the player (dev, 2026-10-31: "maps kind of useless if
+# by default it shows you the whole world"). Whole map still frames everything.
+const OPEN_RADIUS_M := 250.0
 const MAX_ZOOM := 6.0 # Close enough to display the 0.25 m aerial pixels in full.
 var markers: Array = []
 var pony_markers: Array = []
@@ -141,6 +144,12 @@ func follow() -> void:
 	following = true
 	if has_position: center = live_position
 	queue_redraw()
+
+func frame_player() -> void:
+	if zoom_locked: follow(); return
+	if not has_position: frame_world(); return
+	zoom = clampf(minf(size.x, size.y) / (OPEN_RADIUS_M * 2.0), 0.008, MAX_ZOOM)
+	follow()
 
 func frame_world() -> void:
 	if zoom_locked: return

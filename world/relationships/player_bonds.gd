@@ -183,7 +183,8 @@ func eligible(id: String, kind: String) -> bool:
 	match kind:
 		"outing", "hug": return true
 		"date": return rank >= 1 and r.trust >= 15 and interest(id) >= 5
-		"dating": return rank in [1,2] and r.dates >= 1 and r.trust >= 20 and interest(id) >= 5
+		# No completed date needed (dev 2026-10-31): friends with some trust can ask, and her AI decides.
+		"dating": return rank in [1,2] and r.trust >= 20 and interest(id) >= 5
 		"move_in": return rank >= 3 and r.trust >= 35
 		"engagement": return rank == 3 and r.dates >= 3 and r.trust >= 50 and day() - r.dating_since >= 3.0
 		"marriage": return rank == 4 and day() - r.engaged_since >= 1.0
@@ -254,6 +255,22 @@ func answer(id: String, key: String, by: String, accept: bool) -> bool:
 	_save(id, r)
 	context.record("relationship", "You and Anon %s the %s invitation%s." % ["both accepted" if accept else "did not agree to", p.kind.replace("_"," "), " ("+p.activity+")" if p.kind in ["date","outing"] else ""], [id,"player"], [id,"player"])
 	return true
+
+## Her AI heard Anon ask for this step in his own words (or say yes to her offer) and agreed
+## ([agreed: KIND], dev 2026-10-31: "the game is supposed to be AI DIRECTED"). Eligibility still
+## applies; an earlier refusal's wait does not, because she is the one saying yes now.
+func agree(id: String, kind: String, home := "") -> bool:
+	if context._read_only or not eligible(id, kind): return false
+	var p := pending(id)
+	if not p.is_empty():
+		if str(p.kind) != kind: return false
+		return answer(id, str(p.id), "pony" if p.by == "player" else "player", true)
+	var r := record_for(id)
+	r.cooldowns.erase("offer:" + kind)
+	if kind == "dating": r.cooldowns.erase("dating_day")
+	_save(id, r)
+	var key := offer(id, kind, "player", "walk", home)
+	return not key.is_empty() and answer(id, key, "pony", true)
 
 func request_space(id: String) -> bool:
 	if context._read_only or not adults.has(id):return false

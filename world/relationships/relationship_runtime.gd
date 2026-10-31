@@ -3,7 +3,7 @@ extends Node
 const INTENT := preload("res://world/relationships/relationship_intent.gd")
 const HOUSE := preload("res://world/buildings/house_interior.gd")
 const LADDER := preload("res://world/relationships/bond_ladder.gd")
-const ACTION_HELP := "Relationship actions: relationship_offer(kind,activity,location_id) proposes an eligible offer to Anon; activity is walk/fishing/orchard/meal/visit, or place for time together at a mapped place (then give its location_id, e.g. a lake; omit location_id otherwise). For a named destination use go_to and the mapped location; each agreeing companion travels there independently and stops on arrival. Follow Anon only for a walk without a named destination; it ends when he stays beyond walking range. If he takes his balloon during a shared activity, you can board it with him. relationship_answer(offer_id,accept) answers ONLY an existing player offer. Use a boolean accept. State your actual offer or answer in speech. These changes commit only when your spoken line finishes. Never answer your own offer or fabricate player acceptance. request_space() withdraws physical permission for three minutes; say that you want space. buck_player() kicks Anon back with your hind legs when your spoken line ends; only for real, lasting anger at unwelcome contact, never for boops or petting you secretly enjoy. cuddle() walks over and rests with Anon on the bed, couch, supported grass or deployed blanket he is lying on, only if you want to. Actual friendship chooses beside or shoulder company; an established romantic relationship permits a closer snuggle, subject to current boundaries. kiss_player() walks up and initiates a kiss; your relationship line says whether that is natural yet. Adults only. A short spoken line is optional; Anon can end it with the kiss button."
+const ACTION_HELP := "Relationship actions: relationship_offer(kind,activity,location_id) proposes an eligible offer to Anon; activity is walk/fishing/orchard/meal/visit, or place for time together at a mapped place (then give its location_id, e.g. a lake; omit location_id otherwise). For a named destination use go_to and the mapped location; each agreeing companion travels there independently and stops on arrival. Follow Anon only for a walk without a named destination; it ends when he stays beyond walking range. If he takes his balloon during a shared activity, you can board it with him. relationship_answer(offer_id,accept) answers ONLY an existing player offer. Use a boolean accept. agreed(kind) records a step you both said yes to: Anon asked for it in his own words and you accept, or he said yes to your offer. State your actual offer or answer in speech. These changes commit only when your spoken line finishes. Never answer your own offer or fabricate player acceptance. request_space() withdraws physical permission for three minutes; say that you want space. buck_player() kicks Anon back with your hind legs when your spoken line ends; only for real, lasting anger at unwelcome contact, never for boops or petting you secretly enjoy. cuddle() walks over and rests with Anon on the bed, couch, supported grass or deployed blanket he is lying on, only if you want to. Actual friendship chooses beside or shoulder company; an established romantic relationship permits a closer snuggle, subject to current boundaries. kiss_player() walks up and initiates a kiss; your relationship line says whether that is natural yet. Adults only. A short spoken line is optional; Anon can end it with the kiss button."
 ## Added to the relationship prompt only while the player is a young AnonPony (world/life/player_form.gd), so a
 ## human's prompt is unchanged.
 const YOUNG_HELP := " Anon is a foal (a filly or colt), so there is no romance with Anon: no dates, dating, courtship, moving in, engagement, marriage, kisses or flank smacks, and never [kiss_player]."
@@ -61,7 +61,8 @@ func ladder(id: String) -> Dictionary:
 		"romance": bonds.adults.has(id) and bonds.eligible_for_romance(id),
 		"stallion": identity != null and bool(identity.get("stallion")),
 		"turned_down": bonds.offer_on_cooldown(id, "dating") and str(r.stage) in ["friend", "close_friend"],
-		"together_s": float(r.get("together_s", 0.0)), "ready_s": bonds.READY_TOGETHER_S})
+		"together_s": float(r.get("together_s", 0.0)), "ready_s": bonds.READY_TOGETHER_S,
+		"can_ask": bonds.eligible(id, "dating")})
 
 ## A level reached is announced once: she learns it as a world event, and if she is loaded, hearts
 ## and the new level's name rise over her head. The first look at a pony (and every drop, such as
@@ -158,6 +159,9 @@ func stage(id: String, action: Dictionary, turn: int, executor: Node = null) -> 
 		row.answer_source = utterance.duplicate(true)
 		row.offer_id = str(pending.get("id", ""))
 		row.answer_bound = pending.get("by") == "player" and action.get("offer_id") == row.offer_id and utterance.get("offer_id") == row.offer_id
+	if action.get("type") == "agreed":
+		# Bound to the player's line she is answering; a later or ambient turn cannot commit it.
+		row.answer_source = (_player_utterances.get(id, {}) as Dictionary).duplicate(true)
 	_staged[id] = row
 
 func finish_spoken(id: String, turn: int) -> void:
@@ -189,6 +193,9 @@ func finish_spoken(id: String, turn: int) -> void:
 		var source: Dictionary = _player_utterances.get(id, {})
 		var captured: Dictionary = row.get("answer_source", {})
 		committed = bool(row.get("answer_bound", false)) and not captured.is_empty() and source == captured and bonds.pending(id).get("id") == row.offer_id and bonds.answer(id,a.offer_id,"pony",a.accept)
+	elif a.type == "agreed":
+		var captured: Dictionary = row.get("answer_source", {})
+		committed = not captured.is_empty() and _player_utterances.get(id, {}) == captured and bonds.agree(id, str(a.kind), _home_for_offer(id) if a.kind == "move_in" else "")
 	var executor: Node=row.executor.get_ref() if row.get("executor")!=null else null
 	if is_instance_valid(executor): executor._report(a,"completed" if committed else "failed","Spoken agreement committed" if committed else "Offer expired or eligibility changed")
 

@@ -207,8 +207,7 @@ func set_open(value: bool) -> void:
 		display.look_at(camera.global_position, Vector3.UP, true)
 		map.update_ponies(camera,true)
 		_update_location()
-		if map.zoom_locked: map.follow()
-		else: map.frame_world()
+		map.frame_player()
 		viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	else:
 		map.cursor = Vector2(-1, -1); map.hovered_id = ""
