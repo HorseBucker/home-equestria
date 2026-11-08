@@ -1,0 +1,12 @@
+{
+	"id": "watch_party",
+	"name": "Watch Party",
+	"version": "1.0.0",
+	"author": "HorseBucker",
+	"description": "Watch TV and browse the web! Invite a pony over and she sits down and watches with you.\nFind the TVs for free in the Everfree, or wait for somepony else to find them and put them up for sale in the market.\nNeeds ffmpeg for videos and gdCEF for the browser: see Settings → Watch Party → Setup.",
+	"game_version": "0.3.0-maredev",
+	"entry": "res://mods/watch_party/main.gd",
+	"extends": [
+		"res://mods/watch_party/boot.gd"
+	]
+}
