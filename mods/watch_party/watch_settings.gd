@@ -61,6 +61,10 @@ var browser_fps := 30
 var browser_scale := 100
 var browser_pause_hidden := false
 var browser_restore := true
+## Subtitles read with OCR for the ponies (picture_subs.gd, Settings → Watch Party): a film's picture
+## subtitle track when it has no text one, and, when there is no track to read, the picture itself.
+var ocr_tracks := true
+var ocr_live := true
 ## The setup panel opened by itself once already (main.gd after_power_up).
 var setup_shown := false
 var resume: Dictionary = {}          # absolute file path -> seconds
@@ -106,6 +110,8 @@ func open(data_folder: String) -> void:
 	browser_pause_hidden = bool(doc.get("browser_pause_hidden", false))
 	browser_restore = bool(doc.get("browser_restore", true))
 	setup_shown = bool(doc.get("setup_shown", false))
+	ocr_tracks = bool(doc.get("ocr_tracks", true))
+	ocr_live = bool(doc.get("ocr_live", true))
 	browser_tabs.clear()
 	var tabs: Variant = doc.get("browser_tabs", [])
 	if tabs is Array:
@@ -137,7 +143,7 @@ func save() -> void:
 	var file := FileAccess.open(folder.path_join(FILE), FileAccess.WRITE)
 	if file == null: return
 	file.store_string(JSON.stringify({"version": 1, "folders": Array(folders), "ffmpeg": ffmpeg_path, "volume_db": volume_db, "crt": crt, "fill": fill, "pace": pace, "slides_folder": slides_folder, "slides_seconds": slides_seconds, "slides_when_idle": slides_when_idle,
-		"browser_home": browser_home, "browser_folder": browser_folder, "web_ponies": web_ponies, "browser_zoom": browser_zoom, "pick_folder": pick_folder, "save_folder": save_folder, "browser_tabs": browser_tabs, "browser_tab": browser_tab, "last_on": last_on, "skip_quest": skip_quest, "room_light": room_light, "browser_fps": browser_fps, "browser_scale": browser_scale, "browser_pause_hidden": browser_pause_hidden, "browser_restore": browser_restore, "setup_shown": setup_shown, "vision": vision, "vision_usage": vision_usage, "resume": resume, "tracks": tracks}, "\t"))
+		"browser_home": browser_home, "browser_folder": browser_folder, "web_ponies": web_ponies, "browser_zoom": browser_zoom, "pick_folder": pick_folder, "save_folder": save_folder, "browser_tabs": browser_tabs, "browser_tab": browser_tab, "last_on": last_on, "skip_quest": skip_quest, "room_light": room_light, "browser_fps": browser_fps, "browser_scale": browser_scale, "browser_pause_hidden": browser_pause_hidden, "browser_restore": browser_restore, "setup_shown": setup_shown, "ocr_tracks": ocr_tracks, "ocr_live": ocr_live, "vision": vision, "vision_usage": vision_usage, "resume": resume, "tracks": tracks}, "\t"))
 	file.close()
 
 func add_folder(path: String) -> void:

@@ -109,18 +109,26 @@ gone.
   reach one) and sits on a couch or lies down in front of it.
 - While she watches, she remarks on what's on now and then. Set how often in the TV menu or
   Settings → Watch Party (Chatty, Normal, Relaxed, Quiet or Silent).
-- She follows a film through its **text subtitles**, even if they're switched off on screen.
-  Without them she only knows the title. A `.srt` file named like the video, in the same folder,
-  fixes that.
+- She follows a film through its **subtitles**, even if they're switched off on screen (see
+  Subtitles below). Without any she only knows the title.
 - She only knows what she actually watched with you, so no spoilers.
 - She gets up when the watching is over, when you leave, or when the TV stays off.
 
 ## Subtitles
 
 Subtitle tracks inside the video, and `.srt`, `.ass`, `.ssa` or `.vtt` files in the same folder
-named like the video (`Movie.mkv` and `Movie.srt`, or `Movie.en.srt`). Picture subtitles (Blu-ray,
-DVD) show on screen, but ponies can't read them. Free subtitle files: OpenSubtitles.com or
-Podnapisi.net. Pick one made for your copy so the timing matches.
+named like the video (`Movie.mkv` and `Movie.srt`, or `Movie.en.srt`). Free subtitle files:
+OpenSubtitles.com or Podnapisi.net. Pick one made for your copy so the timing matches.
+
+**No subtitle file? Ponies can still follow.** Blu-ray and DVD subtitles are pictures, not text, so
+the mod reads them with OCR in the background, a little ahead of where you are. Each video is only
+read once: the result is kept for next time. The TV menu's "They follow" line shows how far it
+has got. A video with no subtitle track at all has its picture checked every 2 seconds for
+subtitles burned into it (less accurate). Both can be switched off in Settings → Watch Party.
+
+- **Windows:** uses Windows' own OCR, through the PowerShell that comes with Windows. Nothing to
+  install.
+- **Linux:** install Tesseract with your package manager (`tesseract-ocr`, with its English data).
 
 ## Pony vision (optional)
 

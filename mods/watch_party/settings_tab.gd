@@ -36,7 +36,11 @@ const SCALES := [[100, "Full"], [75, "75%"]]
 ## What ponies need to follow a film's words (dev 2026-11-07: say what is needed, where the file
 ## goes and where to find one). tv_set.gd best_pony_choice: a text track, English first, a file
 ## beside the video before one inside it, whether or not it is shown on the screen.
-const SUBTITLE_NOTE := "Ponies follow what is said in a video through its subtitles, even when they're not shown on the screen. They need text subtitles: ones inside the video file, or a subtitle file (.srt, .ass, .ssa or .vtt) in the same folder as the video, named like it: Movie.mkv and Movie.srt (or Movie.en.srt). Picture subtitles from Blu-rays and DVDs show on the screen, but ponies can't read them. Free subtitle files: OpenSubtitles.com or Podnapisi.net; pick one made for your copy of the video so the timing matches. Without subtitles, ponies know only the video's name."
+const SUBTITLE_NOTE := "Ponies follow what is said in a video through its subtitles, even when they're not shown on the screen. Best are text subtitles: ones inside the video file, or a subtitle file (.srt, .ass, .ssa or .vtt) in the same folder as the video, named like it: Movie.mkv and Movie.srt (or Movie.en.srt). A video with only picture subtitles (Blu-ray, DVD) has them read with OCR instead, and one with none at all has its picture checked for subtitles (the two switches below). Without subtitles, ponies know only the video's name."
+## The OCR switches (picture_subs.gd; dev 2026-11-08: Blu-ray subtitles are pictures, and finding a
+## matching .srt is a chore).
+const OCR_TRACKS_NOTE := "When a video has no text subtitles but has picture ones (Blu-ray, DVD), they're read with OCR in the background, so ponies can follow. Read once per video and kept for next time. Windows: built in. Linux: needs Tesseract."
+const OCR_LIVE_NOTE := "When a video has no subtitle track to read, the picture is checked every 2 seconds for subtitles burned into it. Less accurate: now and then a sign or the credits may be read as a line."
 ## Why removing the mod needs this first (finds.gd remove_all).
 const UNINSTALL_NOTE := "If you remove the mod while a TV or remote is in your briefcase or set up anywhere, the game sets your whole briefcase aside, bits and all. Press this first in every world you played with the mod: every TV and remote is removed for good. Then quit the game and delete watch_party.pck."
 ## The colour of a status line saying a download was found (dev 2026-11-07: green, not red).
@@ -133,6 +137,8 @@ func _build(page: Node) -> void:
 	_folder_rows(entry, list)
 	_ffmpeg_rows(entry, list)
 	_card(entry, list, "Subtitles for the ponies", SUBTITLE_NOTE)
+	_switch(entry, list, "Read picture subtitles", "ocr_tracks", OCR_TRACKS_NOTE)
+	_switch(entry, list, "Read subtitles in the picture", "ocr_live", OCR_LIVE_NOTE)
 	_pills(entry, list, "Picture", "fill", SHAPES, "Fit shows the whole picture, with black bars on a wide film. Fill fills the screen and cuts off a wide film's sides.")
 	_switch(entry, list, "CRT look", "crt", "Scanlines and a curved tube on the vintage set.")
 	_heading(entry, list, "Photo slideshow")
@@ -255,6 +261,12 @@ func _choose(entry: Dictionary, key: String, value: Variant) -> void:
 		settings.save()
 	elif key == "pace" and is_instance_valid(company):
 		(company as Node).call("set_pace", str(value))   # saves, and the next remark follows the new pace
+	elif key in ["ocr_tracks", "ocr_live"]:
+		# A video playing now is read (or no longer read) at once.
+		settings.set(key, value)
+		settings.save()
+		for tv: Node in get_tree().get_nodes_in_group("watch_tvs"):
+			if str(tv.get("source")) == "video" and tv.has_method("_restart_subtitles"): tv.call("_restart_subtitles")
 	elif key in ["fill", "crt"]:
 		# Saved, and every set changes now (playtest 2026-11-07: Fit and Fill here seemed to do
 		# nothing: a playing video kept its shape until it was started again).
