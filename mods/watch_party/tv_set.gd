@@ -22,7 +22,8 @@ extends Node3D
 ## the room is lit by the set; the power light glows while something is on.
 ## Ponies watching along (watch_company.gd) read the subtitles through heard() and talking_now():
 ## the shown track when it is text, otherwise the best text track, read in the background even with
-## subtitles off on the screen. Picture-only subtitles leave them the title alone. On a web page
+## subtitles off on the screen. Without a text track, a picture track (Blu-ray, DVD) is read with
+## OCR, or else the picture itself (picture_subs.gd, _start_ocr). On a web page
 ## they get the pages opened instead, and only as far as the player lets them (settings web_ponies:
 ## "none", "words" = the page's title, address and some text, YouTube captions; "pictures" = also
 ## the page itself through pony vision).
@@ -37,6 +38,8 @@ const COMMON := preload("res://mods/watch_party/screen_common.gd")
 const PLAYER := preload("res://mods/watch_party/media_player.gd")
 const TOOLS := preload("res://mods/watch_party/ffmpeg_tools.gd")
 const SUBTITLES := preload("res://mods/watch_party/subtitles.gd")
+## Subtitles read with OCR, for a film the ponies could not follow otherwise.
+const PICTURE_SUBS := preload("res://mods/watch_party/picture_subs.gd")
 const SLIDES := preload("res://mods/watch_party/slideshow.gd")
 const WEB := preload("res://mods/watch_party/web_view.gd")
 const HUB := "/root/Mods/watch_party"
@@ -145,6 +148,9 @@ var _web_sample := 0.0
 var _web_session := 0
 ## The ponies' own subtitle reader (when the shown track is not text) and what they read.
 var pony_lines := SUBTITLES.new()
+## No text subtitles: a picture track, or the picture itself, read with OCR (_start_ocr).
+var pony_ocr := PICTURE_SUBS.new()
+var _live_clock := 0.0
 var _pony_shared := false
 var pony_track := ""
 ## Where a watching pony looks: the middle of the screen.
@@ -226,6 +232,7 @@ func _process(delta: float) -> void:
 	_update_idle(delta)
 	_update_caption()
 	_update_subtitle()
+	_update_ocr(delta)
 	_update_glow(delta)
 	_update_power_light()
 
@@ -236,6 +243,7 @@ func _exit_tree() -> void:
 	_finish_moving_probe()
 	subtitles.stop()
 	pony_lines.stop()
+	pony_ocr.stop()
 
 ## Placed in a house: frozen, solid on layer 1, and furnished in its briefcase loan.
 func _placed() -> bool:
@@ -585,6 +593,7 @@ func _deactivate() -> void:
 	if hub_node != null and hub_node.has_method("tv_gone"): hub_node.tv_gone(self)
 	subtitles.stop()
 	pony_lines.stop()
+	pony_ocr.stop()
 	_close_web()
 	# Only queue_free: this also runs from _exit_tree, when the tree is busy removing us.
 	if is_instance_valid(player): player.stop()
@@ -757,6 +766,7 @@ func stop() -> void:
 	player.stop()
 	subtitles.stop()
 	pony_lines.stop()
+	pony_ocr.stop()
 	if is_instance_valid(slides): slides.stop()
 	_moving = ""
 	_close_web()
@@ -1094,13 +1104,93 @@ func _restart_subtitles() -> void:
 ## on its own from `at` (nothing when the file has picture subtitles only).
 func _restart_pony_lines(ffmpeg: String, at: float) -> void:
 	pony_lines.stop()
+	pony_ocr.stop()
 	_pony_shared = str(subtitles.choice.get("kind", "off")) == "text"
 	pony_track = str(subtitles.choice.get("label", "")) if _pony_shared else ""
 	if _pony_shared or current.is_empty(): return
-	var best := best_pony_choice(subtitle_choices())
-	if best.is_empty(): return
+	var rows := subtitle_choices()
+	var best := best_pony_choice(rows)
+	if best.is_empty():
+		_start_ocr(ffmpeg, rows, at)
+		return
 	pony_track = str(best.get("label", ""))
 	if not ffmpeg.is_empty(): pony_lines.start(ffmpeg, current, best, at)
+
+## No text subtitles: the best picture track is read with OCR (Settings → Watch Party "Read picture
+## subtitles"), else the picture itself ("Read subtitles in the picture"; also a picture track
+## shown on the screen when the first is off). Neither without an OCR engine (main.gd ocr).
+func _start_ocr(ffmpeg: String, rows: Array, at: float) -> void:
+	var hub_node := hub()
+	var settings: RefCounted = _settings()
+	var ocr: Variant = hub_node.get("ocr") if hub_node != null else null
+	if not ocr is RefCounted or settings == null or ffmpeg.is_empty() or str((ocr as RefCounted).get("state")) == "missing": return
+	var picture := best_picture_choice(rows)
+	if not picture.is_empty() and bool(settings.ocr_tracks):
+		pony_ocr.start_track(ffmpeg, current, picture, info, at, ocr, Mods.data_folder("watch_party"))
+		pony_track = str(picture.get("label", "")).replace(" · (picture)", "").replace("(picture)", "").strip_edges() + " picture subtitles, read with OCR"
+	elif bool(settings.ocr_live) and bool(info.get("video", true)):
+		pony_ocr.start_live(ocr, Mods.data_folder("watch_party"))
+		_live_clock = 1.0
+
+## The picture subtitle track to read with OCR: English first, a full track (not "forced").
+static func best_picture_choice(rows: Array) -> Dictionary:
+	var best: Dictionary = {}
+	var best_score := -100
+	for row: Dictionary in rows:
+		if str(row.get("kind", "")) != "picture": continue
+		var label := str(row.get("label", "")).to_lower()
+		var score := (4 if "english" in label else 0) - (6 if "forced" in label else 0)
+		if score > best_score:
+			best_score = score
+			best = row
+	return best
+
+## Each frame: the OCR reader hears where playback is; the live way is offered the decoded frame on
+## the screen every LIVE_EVERY seconds (never the camera's view). Once it has read a line, the
+## ponies count as following the film.
+func _update_ocr(delta: float) -> void:
+	if pony_ocr.mode.is_empty() or source != "video" or not is_instance_valid(player): return
+	var at := float(player.position())
+	pony_ocr.set_playhead(at)
+	# The track could not be drawn at all (ffmpeg's error): the ponies know only the title after all.
+	if pony_ocr.mode == "track" and not pony_ocr.problem.is_empty() and not pony_track.is_empty() and not pony_ocr.found_any(): pony_track = ""
+	if pony_ocr.mode != "live" or player.state != "playing": return
+	_live_clock -= delta
+	if _live_clock > 0.0: return
+	_live_clock = PICTURE_SUBS.LIVE_EVERY
+	var frame: Image = player.picture_now()
+	if frame != null: pony_ocr.offer(frame, at, _film_rect(frame.get_size()))
+	if pony_track.is_empty() and pony_ocr.found_any(): pony_track = "subtitles in the picture, read with OCR"
+
+## Where the film is in a decoded frame: all of it with Fill, else fitted inside black bars
+## (media_player.gd _video_arguments scales by the stored size, as here).
+func _film_rect(size: Vector2i) -> Rect2i:
+	var film := Vector2(float(info.get("width", 0)), float(info.get("height", 0)))
+	if film.x <= 0.0 or film.y <= 0.0 or bool(player.fill): return Rect2i(Vector2i.ZERO, size)
+	var fit := minf(size.x / film.x, size.y / film.y)
+	var shown := Vector2i(int(film.x * fit), int(film.y * fit))
+	return Rect2i((size - shown) / 2, shown)
+
+## The TV menu's word on the OCR ("" when it is not in use).
+func ocr_note() -> String:
+	if source != "video" or current.is_empty(): return ""
+	if pony_ocr.mode == "track":
+		if not pony_ocr.problem.is_empty() and not pony_ocr.found_any(): return "The picture subtitles could not be read (%s)." % pony_ocr.problem
+		return "all read" if pony_ocr.progress >= 0.99 else "%d%% read so far, ahead of where you are" % int(pony_ocr.progress * 100.0)
+	if pony_ocr.mode == "live": return "Looking for subtitles in the picture with OCR every 2 seconds."
+	if _pony_shared or not pony_track.is_empty(): return ""
+	var rows := subtitle_choices()
+	if best_picture_choice(rows).is_empty(): return ""
+	var hub_node := hub()
+	var ocr: Variant = hub_node.get("ocr") if hub_node != null else null
+	if ocr is RefCounted and str((ocr as RefCounted).get("state")) == "missing":
+		return "Only its title: its subtitles are pictures, and there is no OCR to read them. " + str((ocr as RefCounted).get("problem"))
+	return ""
+
+## Who the ponies read: the shown text track, else their own text reader, else the OCR.
+func _pony_reader() -> RefCounted:
+	if _pony_shared: return subtitles
+	return pony_ocr if not pony_ocr.mode.is_empty() else pony_lines
 
 ## The text subtitle choice ponies follow best: English, a full track (not "forced"), a file
 ## beside the video before one inside it. {} when there is no text subtitle at all.
@@ -1131,13 +1221,13 @@ func heard(from: float, to: float) -> Array:
 				if float(row[0]) >= from and float(row[0]) <= to: pages.append(row)
 		return pages
 	if source != "video": return []
-	return (subtitles if _pony_shared else pony_lines).lines_between(from, to)
+	return _pony_reader().lines_between(from, to)
 
 ## Somebody in the video is talking right now (a subtitle line is up).
 func talking_now() -> bool:
 	if source == "web" and is_instance_valid(web): return bool(web.call("tube_talking"))
 	if source != "video" or not is_instance_valid(player): return false
-	return not (subtitles if _pony_shared else pony_lines).text_at(float(player.position())).is_empty()
+	return not _pony_reader().text_at(float(player.position())).is_empty()
 
 ## Video seconds of the latest cut in the picture (-1 when none since it started playing).
 func last_cut() -> float:
@@ -1196,6 +1286,7 @@ func play_file(path: String, at := -1.0) -> void:
 	_finish_probe()
 	subtitles.stop()
 	pony_lines.stop()
+	pony_ocr.stop()
 	_probe_for = path; _probe_at = at
 	current = path
 	_remember_on("video")
@@ -1408,6 +1499,7 @@ func _on_finished() -> void:
 		settings.save()
 	subtitles.stop()
 	pony_lines.stop()
+	pony_ocr.stop()
 	source = ""
 	_power_off(true)
 	if is_instance_valid(player) and not str(player.error).is_empty(): _note("Could not play: " + str(player.error))

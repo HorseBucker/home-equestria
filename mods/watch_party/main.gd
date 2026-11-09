@@ -32,6 +32,9 @@ const SETUP_DELAY := 6.0
 const EXTENSIONS := preload("res://mods/watch_party/ext_loader.gd")
 const WEB := preload("res://mods/watch_party/web_engine.gd")
 const CATALOG := preload("res://mods/watch_party/catalog.gd")
+## Reads subtitles off pictures (picture_subs.gd): Windows' own OCR, or Tesseract.
+const OCR := preload("res://mods/watch_party/ocr_engine.gd")
+const OCR_TIDY_SECONDS := 10.0
 const ID := "watch_party"
 
 var settings: RefCounted
@@ -50,6 +53,10 @@ var blast: Node
 var settings_tab: Node
 var welcome: Node
 var _setup: CanvasLayer
+## The OCR every set shares (ocr_engine.gd); checked on a worker thread at start (check_ocr).
+var ocr: RefCounted
+var _ocr_check: Thread
+var _ocr_tidy := OCR_TIDY_SECONDS
 
 ## The Mods autoload makes this node before the title screen, ahead of every game script the
 ## extensions change (ext_loader.gd).
@@ -73,6 +80,8 @@ func _ready() -> void:
 	settings_tab = _part(SETTINGS_TAB, "SettingsTab")
 	welcome = _part(WELCOME, "Welcome")
 	find_ffmpeg()
+	ocr = OCR.new()
+	check_ocr()
 	Mods.world_ready.connect(_on_world)
 	Mods.world_closed.connect(_on_world_closed)
 	if is_instance_valid(Mods.game): _on_world(Mods.game)
@@ -96,6 +105,8 @@ func _exit_tree() -> void:
 	for tv: Node in get_tree().get_nodes_in_group("watch_tvs"):
 		if tv.has_method("stop"): tv.stop()
 	if _search != null and _search.is_started(): _search.wait_to_finish()
+	if _ocr_check != null and _ocr_check.is_started(): _ocr_check.wait_to_finish()
+	if ocr != null: ocr.call("close")
 
 func _on_world(game: Node) -> void:
 	CATALOG.paint_icons()
@@ -134,6 +145,23 @@ func _found(found: String) -> void:
 	_searching = false
 	ffmpeg = found
 	print("[watch_party] ffmpeg: ", found if not found.is_empty() else "not found")
+
+## Looks for an OCR engine on a worker thread (Windows: starts its OCR once through PowerShell).
+func check_ocr() -> void:
+	if _ocr_check != null:
+		if _ocr_check.is_alive(): return
+		_ocr_check.wait_to_finish()
+	_ocr_check = Thread.new()
+	_ocr_check.start(func() -> void:
+		ocr.call("check")
+		print("[watch_party] OCR: ", str(ocr.get("engine")) if str(ocr.get("state")) == "ready" else "none (%s)" % str(ocr.get("problem"))))
+
+## Now and then: an idle OCR process is closed.
+func _process(delta: float) -> void:
+	_ocr_tidy -= delta
+	if _ocr_tidy > 0.0: return
+	_ocr_tidy = OCR_TIDY_SECONDS
+	if ocr != null and (_ocr_check == null or not _ocr_check.is_alive()): ocr.call("tidy")
 
 ## Why the TV cannot play yet, or "" when it can.
 func ffmpeg_note() -> String:

@@ -93,6 +93,13 @@ const DUCK_DB := -10.0
 const DUCK_RANGE := 9.0
 const DUCK_DOWN_PER_SECOND := 40.0
 const DUCK_UP_PER_SECOND := 12.0
+## Ponese from a pony watching along is this much softer while the set has sound on (dev
+## 2026-11-09: "a bit loud, can make hearing the film difficult"). TTS voices keep their level.
+## The game caps Ponese close up (openpony_mare.gd PONESE_MAX_DB, 0 dB), so the cap is lowered too:
+## within a few metres she would otherwise still reach it.
+const PONESE_SOFTER_DB := -4.0
+const GAME_PONESE_MAX_DB := 0.0
+const AUDIO_MIX := preload("res://world/audio/audio_mix.gd")
 const TICK := 0.25
 ## After the player speaks, the next remark waits this share of a full pace wait.
 const AFTER_PLAYER := 0.6
@@ -136,6 +143,10 @@ var last_picture: Dictionary = {}
 var vision: Node
 var _tick := 0.0
 var _duck: Dictionary = {}   # tv instance id -> current dB
+## Voices made softer now (PONESE_SOFTER_DB): instance id -> WeakRef to the AudioStreamPlayer3D.
+var _softened: Dictionary = {}
+var _voices: Dictionary = {}   # pony id -> WeakRef to her "Voice" player, or null: none found
+var _voice_clock := 0.0
 var _director: Node
 var _rng := RandomNumberGenerator.new()
 
@@ -213,9 +224,14 @@ func _player_spoke(_text: String) -> void:
 func _process(delta: float) -> void:
 	_clock += delta
 	_update_duck(delta)
+	_soften_ponese()
 	_tick -= delta
 	if _tick > 0.0: return
 	_tick = TICK
+	_voice_clock -= TICK
+	if _voice_clock <= 0.0:
+		_voice_clock = 5.0
+		_voices.clear()
 	var director := _director_node()
 	for id: String in watchers.keys():
 		var row: Dictionary = watchers[id]
@@ -828,6 +844,41 @@ func _update_duck(delta: float) -> void:
 		now = move_toward(now, target, delta * (DUCK_DOWN_PER_SECOND if target < now else DUCK_UP_PER_SECOND))
 		_duck[key] = now
 		tv.call("set_duck", now)
+
+## Every frame: each watcher's voice, while it is routed to the game's Ponese bus and her set has
+## sound on, gets PONESE_SOFTER_DB; any other voice softened before is put back. Per frame because
+## the game sets the voice's bus and cap afresh at the start of every line (_route_voice).
+func _soften_ponese() -> void:
+	var soft := {}
+	for id: String in watchers:
+		var row: Dictionary = watchers[id]
+		var actor := (row.actor as WeakRef).get_ref() as Node
+		var tv := (row.tv as WeakRef).get_ref() as Node
+		if actor == null or tv == null: continue
+		if not str((tv.call("status") as Dictionary).get("state", "")) in ["playing", "private"]: continue
+		var voice := _voice_of(id, actor)
+		if voice == null or voice.bus != AUDIO_MIX.PONESE_BUS: continue
+		voice.volume_db = PONESE_SOFTER_DB
+		voice.max_db = GAME_PONESE_MAX_DB + PONESE_SOFTER_DB
+		soft[voice.get_instance_id()] = weakref(voice)
+	for key: int in _softened:
+		if soft.has(key): continue
+		var voice := (_softened[key] as WeakRef).get_ref() as AudioStreamPlayer3D
+		if voice == null: continue
+		voice.volume_db = 0.0
+		if voice.bus == AUDIO_MIX.PONESE_BUS: voice.max_db = GAME_PONESE_MAX_DB
+	_softened = soft
+
+## Her speech player (openpony_mare.gd makes an AudioStreamPlayer3D named "Voice" on her head).
+func _voice_of(id: String, actor: Node) -> AudioStreamPlayer3D:
+	# A pony with no such player (null kept) is looked for again only after the cache clears.
+	if _voices.has(id):
+		var known: AudioStreamPlayer3D = null
+		if _voices[id] is WeakRef: known = (_voices[id] as WeakRef).get_ref() as AudioStreamPlayer3D
+		if known == null or actor.is_ancestor_of(known): return known
+	var found := actor.find_child("Voice", true, false) as AudioStreamPlayer3D
+	_voices[id] = weakref(found) if found != null else null
+	return found
 
 ## A pony near the set is speaking with a real (TTS) voice.
 func _voice_near(tv: Node3D) -> bool:

@@ -459,7 +459,8 @@ func _pace_chosen(index: int) -> void:
 	var company: Variant = hub.get("company")
 	if is_instance_valid(company): (company as Node).call("set_pace", COMPANY.PACE_ORDER[index])
 
-## Whether ponies can follow what is on: they read text subtitles, never picture ones; on the web,
+## Whether ponies can follow what is on: they read text subtitles, or picture ones (or the picture)
+## with OCR (tv_set.gd ocr_note); on the web,
 ## a YouTube video's captions, else the pages and a little of their words (when they may see).
 func _show_follows(status: Dictionary) -> void:
 	var mode := str(status.get("mode", ""))
@@ -474,12 +475,14 @@ func _show_follows(status: Dictionary) -> void:
 	if str(status.path).is_empty() or str(status.state) in ["idle", "tuning"]:
 		_follows.text = "Play something to see whether ponies can follow it."
 		_follows.theme_type_variation = "Faint"
-	elif str(tv.get("pony_track")).is_empty():
-		_follows.text = "Only its title: it has no text subtitles. A .srt file with the same name beside it fixes that."
-		_follows.theme_type_variation = "Warn"
 	else:
-		_follows.text = "Yes, they read the subtitles: " + str(tv.get("pony_track"))
-		_follows.theme_type_variation = "Muted"
+		var ocr := str(tv.call("ocr_note")) if tv.has_method("ocr_note") else ""
+		if str(tv.get("pony_track")).is_empty():
+			_follows.text = ocr if not ocr.is_empty() else "Only its title: it has no text subtitles. A .srt file with the same name beside it fixes that."
+			_follows.theme_type_variation = "Muted" if ocr.begins_with("Looking") else "Warn"
+		else:
+			_follows.text = "Yes, they read the subtitles: " + str(tv.get("pony_track")) + ((" (" + ocr + ")") if not ocr.is_empty() and not ocr.begins_with("Looking") else "")
+			_follows.theme_type_variation = "Muted"
 
 func _shape_chosen(fill: bool) -> void:
 	_tv_call("set_fill", [fill])

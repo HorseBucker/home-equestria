@@ -52,7 +52,8 @@ static func ffprobe_for(ffmpeg: String) -> String:
 	if ffmpeg == "ffmpeg" or ffmpeg.get_base_dir().is_empty(): return "ffprobe"
 	return ffmpeg.get_base_dir().path_join(executable("ffprobe"))
 
-## {ok, duration, video, audio: [{track, language, title}], subtitles: [{track, language, title}], error}.
+## {ok, duration, video, width, height (the first picture's), audio: [{track, language, title}],
+## subtitles: [{track, language, title, codec, width, height (a picture track's canvas)}], error}.
 ## Without ffprobe the file is assumed to have a picture and sound of unknown length.
 static func probe(ffprobe: String, file: String) -> Dictionary:
 	var info := {"ok": true, "hdr": false, "duration": 0.0, "video": true, "audio": [{"track": 0, "language": "", "title": ""}], "subtitles": [], "error": ""}
@@ -78,10 +79,13 @@ static func probe(ffprobe: String, file: String) -> Dictionary:
 			var kind := str(row.get("codec_type", ""))
 			var disposition: Dictionary = row.get("disposition", {}) if row.get("disposition") is Dictionary else {}
 			if kind == "video" and int(disposition.get("attached_pic", 0)) == 0:
-				if not video: info.hdr = str(row.get("color_transfer", "")) in ["smpte2084", "arib-std-b67"]
+				if not video:
+					info.hdr = str(row.get("color_transfer", "")) in ["smpte2084", "arib-std-b67"]
+					info.width = int(row.get("width", 0)); info.height = int(row.get("height", 0))
 				video = true
 			elif kind == "audio": audio.append({"track": audio.size(), "language": str(tags.get("language", "")), "title": str(tags.get("title", ""))})
-			elif kind == "subtitle": subtitles.append({"track": subtitles.size(), "language": str(tags.get("language", "")), "title": str(tags.get("title", "")), "codec": str(row.get("codec_name", ""))})
+			elif kind == "subtitle": subtitles.append({"track": subtitles.size(), "language": str(tags.get("language", "")), "title": str(tags.get("title", "")), "codec": str(row.get("codec_name", "")),
+					"width": int(row.get("width", 0)), "height": int(row.get("height", 0))})
 	info.video = video
 	info.audio = audio
 	info.subtitles = subtitles

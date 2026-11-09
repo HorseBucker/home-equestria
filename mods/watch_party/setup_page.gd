@@ -6,6 +6,7 @@ extends VBoxContainer
 ## - ffmpeg plays the videos (ffmpeg_tools.gd looks in the game folder, also in an unzipped
 ##   "ffmpeg..." folder there, and in the mod's data folder).
 ## - gdCEF runs the web browser, optional (web_engine.gd: its cef_artifacts folder in the game folder).
+## - OCR reads picture subtitles for the ponies (ocr_engine.gd): built into Windows; Tesseract on Linux.
 
 const FFMPEG_PAGE := "https://www.gyan.dev/ffmpeg/builds/"
 const GDCEF_PAGE := "https://github.com/Lecrapouille/gdcef/releases/tag/v0.20.0-godot4"
@@ -13,6 +14,7 @@ const GDCEF_PAGE := "https://github.com/Lecrapouille/gdcef/releases/tag/v0.20.0-
 var hub: Node
 var _ffmpeg: Label
 var _browser: Label
+var _ocr: Label
 var _skip: CheckButton
 ## The magic's section (Settings → Watch Party has its own row for it, so it leaves it out).
 var show_magic := true
@@ -38,6 +40,13 @@ func _ready() -> void:
 	add_child(_browser)
 	add_child(_text("Only needed for the browser on the screen. On the download page get gdcef-0.20.0_godot-4.5.zip (about 1 GB; newer versions will not load in this game). Unzip it and put its cef_artifacts folder in the game folder."))
 	add_child(_row([_button("Open download page", _open.bind(GDCEF_PAGE)), _button("Open game folder", _open_game_folder), _button("Check again", _check_browser)]))
+	add_child(_label("Picture subtitles: OCR", "Subheading"))
+	_ocr = _label("")
+	_ocr.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	add_child(_ocr)
+	if OS.get_name() == "Windows": add_child(_text("Reads Blu-ray and DVD subtitles so ponies can follow films without a subtitle file. Built into Windows: nothing to download."))
+	else: add_child(_text("Reads Blu-ray and DVD subtitles so ponies can follow films without a subtitle file. Install Tesseract with your package manager (tesseract-ocr, with its English data), then press Check again."))
+	add_child(_row([_button("Check again", _check_ocr)]))
 	_skip = CheckButton.new()
 	_skip.text = "Ozone-powered TVs"
 	_skip.toggled.connect(_skip_toggled)
@@ -100,7 +109,13 @@ func _show_status() -> void:
 	_browser.text = "Not found: the browser will not open." if folder.is_empty() else "Found: " + folder
 	_ffmpeg.theme_type_variation = "Warn" if ffmpeg.is_empty() and not bool(hub.get("_searching")) else ""
 	_browser.theme_type_variation = "Warn" if folder.is_empty() else ""
-	for pair: Array in [[_ffmpeg, not ffmpeg.is_empty()], [_browser, not folder.is_empty()]]:
+	var ocr: Variant = hub.get("ocr")
+	var ocr_state := str((ocr as RefCounted).get("state")) if ocr is RefCounted else "missing"
+	if ocr_state == "ready": _ocr.text = "Found: " + str((ocr as RefCounted).get("engine"))
+	elif ocr_state == "unknown": _ocr.text = "Checking…"
+	else: _ocr.text = "Not found: " + str((ocr as RefCounted).get("problem") if ocr is RefCounted else "")
+	_ocr.theme_type_variation = "Warn" if ocr_state == "missing" else ""
+	for pair: Array in [[_ffmpeg, not ffmpeg.is_empty()], [_browser, not folder.is_empty()], [_ocr, ocr_state == "ready"]]:
 		if bool(pair[1]): (pair[0] as Label).add_theme_color_override("font_color", FOUND)
 		else: (pair[0] as Label).remove_theme_color_override("font_color")
 
@@ -117,6 +132,10 @@ func _check_ffmpeg() -> void:
 func _check_browser() -> void:
 	var web: Node = hub.get("web") as Node
 	if web != null: web.call("retry")
+	_show_status()
+
+func _check_ocr() -> void:
+	hub.call("check_ocr")
 	_show_status()
 
 func _skip_toggled(on: bool) -> void:
