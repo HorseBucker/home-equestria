@@ -2,10 +2,10 @@ extends "res://world/ai/speech_vocabulary.gd"
 ## Watch Party: the speech recognizer's word list also names what is on a television near Anon (its
 ## title and the names said in it lately, res://mods/watch_party/watch_company.gd speech_words),
 ## after the places and the core cast and before the ponies nearest him (Whisper keeps the end).
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
 
 const WATCH_PARTY_PATH := "res://world/ai/speech_vocabulary.gd"
-const WATCH_PARTY_LOADER := preload("res://mods/watch_party/ext_loader.gd")
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 const WATCH_PARTY_HUB := "Mods/watch_party"
 
 static func prompt(characters: Dictionary, head: Variant, player_name := "") -> String:

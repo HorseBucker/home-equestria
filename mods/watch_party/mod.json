@@ -1,12 +1,24 @@
 {
 	"id": "watch_party",
 	"name": "Watch Party",
-	"version": "1.1.0",
+	"version": "1.2.0",
 	"author": "HorseBucker",
 	"description": "Watch TV and browse the web! Invite a pony over and she sits down and watches with you.\nFind the TVs for free in the Everfree, or wait for somepony else to find them and put them up for sale in the market.\nNeeds ffmpeg for videos and gdCEF for the browser: see Settings → Watch Party → Setup.",
-	"game_version": "0.3.0-maredev",
+	"game_version": "0.3.1-maredev",
 	"entry": "res://mods/watch_party/main.gd",
 	"extends": [
+		"res://mods/watch_party/ext/apple_sapling.gd",
+		"res://mods/watch_party/ext/furnishing_rules.gd",
+		"res://mods/watch_party/ext/pony_intent_consistency.gd",
+		"res://mods/watch_party/ext/speech_vocabulary.gd",
+		"res://mods/watch_party/ext/pony_action_executor.gd",
+		"res://mods/watch_party/ext/home_furnishing.gd",
+		"res://mods/watch_party/ext/pony_action_schema.gd",
+		"res://mods/watch_party/ext/market.gd",
+		"res://mods/watch_party/ext/shop_world.gd",
+		"res://mods/watch_party/ext/speech_input.gd",
+		"res://mods/watch_party/ext/conversation_director.gd",
+		"res://mods/watch_party/ext/interaction_hints.gd",
 		"res://mods/watch_party/boot.gd"
 	]
 }

@@ -10,19 +10,23 @@ extends RefCounted
 ## - A set does nothing until somepony who knows magic (Twilight, Celestia, Luna or Trixie:
 ##   magic_quest.gd) has woken one of its kind; after that every set of that kind works. "Skip the
 ##   magic" (watch_settings.gd skip_quest) makes them all work at once.
-## - Trixie's spell may blow the set up (tv_blast.gd): it is gone for good (destroyed), until Anon
-##   puts it back at the market from Settings → Watch Party (respawn).
+## - Trixie's spell may blow the set up (tv_blast.gd): it is gone (destroyed).
 ## - Who saw what (seen): each pony near a set when it woke or blew up remembers it, so a helper
 ##   treats a set as "another one" only when she saw one before (dev 2026-11-06).
 ## - The remote comes free with the first television (forest_finds.gd).
-## - Only three sets ever came over from Anon's world, one of each kind: a set Anon has (found or
-##   bought) is gone from the forest and the market for good. Only the remote restocks.
-## Nothing here preloads a game script: tv_set.gd preloads this file, and main.gd loads tv_set.gd
-## before the mod's script extensions are applied (ext_loader.gd).
+## - One set of each kind is about at a time: a set Anon has (found or bought) is gone from the
+##   forest and the market. The remote always restocks.
+## - A set Anon had that is nowhere any more (blown up, or in no briefcase slot, hand, house or
+##   spot in the world and not set aside by the game: a save cleaned of the mod's goods, say) is
+##   for sale at the market again from the next 06:00 restock, at its price and asleep (dev
+##   2026-11-12; tidy_lost, respawn). Until 1.1.0 it never came back, bar a button in the settings
+##   for a blown-up one.
+## Nothing here preloads a game script: tv_set.gd preloads this file, and it may be compiled while
+## the game still boots, before every mod's extensions stand at the game paths (hooks.gd).
 ## State: {first_day, found: {id: true}, bought: {id: true}, remote_given, powered: [ids, in the
 ## order they were woken], woke_by: {id: pony}, seen: {pony: [{id, by, blew}]}, destroyed: {id:
 ## true}, market_now: {id: true}, remote_powered, spots: {id: [x, y, z]}, scorches (tv_blast.gd),
-## attempt}.
+## attempt, gone: {id: the market day it blew up or was first seen missing}}.
 
 const ID := "watch_party"
 const HUB := "/root/Mods/watch_party"
@@ -220,7 +224,36 @@ static func mark_destroyed(id: String) -> void:
 	changed()
 	print("[watch_party] story: the %s blew up; it is gone" % kind_name(id))
 
-## Settings → Watch Party: a blown-up set is for sale at the market again (ext/shop_world.gd builds
+## A set Anon had and no longer has is waiting for the next restock (tidy_lost).
+static func lost(id: String) -> bool:
+	var gone: Variant = state().get("gone")
+	return gone is Dictionary and (gone as Dictionary).has(id)
+
+## Called every second or so in a loaded world (forest_finds.gd) with the mod's goods Anon has
+## (`present`: briefcase, hands, placed, lying about, set aside by the game). A set he had that is
+## not among them, or that blew up, is noted with today's market day; from the next 06:00 restock
+## it is at the market again (respawn). One that turns up again first is simply his as before.
+static func tidy_lost(present: Array) -> void:
+	var data := state()
+	var today := market_day()
+	if data.is_empty() or today < 0: return
+	if not data.get("gone") is Dictionary: data.gone = {}
+	var gone: Dictionary = data.gone
+	for id: String in TVS:
+		if not (destroyed(id) or (had(id) and not id in present)):
+			if gone.has(id):
+				gone.erase(id)
+				changed()
+			continue
+		if not gone.has(id):
+			gone[id] = today
+			changed()
+			print("[watch_party] story: the %s is %s; another is at the market from the next morning" % [kind_name(id), "blown up" if destroyed(id) else "nowhere to be found"])
+		elif today > int(gone[id]):
+			gone.erase(id)
+			respawn(id)
+
+## A set that blew up or went missing is for sale at the market again (ext/shop_world.gd builds
 ## the stand again within a second, when its goods change), asleep until somepony wakes it again.
 static func respawn(id: String) -> void:
 	var data := state()
@@ -264,6 +297,19 @@ static func owned(inventory: Node) -> Array:
 		if not id in unique: unique.append(id)
 	return unique
 
+## The mod's goods the game has set aside (world/inventory/inventory_store.gd parked, game 0.3.1:
+## they came from a save while the mod was off, or there is no room for them yet).
+static func parked(inventory: Node) -> Array:
+	var ids: Array = []
+	var store: Variant = inventory.get("inventory") if is_instance_valid(inventory) else null
+	var rows: Variant = (store as Object).get("parked") if store is Object else null
+	if not rows is Array: return ids
+	for row: Variant in rows:
+		var entry: Variant = (row as Dictionary).get("entry") if row is Dictionary else null
+		var id := str((entry as Dictionary).get("id", "")) if entry is Dictionary else ""
+		if id.begins_with("goods:watch-tv-") and not id in ids: ids.append(id)
+	return ids
+
 ## The spot chosen in the forest for a set, or null before one was found.
 static func spot(id: String) -> Variant:
 	var spots: Variant = state().get("spots", {})
@@ -294,7 +340,7 @@ static func restart() -> void:
 	data.powered = []
 	data.remote_given = false
 	data.remote_powered = false
-	for group: String in ["seen", "woke_by", "destroyed", "market_now"]: data[group] = {}
+	for group: String in ["seen", "woke_by", "destroyed", "market_now", "gone"]: data[group] = {}
 	data.scorches = []
 	changed()
 
@@ -304,47 +350,3 @@ static func next_attempt() -> int:
 	data.attempt = int(data.get("attempt", 0)) + 1
 	changed()
 	return int(data.attempt)
-
-## Before the mod is removed (Settings → Watch Party → Before you uninstall): every TV and remote
-## leaves this world, set up anywhere or in the briefcase. The game rejects a briefcase that holds
-## an item it does not know (world/inventory/inventory_store.gd valid_document), so with the mod
-## gone a single TV left behind would set the whole briefcase aside, bits and all. Placed ones end
-## like eaten food (consume), the rest leave their slots (discard). The sets go back to the market,
-## should the mod stay after all. Returns how many items went, or -1 with nothing done (`why`).
-static func remove_all(inventory: Node, why: Array) -> int:
-	var store: Variant = inventory.get("inventory") if is_instance_valid(inventory) else null
-	if not store is Object or not (store as Object).has_method("consume"):
-		why.append("The briefcase is not loaded. Load your world first.")
-		return -1
-	var ours := func(id: Variant) -> bool: return str(id).begins_with("goods:watch-tv-")
-	# One in a hand stays put (its hand would be left holding nothing real): it is put down first.
-	var held: Variant = inventory.get("held")
-	if held is Dictionary:
-		for body: Variant in (held as Dictionary).values():
-			if is_instance_valid(body) and ours.call((body as Node).get_meta("item_id", "")):
-				why.append("Put down the TV or remote you're holding first.")
-				return -1
-	var count := 0
-	var loose: Variant = inventory.get("loose")
-	var loans: Dictionary = ((store as Object).get("loans") as Dictionary).duplicate()
-	for token: Variant in loans:
-		if not ours.call((loans[token] as Dictionary).get("id", "")): continue
-		if loose is Dictionary:
-			var body: Variant = (loose as Dictionary).get(token)
-			if is_instance_valid(body): (body as Node).queue_free()
-			(loose as Dictionary).erase(token)
-		if (store as Object).call("consume", str(token)): count += 1
-	for slot: Variant in ((store as Object).get("slots") as Array).duplicate(true):
-		if slot is Dictionary and ours.call((slot as Dictionary).get("id", "")): count += int((slot as Dictionary).get("count", 0))
-	for id: String in TVS + [REMOTE]: (store as Object).call("discard", id)
-	if not owned(inventory).is_empty():
-		why.append("Some could not be removed. Try again, or pick them up and press it again.")
-		return -1
-	var data := state()
-	if not data.is_empty():
-		for id: String in TVS:
-			if had(id) or destroyed(id): respawn(id)
-		data.remote_given = false
-		changed()
-	print("[watch_party] packed away for uninstalling: %d item(s) removed" % count)
-	return count

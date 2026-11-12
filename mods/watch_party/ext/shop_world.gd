@@ -17,7 +17,11 @@ extends "res://world/shop/shop_world.gd"
 ## What is out follows the story (res://mods/watch_party/finds.gd market_items): nothing on the
 ## first day (the sets still lie in the Everfree), the vintage set and the remote from the second,
 ## both flatscreens as well from the third. Their sales go to the market (shops.json default_owner).
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
+
+## Marks this script as Watch Party's extension of the game script (hooks.gd).
+const WATCH_PARTY_PATH := "res://world/shop/shop_world.gd"
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 
 const WATCH_PARTY_FINDS := preload("res://mods/watch_party/finds.gd")
 ## Where the stand's front step is centred, on the ground, and which way its front faces (degrees

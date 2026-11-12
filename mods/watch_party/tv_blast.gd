@@ -1,8 +1,8 @@
 extends Node
 ## A television blowing up (dev 2026-11-06): Trixie's spell went wrong (magic_quest.gd), and when
 ## the set is switched on it goes off with a flash, a fireball, a cloud of smoke, bits of it flying
-## and a bang. The set is gone for good (finds.gd destroyed; Settings → Watch Party can put it back
-## at the market). It leaves a scorch mark on the ground that stays a day and fades over the next
+## and a bang. The set is gone (finds.gd destroyed; another is for sale at the market from the next
+## 06:00 restock, finds.gd tidy_lost). It leaves a scorch mark on the ground that stays a day and fades over the next
 ## (kept in the world save: finds.gd state scorches). Anon close by is knocked down as if bucked
 ## (his body's receive_buck, desktop and VR alike); ponies close by are thrown back and land on
 ## their hooves (the game's own hop, world/characters/locomotion/pony_throw.gd), and every pony

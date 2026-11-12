@@ -1,7 +1,11 @@
 extends "res://world/ui/interaction_hints.gd"
 ## Watch Party: a television lying in the Everfree is free (ext/market.gd prices it at nothing), so
 ## its prompt says "Pick up", not "Buy · 0 bits". Every other good's prompt is the game's own.
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
+
+## Marks this script as Watch Party's extension of the game script (hooks.gd).
+const WATCH_PARTY_PATH := "res://world/ui/interaction_hints.gd"
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 
 const WATCH_PARTY_FOREST := "watch_party:forest:"
 

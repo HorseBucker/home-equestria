@@ -10,10 +10,10 @@ extends "res://world/ai/pony_action_schema.gd"
 ## there, her locations include it ("point:X,Z", the navigator's own story waypoint form, labelled
 ## "the strange black slab in the Everfree"), so her [lead: player, strange black slab] is a lead
 ## the game carries out. Nopony else is given it.
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
 
 const WATCH_PARTY_PATH := "res://world/ai/pony_action_schema.gd"
-const WATCH_PARTY_LOADER := preload("res://mods/watch_party/ext_loader.gd")
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 const WATCH_PARTY_TYPE := "watch_tv"
 ## The tag and the spellings a model uses for it.
 const WATCH_PARTY_NAMES := ["watch_tv", "watchtv", "watch", "watch_movie", "watch_a_movie", "watch_show", "watch_television", "television", "tv", "movie"]

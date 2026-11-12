@@ -1,6 +1,6 @@
 # Watch Party
 
-A mod for Home: Equestria, by HorseBucker.
+A mod for Home: Equestria, by HorseBucker. Needs game version 0.3.1 or newer.
 
 Watch TV and browse the web! Invite a pony over and she sits down and watches with you.
 Find the TVs for free in the Everfree, or wait for somepony else to find them and put them up for
@@ -16,7 +16,9 @@ Watch Party is one file plus two free downloads. Put all three in the game folde
 `HomeEquestria.exe` in it.
 
 1. **The mod.** Put `watch_party.pck` in the `mods` folder inside the game folder (in the game:
-   Settings → Mods → Open mods folder). Start the game. Settings → Mods should list Watch Party.
+   Settings → Mods → Open mods folder). Start the game. Settings → Mods should list Watch Party
+   under "Your mods". The game also comes with an older Watch Party of its own, off by default:
+   the newer of the two is used, and the other is listed as superseded.
 2. **ffmpeg, for videos.** On https://www.gyan.dev/ffmpeg/builds/ under "release builds", download
    `ffmpeg-release-essentials.zip`. Unzip it and put the whole folder it makes
    (`ffmpeg-<version>-essentials_build`) in the game folder. Don't rename it.
@@ -36,18 +38,14 @@ cef_artifacts\...                                   (only for the browser)
 
 To check it all worked, open Settings → Watch Party → Setup (or the TV menu's Setup tab). It shows
 whether ffmpeg and gdCEF are found and has buttons for the download pages and the game folder.
+Nothing outside the game is started until then: ffmpeg is looked for the first time you use a TV
+or open that page.
 
 ## Uninstall
 
-**Do this before you delete the mod**, or you can lose your whole briefcase. The game refuses a
-briefcase holding an item it doesn't know, and a TV or remote counts as one, in the briefcase or
-set up anywhere in the world. Without the mod, the game would set the whole briefcase aside, bits
-and all, and start you with an empty one. Switching the mod off in Settings → Mods does the same.
-
-1. Load your world. If you're holding a TV or the remote, put it down.
-2. Settings → Watch Party → **Remove all TVs**, then press it again to confirm.
-3. Do this in every world where you had a TV.
-4. Quit the game, then delete `watch_party.pck` from the mods folder.
+Switch the mod off in Settings → Mods, or delete `watch_party.pck` from the mods folder. Your
+saves stay fine: the game sets your TVs and remotes aside and gives them back, where they were,
+when the mod is on again.
 
 The mod's settings, browser logins and vision API keys are in
 `%APPDATA%\home-equestria-public\mods\data\watch_party\`. Delete that folder too if you want them
@@ -57,7 +55,9 @@ gone.
 
 - For your first few days in a world, the TVs lie somewhere in the Everfree, free to whoever finds
   them. Wait too long and somepony else finds them and sells them in Ponyville.
-- Only three ever came over, one of each kind. Once you have one, it's yours for good.
+- There's one of each kind. Once you have one, the forest and the market have no other.
+- Lost one? If a TV you had is gone for any reason, another one is for sale at the market from 6
+  the next morning, at the usual price.
 - The remote comes with your first TV. The market sells spares.
 - A TV does nothing at first. How to get it working is for you to find out.
 - Rather skip that quest? Turn on **Ozone-powered TVs** in Settings → Watch Party. Every TV works
@@ -78,9 +78,6 @@ gone.
 - **Waking them.** Somepony who knows magic has to give a TV power of its own: **Twilight**,
   **Princess Celestia** or **Princess Luna** (only while they visit you), or **Trixie**. Bring the
   TV to her, or set it down near her, and she takes it from there. Each does it her own way.
-- **Trixie** isn't very good at it. About one time in three, a TV she woke blows up when it's
-  switched on. If that happens, Settings → Watch Party has a **Put it back** button that puts it up
-  for sale again.
 
 </details>
 

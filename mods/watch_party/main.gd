@@ -13,9 +13,9 @@ extends Node
 const SETTINGS := preload("res://mods/watch_party/watch_settings.gd")
 const TOOLS := preload("res://mods/watch_party/ffmpeg_tools.gd")
 const CONTROLS := preload("res://mods/watch_party/tv_controls.gd")
-## Loaded only once ext_loader.gd has extended the game scripts: tv_menu.gd and watch_company.gd
-## reach some of them through their own preloads, and a game script loaded before its extension
-## keeps the game's version.
+## Loaded when the mod starts, not preloaded: tv_menu.gd and watch_company.gd reach game scripts
+## through their own preloads, and this script is compiled while the game still boots (a patch pack
+## that extends it does that), before every mod's extensions stand at the game paths.
 const MENU := "res://mods/watch_party/tv_menu.gd"
 const COMPANY := "res://mods/watch_party/watch_company.gd"
 const FOREST := "res://mods/watch_party/forest_finds.gd"
@@ -28,8 +28,9 @@ const SETTINGS_TAB := "res://mods/watch_party/settings_tab.gd"
 const WELCOME := "res://mods/watch_party/welcome.gd"
 ## The setup panel opens by itself this long after the first set works, if something is missing.
 const SETUP_DELAY := 6.0
-## Applies the mod's script extensions (ext/); preloads no game script itself.
-const EXTENSIONS := preload("res://mods/watch_party/ext_loader.gd")
+## The mod's script extensions (ext/, applied by the game: mod.json "extends"); preloads no game
+## script itself.
+const HOOKS := preload("res://mods/watch_party/hooks.gd")
 const WEB := preload("res://mods/watch_party/web_engine.gd")
 const CATALOG := preload("res://mods/watch_party/catalog.gd")
 ## Reads subtitles off pictures (picture_subs.gd): Windows' own OCR, or Tesseract.
@@ -41,6 +42,11 @@ var settings: RefCounted
 ## The ffmpeg in use, or "" while none was found.
 var ffmpeg := ""
 var _searching := false
+## Nothing outside the game runs until a TV is used (devanon's patch for 1.0.0, 2026-11-08: "start
+## nothing early"): ffmpeg and the OCR are looked for the first time something asks (use_tools).
+var _tools_asked := false
+## The first set woke while ffmpeg was still being looked for: after_power_up() runs again then.
+var _power_up_waiting := false
 var _search: Thread
 var _controls: Node
 var _menu: CanvasLayer
@@ -53,15 +59,20 @@ var blast: Node
 var settings_tab: Node
 var welcome: Node
 var _setup: CanvasLayer
-## The OCR every set shares (ocr_engine.gd); checked on a worker thread at start (check_ocr).
+## The OCR every set shares (ocr_engine.gd); checked on a worker thread on first use (use_tools).
 var ocr: RefCounted
 var _ocr_check: Thread
 var _ocr_tidy := OCR_TIDY_SECONDS
 
-## The Mods autoload makes this node before the title screen, ahead of every game script the
-## extensions change (ext_loader.gd).
+## The Mods autoload makes this node before the title screen: every mod's extensions are applied
+## by now, so what stands at the game paths stays (hooks.gd settle).
 func _init() -> void:
-	EXTENSIONS.apply(Mods.data_folder(ID).path_join("ext"))
+	HOOKS.settle()
+	var missing: PackedStringArray = []
+	for target: String in HOOKS.TARGETS:
+		if not HOOKS.hooked(target): missing.append(target.get_file())
+	if missing.is_empty(): print("[watch_party] game hooks ready (%d script extensions)" % HOOKS.TARGETS.size())
+	else: push_warning("[watch_party] game hooks missing for %s; that part of the mod will not work" % ", ".join(missing))
 
 func _ready() -> void:
 	settings = SETTINGS.new()
@@ -79,9 +90,7 @@ func _ready() -> void:
 	blast = _part(BLAST, "TvBlast")
 	settings_tab = _part(SETTINGS_TAB, "SettingsTab")
 	welcome = _part(WELCOME, "Welcome")
-	find_ffmpeg()
 	ocr = OCR.new()
-	check_ocr()
 	Mods.world_ready.connect(_on_world)
 	Mods.world_closed.connect(_on_world_closed)
 	if is_instance_valid(Mods.game): _on_world(Mods.game)
@@ -107,9 +116,14 @@ func _exit_tree() -> void:
 	if _search != null and _search.is_started(): _search.wait_to_finish()
 	if _ocr_check != null and _ocr_check.is_started(): _ocr_check.wait_to_finish()
 	if ocr != null: ocr.call("close")
+	# Mods made for 1.1.0 and older kept the extension loader in the engine's metadata, where it
+	# outlived the script language and crashed the game as it closed (devanon's patch, 2026-11-08).
+	if Engine.has_meta(&"watch_party_extensions"): Engine.remove_meta(&"watch_party_extensions")
 
 func _on_world(game: Node) -> void:
 	CATALOG.paint_icons()
+	# Briefcase views that drew before the pictures were in draw again (item_icon_camera.gd GROUP).
+	for id: String in CATALOG.ICONS: get_tree().call_group("item_icon_views", "icon_ready", id)
 	if is_instance_valid(forest): forest.call("world", game)
 	if is_instance_valid(quest): quest.call("world", game)
 	if is_instance_valid(blast): blast.call("world", game)
@@ -127,8 +141,17 @@ func _on_world_closed(_game: Node) -> void:
 	_controls = null
 	settings.save()
 
+## The first time a TV is used (its menu, the setup, a set that works, Settings → Watch Party):
+## ffmpeg and the OCR are looked for, once. Their Check buttons look again whenever pressed.
+func use_tools() -> void:
+	if _tools_asked: return
+	_tools_asked = true
+	find_ffmpeg()
+	check_ocr()
+
 ## Looks for ffmpeg on a worker thread (each candidate runs `ffmpeg -version`).
 func find_ffmpeg() -> void:
+	_tools_asked = true
 	if _searching: return
 	_searching = true
 	if _search != null and _search.is_started(): _search.wait_to_finish()
@@ -145,6 +168,9 @@ func _found(found: String) -> void:
 	_searching = false
 	ffmpeg = found
 	print("[watch_party] ffmpeg: ", found if not found.is_empty() else "not found")
+	if _power_up_waiting:
+		_power_up_waiting = false
+		after_power_up()
 
 ## Looks for an OCR engine on a worker thread (Windows: starts its OCR once through PowerShell).
 func check_ocr() -> void:
@@ -165,11 +191,13 @@ func _process(delta: float) -> void:
 
 ## Why the TV cannot play yet, or "" when it can.
 func ffmpeg_note() -> String:
+	use_tools()
 	if not ffmpeg.is_empty(): return ""
 	if _searching: return "Looking for ffmpeg…"
 	return "The TV needs ffmpeg to play videos: put its unzipped folder next to HomeEquestria.exe (TV menu → Setup)."
 
 func open_menu(tv: Node3D) -> void:
+	use_tools()
 	if not is_instance_valid(_menu):
 		_menu = load(MENU).new()
 		_menu.name = "WatchPartyMenu"
@@ -190,6 +218,7 @@ func _close_menu() -> void:
 
 ## The setup panel (the TV remote's right click, or two trigger pulls in VR, where no set is on).
 func open_setup(by_itself := false) -> void:
+	use_tools()
 	if not is_instance_valid(_setup):
 		_setup = load(SETUP).new()
 		_setup.name = "WatchPartySetup"
@@ -217,12 +246,18 @@ func _desktop() -> bool:
 ## A set works (tv_set.gd _activate). The first time with the quest skipped also counts as the
 ## first set working.
 func tv_working(_tv: Node) -> void:
+	use_tools()
 	if bool(settings.skip_quest): after_power_up()
 
 ## The first set works now (woken with magic, magic_quest.gd): once, if ffmpeg or gdCEF is
 ## missing, the setup panel opens a few seconds later, after her words.
 func after_power_up() -> void:
 	if bool(settings.setup_shown): return
+	# Whether the panel opens depends on ffmpeg being found: the search it starts is waited for.
+	use_tools()
+	if _searching:
+		_power_up_waiting = true
+		return
 	var browser := str(web.call("artifacts_folder")) if is_instance_valid(web) else ""
 	if not ffmpeg.is_empty() and not browser.is_empty(): return
 	settings.setup_shown = true

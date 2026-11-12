@@ -4,7 +4,11 @@ extends "res://world/mechanics/market/market.gd"
 ## (res://mods/watch_party/forest_finds.gd, display ids "watch_party:forest:..."), so picking one up
 ## is the game's own purchase (world/shop/shop_purchase.gd), which asks this module for the price
 ## (live_price → price_for): for those displays it is nothing. The market tent's sets keep their
-## prices. Applied by res://mods/watch_party/ext_loader.gd.
+## prices. Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
+
+## Marks this script as Watch Party's extension of the game script (hooks.gd).
+const WATCH_PARTY_PATH := "res://world/mechanics/market/market.gd"
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 
 const WATCH_PARTY_FOREST := "watch_party:forest:"
 

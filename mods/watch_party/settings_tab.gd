@@ -9,7 +9,6 @@ extends Node
 ## - What ponies know of the browser (web_ponies), the slideshow on a set left off (slides_when_idle),
 ##   where the sets are (a spoiler, shown only when asked), skipping the magic quest (skip_quest,
 ##   "Ozone-powered TVs": dev 2026-11-07, the joke is the ozone AI ponies love to smell in the air).
-## - A set Trixie blew up (finds.gd destroyed): a row to put it back at the market, shown only then.
 ## - The browser's load (browser_fps, browser_scale, browser_pause_hidden, browser_restore) and the
 ##   (zoom: Home, no setting).
 ## - Everything the TV menu sets up too (dev 2026-11-07: "if the player wants to set up everything
@@ -41,8 +40,6 @@ const SUBTITLE_NOTE := "Ponies follow what is said in a video through its subtit
 ## matching .srt is a chore).
 const OCR_TRACKS_NOTE := "When a video has no text subtitles but has picture ones (Blu-ray, DVD), they're read with OCR in the background, so ponies can follow. Read once per video and kept for next time. Windows: built in. Linux: needs Tesseract."
 const OCR_LIVE_NOTE := "When a video has no subtitle track to read, the picture is checked every 2 seconds for subtitles burned into it. Less accurate: now and then a sign or the credits may be read as a line."
-## Why removing the mod needs this first (finds.gd remove_all).
-const UNINSTALL_NOTE := "If you remove the mod while a TV or remote is in your briefcase or set up anywhere, the game sets your whole briefcase aside, bits and all. Press this first in every world you played with the mod: every TV and remote is removed for good. Then quit the game and delete watch_party.pck."
 ## The colour of a status line saying a download was found (dev 2026-11-07: green, not red).
 const FOUND := Color(0.5, 0.88, 0.55)
 
@@ -52,6 +49,9 @@ var _patched: Array = []
 var _status_wait := 0.0
 
 func _ready() -> void:
+	# The settings page is open while the game is paused: the status lines keep up all the same
+	# (playtest 2026-11-12: ffmpeg found from a TV still read "not found" here until Check).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	Mods.on_node(PAGE, _on_page)
 
 func _exit_tree() -> void:
@@ -123,9 +123,6 @@ func _build(page: Node) -> void:
 	_switch(entry, list, "Slideshow on a set left off", "slides_when_idle", "After a set has been off for 5 minutes while you're nearby, it shows your photos like a picture frame. Pick the folder in the TV menu → Photos & web.")
 	_spoilers(entry, list)
 	_switch(entry, list, "Ozone-powered TVs", "skip_quest", "Skips the quest to get the TVs working: every TV works as soon as you set it down. Why? Because Equestria's air is thick with ozone, that's why.")
-	var lost := VBoxContainer.new(); lost.add_theme_constant_override("separation", 6)
-	list.add_child(lost)
-	entry.lost = lost
 	_heading(entry, list, "Web browser")
 	_pills(entry, list, "Frames a second", "browser_fps", FPS, "How often a page is drawn. 15 is lighter on slower computers. Requires browser restart.")
 	_pills(entry, list, "Page resolution", "browser_scale", SCALES, "75% draws fewer pixels: lighter on slower computers. Requires browser restart.")
@@ -147,8 +144,6 @@ func _build(page: Node) -> void:
 	_embed(entry, list, VISION_PAGE)
 	_heading(entry, list, "Setup")
 	_embed(entry, list, SETUP_PAGE)
-	_heading(entry, list, "Uninstalling")
-	_uninstall_rows(entry, list)
 	# Any other tab, the game's or another mod's, hides this one.
 	for child: Node in side.get_children(): _watch_button(child, entry)
 	side.child_entered_tree.connect(_watch_button.bind(entry))
@@ -284,7 +279,6 @@ func _choose(entry: Dictionary, key: String, value: Variant) -> void:
 func _refresh(entry: Dictionary) -> void:
 	var settings := _settings()
 	if settings == null: return
-	_show_lost(entry)
 	var spoiler: Variant = entry.get("spoiler")
 	if is_instance_valid(spoiler) and (spoiler as Label).visible: (spoiler as Label).text = spoiler_text()
 	for key: String in entry.rows:
@@ -343,29 +337,11 @@ static func spoiler_text() -> String:
 	return "\n\n".join(lines)
 
 static func _where(id: String, otherwise: String) -> String:
-	if FINDS.destroyed(id): return "blown up. You can put it back at the market below."
+	if FINDS.destroyed(id): return "blown up. Another one will be for sale in one of the market tents from 6 the next morning."
+	if FINDS.lost(id): return "gone missing. Another one will be for sale in one of the market tents from 6 the next morning."
 	if FINDS.had(id): return "you have it."
 	if FINDS.at_market(id): return "for sale in one of the market tents now."
 	return otherwise
-
-## A row for each set that blew up, to put it back at the market (shown only when there is one).
-func _show_lost(entry: Dictionary) -> void:
-	var holder: Variant = entry.get("lost")
-	if not is_instance_valid(holder): return
-	var gone: Array = FINDS.destroyed_list() if not FINDS.state().is_empty() else []
-	var key := ",".join(PackedStringArray(gone))
-	if str(entry.get("lost_key", "-")) == key: return
-	entry.lost_key = key
-	for child: Node in (holder as Node).get_children(): child.queue_free()
-	var page: Node = entry.page
-	for id: String in gone:
-		var line := _card(entry, holder as VBoxContainer, "The %s blew up" % FINDS.kind_name(id), "It's gone for good, unless you put it back up for sale at the market. It will need waking again.")
-		var button: Button = page.call("_button", line, "Put it back", _respawn.bind(entry, id))
-		button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-
-func _respawn(entry: Dictionary, id: String) -> void:
-	FINDS.respawn(id)
-	_refresh(entry)
 
 ## What the chosen option of a row does, in a few plain lines (dev 2026-11-07: only the one that is
 ## on, easy to take in).
@@ -527,38 +503,6 @@ func _pick(entry: Dictionary, what: String) -> void:
 	add_child(dialog)
 	dialog.popup_centered_ratio(0.6)
 
-## Before removing the mod: everything it added leaves the world (finds.gd remove_all). Asks twice.
-func _uninstall_rows(entry: Dictionary, list: VBoxContainer) -> void:
-	var page: Node = entry.page
-	var line := _card(entry, list, "Before you uninstall", UNINSTALL_NOTE)
-	var button: Button = page.call("_button", line, "Remove all TVs", _pack_away.bind(entry))
-	button.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	entry.pack_button = button
-	_status(entry, list, "pack")
-
-func _pack_away(entry: Dictionary) -> void:
-	var button: Button = entry.pack_button
-	var label: Label = (entry.status as Dictionary).pack
-	if not bool(entry.get("pack_armed", false)):
-		entry.pack_armed = true
-		button.text = "Sure? Press again"
-		label.text = "Every TV and remote leaves this world for good."
-		_mark(label, -1)
-		_redraw(entry.page)
-		return
-	entry.pack_armed = false
-	button.text = "Remove all TVs"
-	var game: Variant = Mods.game
-	var why: Array = []
-	var count: int = FINDS.remove_all((game as Node).get("inventory") as Node if is_instance_valid(game) else null, why)
-	if count < 0:
-		label.text = str(why[0]) if not why.is_empty() else "Nothing was removed."
-		_mark(label, 0)
-	else:
-		label.text = "Done (%d removed). Now quit the game (it saves as it closes), then delete watch_party.pck from the mods folder." % count
-		_mark(label, 1)
-	_redraw(entry.page)
-
 ## The TV menu's own page, stacked to fit here.
 func _embed(entry: Dictionary, list: VBoxContainer, path: String) -> void:
 	var script: Script = load(path)
@@ -628,4 +572,7 @@ func _process(delta: float) -> void:
 	# ffmpeg's search and gdCEF change by themselves; the picture count only when chosen (a big
 	# folder takes a moment to list).
 	for entry: Dictionary in _patched:
-		if is_instance_valid(entry.panel) and (entry.panel as Control).is_visible_in_tree(): _show_status(entry, false)
+		if is_instance_valid(entry.panel) and (entry.panel as Control).is_visible_in_tree():
+			# Looking at this page is using the TVs: ffmpeg and the OCR are looked for (main.gd use_tools).
+			if is_instance_valid(hub) and hub.has_method("use_tools"): hub.call("use_tools")
+			_show_status(entry, false)

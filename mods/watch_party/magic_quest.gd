@@ -4,7 +4,7 @@ extends Node
 ## (HELPERS): Twilight, Princess Celestia and Princess Luna (on their visits: world/life/
 ## princess_visits.gd keeps a visiting princess near Anon while this holds her), and Trixie, who is
 ## not very good at it (dev 2026-11-06): her spell leaves the set smoking, and when it is switched
-## on there is a BLOW_CHANCE that it blows up (tv_blast.gd) and is gone for good. Anyone else (Rarity,
+## on there is a BLOW_CHANCE that it blows up (tv_blast.gd) and is gone. Anyone else (Rarity,
 ## say) can try in a conversation, but nothing here makes it work; the AI plays that out as it likes.
 ## Each helper knows only what she saw (finds.gd seen): a set woken or blown up near her counts, one
 ## woken elsewhere does not, so taking one set to Trixie, one to Twilight and one to Luna is three

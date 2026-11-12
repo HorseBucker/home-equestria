@@ -8,7 +8,11 @@ extends "res://world/ai/pony_action_executor.gd"
 ##   then the same checks the game makes before any ground movement (being held or petted, flying).
 ##   While the watch is an ordinary follow of Anon (no set near yet), the game walks it as usual.
 ## - _end_move(): a watch that ends for any reason is tidied up (watch_invite.gd ended()).
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
+
+## Marks this script as Watch Party's extension of the game script (hooks.gd).
+const WATCH_PARTY_PATH := "res://world/ai/pony_action_executor.gd"
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 
 const WATCH_PARTY_INVITE := "res://mods/watch_party/watch_invite.gd"
 const WATCH_PARTY_TICK := 0.2

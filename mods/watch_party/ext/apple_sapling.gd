@@ -4,10 +4,10 @@ extends "res://world/items/apple_sapling.gd"
 ## SAPLING): is_sapling() in has(), definition(), and build_visual() from shop_item_visual.gd. For
 ## the Watch Party ids these answer from res://mods/watch_party/catalog.gd; for every other id
 ## (the apple sapling itself, or a sapling planted at Sweet Apple Acres) they are the game's own.
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
 
 const WATCH_PARTY_PATH := "res://world/items/apple_sapling.gd"
-const WATCH_PARTY_LOADER := preload("res://mods/watch_party/ext_loader.gd")
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 const WATCH_PARTY_CATALOG := "res://mods/watch_party/catalog.gd"
 const WATCH_PARTY_PREFIX := "goods:watch-tv-"
 

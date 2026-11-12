@@ -53,23 +53,28 @@ static func definition(id: String) -> Dictionary:
 	var row: Array = GOODS[id]
 	return {"name": row[0], "description": row[3], "stack": 1, "price_bits": row[2], "size_m": row[1], "shop": true}
 
-## The briefcase badges for these goods, in the shop's own style (world/shop/shop_items.gd icon(),
-## which would paint them in the apple sapling's green: ext/apple_sapling.gd answers for them).
-## Put in shop_items.gd's icon cache once per world.
+## The briefcase and hotbar pictures of these goods: the mod's own (icons/, photographs of the
+## models from the game's three-quarter view), put where the game looks first
+## (world/inventory/item_catalog.gd icon(): its _icons cache, ahead of the photograph the game
+## would take itself; that one came out cut off for whichever item it took first, playtest
+## 2026-11-12) and in the shop's cache (world/shop/shop_items.gd icon()). A picture that cannot be
+## read leaves the game's own. Once per world.
+const ICONS := {VINTAGE: "vintage", FLAT_STAND: "flat", FLAT_WALL: "flat-wall", REMOTE: "remote"}
+const ICON_FILE := "res://mods/watch_party/icons/%s.png"
+static var _pictures: Dictionary = {}
+
 static func paint_icons() -> void:
-	var items := load("res://world/shop/shop_items.gd") as Script
-	var icons: Variant = items.get("_icons") if items != null else null
-	if not icons is Dictionary: return
-	for id: String in GOODS:
-		if (icons as Dictionary).has(id): continue
-		var colour := Color("7a4e2d") if id == VINTAGE else Color("2b2622")
-		var image := Image.create(64, 64, false, Image.FORMAT_RGBA8)
-		image.fill(Color(0, 0, 0, 0))
-		for y in 64:
-			for x in 64:
-				var d := Vector2(x - 31.5, y - 31.5).length()
-				if d < 30.0: image.set_pixel(x, y, colour.darkened(0.25) if d > 26.0 else colour)
-		(icons as Dictionary)[id] = ImageTexture.create_from_image(image)
+	for id: String in ICONS:
+		if _pictures.has(id): continue
+		var bytes := FileAccess.get_file_as_bytes(ICON_FILE % str(ICONS[id]))
+		var image := Image.new()
+		if bytes.is_empty() or image.load_png_from_buffer(bytes) != OK or image.is_empty(): continue
+		_pictures[id] = ImageTexture.create_from_image(image)
+	for path: String in ["res://world/inventory/item_catalog.gd", "res://world/shop/shop_items.gd"]:
+		var script := load(path) as Script
+		var icons: Variant = script.get("_icons") if script != null else null
+		if not icons is Dictionary: continue
+		for id: String in _pictures: (icons as Dictionary)[id] = _pictures[id]
 
 ## The set's look and working parts under a shop visual (world/shop/shop_item_visual.gd); returns
 ## the bounds the briefcase sizes the set's collision box from.

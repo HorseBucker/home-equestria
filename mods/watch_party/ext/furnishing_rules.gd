@@ -3,10 +3,10 @@ extends "res://world/housing/furnishing_rules.gd"
 ## stand on a floor, the wall flatscreen hangs). The game's SURFACES table is a constant, so has()
 ## and wall() answer for the sets first. valid_loan() asks the game's own check about a game good on
 ## the same surface, so a placed set is kept in the save under exactly the game's rules.
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
 
 const WATCH_PARTY_PATH := "res://world/housing/furnishing_rules.gd"
-const WATCH_PARTY_LOADER := preload("res://mods/watch_party/ext_loader.gd")
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 const WATCH_PARTY_SURFACES := {"goods:watch-tv-vintage": "floor", "goods:watch-tv-flat": "floor", "goods:watch-tv-flat-wall": "wall"}
 
 static func has(id: String) -> bool:

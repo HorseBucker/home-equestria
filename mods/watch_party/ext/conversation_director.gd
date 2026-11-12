@@ -13,7 +13,11 @@ extends "res://world/ai/conversation_director.gd"
 ## - handle_text(): Anon speaking to a pony watching with him, asking her to look at the screen
 ##   ("look at this", "who's that?") or long after her last look: the screen is described first
 ##   (watch_company.gd look_before_reply, a few seconds at most), so her answer sees it.
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
+
+## Marks this script as Watch Party's extension of the game script (hooks.gd).
+const WATCH_PARTY_PATH := "res://world/ai/conversation_director.gd"
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 
 const WATCH_PARTY_INVITE := "res://mods/watch_party/watch_invite.gd"
 const WATCH_PARTY_HELP := "- [watch_tv] watch something on Anon's television with him: you go to the set (or go along with him until you reach one) and settle in on a seat or the floor in front of it; only if you want to, and say yes or no in your own words. It does the walking and the sitting down: add no [follow], [sit], [lie_down] or [stay] with it"

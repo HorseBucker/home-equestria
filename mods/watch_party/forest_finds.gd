@@ -49,10 +49,16 @@ const NOTES := {
 ## The story begins this long after a world opens with Anon in it (its save and briefcase are
 ## loaded by then, so a world that already has a set is known as one).
 const BEGIN_AFTER := 3.0
+## A set is looked for only this long after the world opened, and counts as missing after this
+## many passes (CHECK_SECONDS apart) without it (_note_lost).
+const LOST_AFTER := 10.0
+const LOST_CHECKS := 5
 var hub: Node
 var _displays: Dictionary = {}
 var _check := 0.0
 var _opened := 0.0
+## Set id -> passes in a row it was in no briefcase slot or loan (_note_lost).
+var _absent: Dictionary = {}
 ## The sets whose spot was checked this session (CHECK_RANGE).
 var _checked: Dictionary = {}
 
@@ -63,6 +69,7 @@ func _ready() -> void:
 func world(_game: Node) -> void:
 	_displays.clear()
 	_checked.clear()
+	_absent.clear()
 	_opened = 0.0
 
 func _process(delta: float) -> void:
@@ -92,9 +99,26 @@ func _process(delta: float) -> void:
 				if not FINDS.had(id): print("[watch_party] forest: the %s is gone (somepony took it to the market)" % FINDS.kind_name(id))
 	_note_owned(inventory)
 	_give_remote(inventory)
+	_note_lost(inventory)
 
-## A set in Anon's briefcase, hands or placed somewhere is his: the only one of its kind, so it is
-## gone from the forest and the market for good (bought at the market, it is in his loans the
+## A set Anon had that is nowhere now goes back to the market at the next restock (finds.gd
+## tidy_lost). Only once the briefcase has been steady for a while: a set counts as missing after
+## LOST_CHECKS passes in a row without it, so a briefcase still loading loses nothing.
+func _note_lost(inventory: Node) -> void:
+	var store: Variant = inventory.get("inventory") if is_instance_valid(inventory) else null
+	if _opened < LOST_AFTER or not store is Object or not (store as Object).get("slots") is Array or not (store as Object).get("loans") is Dictionary:
+		_absent.clear()
+		return
+	var present: Array = FINDS.owned(inventory) + FINDS.parked(inventory)
+	for id: String in FINDS.TVS:
+		if id in present: _absent.erase(id)
+		else:
+			_absent[id] = int(_absent.get(id, 0)) + 1
+			if int(_absent[id]) < LOST_CHECKS: present.append(id)
+	FINDS.tidy_lost(present)
+
+## A set in Anon's briefcase, hands or placed somewhere is his: the one of its kind, so it is
+## gone from the forest and the market (bought at the market, it is in his loans the
 ## moment it is paid for: world/shop/shop_purchase.gd).
 func _note_owned(inventory: Node) -> void:
 	for id: Variant in FINDS.owned(inventory):

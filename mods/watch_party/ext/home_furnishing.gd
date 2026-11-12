@@ -12,10 +12,10 @@ extends "res://world/housing/home_furnishing.gd"
 ##   exactly where it was, frozen, on a tree as well as on the ground.
 ## Everything else, and a set in Anon's own house, takes the game's own path unchanged. A set placed
 ## in a house loads back through the game's home(tree, id) like any furniture.
-## Applied by res://mods/watch_party/ext_loader.gd.
+## Applied by the game (mod.json "extends"); see res://mods/watch_party/hooks.gd.
 
 const WATCH_PARTY_PATH := "res://world/housing/home_furnishing.gd"
-const WATCH_PARTY_LOADER := preload("res://mods/watch_party/ext_loader.gd")
+const WATCH_PARTY_LOADER := preload("res://mods/watch_party/hooks.gd")
 const WATCH_PARTY_CATALOG := "res://mods/watch_party/catalog.gd"
 const WATCH_PARTY_SETS := ["goods:watch-tv-vintage", "goods:watch-tv-flat", "goods:watch-tv-flat-wall"]
 ## The home id of a set placed out of doors.
