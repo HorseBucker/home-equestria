@@ -99,6 +99,16 @@ func _spawn_resident(id: String, region_id: String, at: Vector3, packed: PackedS
 		var hit := space.intersect_ray(PhysicsRayQueryParameters3D.create(
 			Vector3(point.x, from_y, point.z),
 			Vector3(point.x, navigation.bounds.position.y - 2.0, point.z), 1))
+		# Out of doors on open terrain, a hit well above the ground is a roof, not her floor (2026-11-22 play test:
+		# Scootaloo streamed in on top of a market stall's awning).
+		if not hit.is_empty() and home == null and region_id == "ponyville" and is_finite(terrain_y) and (hit.position as Vector3).y > terrain_y + 1.2:
+			misses["on a roof"] = int(misses.get("on a roof", 0)) + 1
+			hit = {}
+			selected = Vector3.INF
+			if not await spawn_scope.wait_physics_frame():
+				host._release_cancelled_resident_service.call_deferred(current_region)
+				return null
+			continue
 		if not hit.is_empty():
 			point = hit.position
 			selected = ROSTER_PLACEMENT.support(space, point, profile,home)

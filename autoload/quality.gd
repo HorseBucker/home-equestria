@@ -87,6 +87,7 @@ const CONFIG := {
 	#     (Low..Ultra FAR decide every 6th step, 10 Hz, since 2026-10-13: their motion still runs every step)
 	#   season keys            see SEASON_CONFIG below (merged into every tier)
 	Preset.VERY_LOW: {
+		"town_density": "minimum",   # Ponyville's houses when Town density follows the preset (town_density.gd)
 		# 1.5 km: the valley and the town; Canterlot and the far ranges sit in the fog.
 		"draw_distance": 600.0,
 		"sdfgi": false,
@@ -118,6 +119,7 @@ const CONFIG := {
 		"mipmap_bias": 1.0,
 		"volume_clouds": false,
 		"cloud_steps": 12,
+		"flower_meadow": false,   # Ponyville's flower meadow (kit_dressing.gd): about 500 draw calls near it before the 2026-11-17 cost pass
 		"grass_density": 0.2,
 		"grass_range_mul": 0.6,
 		"grass_rings": 1,
@@ -154,6 +156,7 @@ const CONFIG := {
 		"nav_sample_budget_us": 1000,
 	},
 	Preset.LOW: {
+		"town_density": "low",   # Ponyville's houses when Town density follows the preset (town_density.gd)
 		"draw_distance": 3000.0,
 		"sdfgi": false,
 		"volumetric_fog": false,
@@ -216,6 +219,7 @@ const CONFIG := {
 		"nav_sample_budget_us": 1000,
 	},
 	Preset.MEDIUM: {
+		"town_density": "medium",   # Ponyville's houses when Town density follows the preset (town_density.gd)
 		# The old Low look (fog, god rays, 6 km) with lighter shadows.
 		"draw_distance": 6000.0,
 		"sdfgi": false,
@@ -277,6 +281,7 @@ const CONFIG := {
 		"nav_sample_budget_us": 1000,
 	},
 	Preset.HIGH: {
+		"town_density": "high",   # Ponyville's houses when Town density follows the preset (town_density.gd)
 		# Camera far clip and the end of the depth fog (15 km world, WORLD.md).
 		"draw_distance": 12000.0,
 		"sdfgi": false,
@@ -345,6 +350,7 @@ const CONFIG := {
 		"nav_sample_budget_us": 1000,
 	},
 	Preset.ULTRA: {
+		"town_density": "high",   # Ponyville's houses when Town density follows the preset (town_density.gd)
 		# Camera far clip and the end of the depth fog (15 km world, WORLD.md).
 		"draw_distance": 15000.0,
 		"sdfgi": false,

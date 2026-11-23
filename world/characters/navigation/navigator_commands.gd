@@ -140,15 +140,19 @@ static func command_follow_goal(nav: Node, goal: Vector3, leader: Vector3) -> Ve
 			candidates.append(Vector3(leader.x + cos(turn) * radius, floor.y, leader.z + sin(turn) * radius))
 		for slot: Vector3 in home.slots():
 			if absf(slot.y - floor.y) < .25 and _flat(slot, leader) <= radius + .5: candidates.append(slot)
-		var from: Vector3 = pony.global_position if home.contains(pony.global_position) else home.inside()
+		var inside: bool = home.contains(pony.global_position)
+		var from: Vector3 = pony.global_position if inside else home.inside()
 		var arrival: float = nav.arrival_distance
 		for candidate: Vector3 in candidates:
 			if not home.contains(candidate) or Vector2(candidate.x - leader.x, candidate.z - leader.z).length() < 1.0: continue
 			var supported: Vector3 = nav._indoor_follow_support(home, candidate, floor.y)
 			if not supported.is_finite(): continue
 			# A free island behind furniture is not a usable follow destination.
-			var next: Vector3 = nav.house_travel._waypoint(home, pony, from, supported)
-			if from.distance_to(supported) > arrival and next.distance_to(from) < .05: continue
+			if inside:
+				if not nav.house_travel.can_start(nav, home, supported): continue
+			else:
+				var next: Vector3 = nav.house_travel._waypoint(home, pony, from, supported)
+				if from.distance_to(supported) > arrival and next.distance_to(from) < .05: continue
 			selected = supported
 			break
 	nav._indoor_follow_cache = {"time": now, "goal": goal, "leader": leader, "result": selected}
@@ -225,6 +229,9 @@ static func command_location(nav: Node, id: String) -> Vector3:
 	# so the grid is sampled that far before searching.
 	if is_instance_valid(service) and _flat(at, pony.global_position) < 250.0:
 		service.ensure_near(at, 20.0)
+		# (a walk-in building names its meeting point inside with a NavigationAnchor, the Day Spa's: a roof over it is
+		# expected there; see _roofed)
+		var walk_in: bool = is_instance_valid(place.get("node")) and (place.get("node") as Node).get_node_or_null("NavigationAnchor") != null
 		# Walk out from it toward her: the first walkable cell at ground level (not a ledge,
 		# porch rail or roof beside it: the nearest cell to Town Hall's point was one, and
 		# every route to it failed, river_trips.gd 2026-09-30).
@@ -235,12 +242,12 @@ static func command_location(nav: Node, id: String) -> Vector3:
 			var h: float = WorldTerrain.instance.height_at(probe) if is_instance_valid(WorldTerrain.instance) else NAN
 			if is_finite(h): probe.y = h
 			var ground: Vector3 = service.closest(probe, pony.profile, 2.0)
-			if ground.is_finite() and (not is_finite(h) or absf(ground.y - h) < .6) and not _inside_home(tree, ground):
+			if ground.is_finite() and (not is_finite(h) or absf(ground.y - h) < .6) and not _inside_home(tree, ground) and (walk_in or not _roofed(tree, ground)):
 				location_cache[id] = [ground, Time.get_ticks_msec(), place.get("node")]
 				return ground
 		for radius in [3.0, 8.0, 14.0]:
 			var ground: Vector3 = service.closest(at, pony.profile, radius)
-			if ground.is_finite() and not _inside_home(tree, ground):
+			if ground.is_finite() and not _inside_home(tree, ground) and (walk_in or not _roofed(tree, ground)):
 				location_cache[id] = [ground, Time.get_ticks_msec(), place.get("node")]
 				return ground
 		# Not sampled yet: aim at her side of it, clear of a building's walls, until it is.
@@ -261,6 +268,17 @@ static func _landmark_home(tree: SceneTree, place: Dictionary) -> Node3D:
 	return null
 
 ## Whether an outdoor goal candidate lies inside any house (a walk-grid floor cell indoors).
+## Ponyville overhaul (2026-11-23 play test): a cell with a roof over it is inside a building, not open ground beside
+## it. The Hayburger's floor is not a house interior, so _inside_home let it through: a pony asked to go or lead to the
+## Hayburger from the east got a spot 3 m inside its closed front, no route reached it, and the search grew until it
+## gave up (45 s standing still, the walk grid sampling ever wider: physics time 15-40 ms, the frame rate halved).
+static func _roofed(tree: SceneTree, at: Vector3) -> bool:
+	var world := tree.root.get_world_3d()
+	if world == null: return false
+	var hit := world.direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.3, at + Vector3.UP * 8.0, 1))
+	return not hit.is_empty() and not (hit.collider as Object).is_class("Terrain3D")
+
+
 static func _inside_home(tree: SceneTree, at: Vector3) -> bool:
 	for home: Node in tree.get_nodes_in_group("house_interiors"):
 		if home is Node3D and home.has_method("contains") and home.contains(at): return true

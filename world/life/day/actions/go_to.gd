@@ -10,11 +10,14 @@ var _tries := 0
 var _snack: Node3D
 var _home: Node3D
 const HOME := preload("res://world/buildings/house_interior.gd")
+const SPREAD := preload("res://world/life/day/place_spread.gd")
 
 func start(ctx: Dictionary) -> bool:
 	_point = place_point(ctx, str(ctx.step.target))
 	if not _point.is_finite(): return false
 	_home = HOME.at(ctx.tree, _point)
+	# out in the open: her own spot round the place, not its one anchor point (place_spread.gd)
+	if _home == null or not _home.has_method("request_visit"): _point = SPREAD.point(ctx.tree, str(ctx.id), str(ctx.step.target), _point)
 	if _home != null and _home.has_method("request_visit"):
 		if not _home.request_visit(ctx.actor): return false
 		_point = _home.visit_point(ctx.actor)

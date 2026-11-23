@@ -131,6 +131,8 @@ func _fill_list(t: int, list: VBoxContainer) -> void:
 	var tab: Array = Settings.TABS[t]
 	for row in tab[1]:
 		_row(list, str(row[0]), str(row[1]))
+		# Ponyville's town density (town_density.gd keeps it, not Settings) after the plants row.
+		if str(row[1]) == "video/foliage_density": _town_density_rows(list)
 		# A sample caption under its background row, as that row and Subtitle size make it.
 		if str(row[1]) == "access/caption_opacity":
 			var sample := CAPTION.new()
@@ -296,6 +298,42 @@ func _row(list: VBoxContainer, label_text: String, key: String) -> void:
 	var options := _options(key)
 	if _segments_fit(options): _segments(line, key, options)
 	else: _dropdown(stack, line, key, options)
+
+
+## Town density (world/towns/ponyville/town_density.gd): Ponyville's houses, 75 to 260, and a button that saves
+## the world and loads it again (the town is built when a world loads). Its own row, as its choice is not one of
+## Settings' rows (the overhaul ships as a mod; the game's Settings script loads before any mod).
+func _town_density_rows(list: VBoxContainer) -> void:
+	var density := preload("res://world/towns/ponyville/town_density.gd")
+	var card := PanelContainer.new(); card.add_theme_stylebox_override("panel", _row_idle)
+	card.mouse_filter = Control.MOUSE_FILTER_PASS
+	card.mouse_entered.connect(func() -> void: card.add_theme_stylebox_override("panel", _row_hover); _redraw())
+	card.mouse_exited.connect(func() -> void: card.add_theme_stylebox_override("panel", _row_idle); _redraw())
+	list.add_child(card)
+	var stack := VBoxContainer.new(); stack.add_theme_constant_override("separation", 6); card.add_child(stack)
+	stack.add_child(STYLE.label("Town density", "", font_size))
+	var caption := STYLE.label("How many houses Ponyville has; applies the next time a world loads. Your home stays yours.", "Faint", font_size - 5)
+	caption.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART; stack.add_child(caption)
+	var pills := HFlowContainer.new(); pills.add_theme_constant_override("h_separation", 4); pills.add_theme_constant_override("v_separation", 4)
+	stack.add_child(pills)
+	var buttons: Array[Button] = []
+	var show := func() -> void:
+		for button: Button in buttons: button.set_pressed_no_signal(str(button.get_meta("value")) == density.choice())
+	for option: Array in density.CHOICES:
+		var pill := _button(pills, str(option[1]), func() -> void:
+			density.set_choice(str(option[0])); show.call()
+			Settings.message = density.change_note(); refresh())
+		pill.theme_type_variation = "Segment"; pill.toggle_mode = true
+		pill.custom_minimum_size = Vector2(0, font_size * 1.75)
+		pill.add_theme_font_size_override("font_size", font_size - 3)
+		pill.set_meta("value", option[0])
+		buttons.append(pill)
+	show.call()
+	var reload := _button(list, "Reload world now (applies the town density)", func() -> void:
+		Settings.message = density.reload_world(); refresh())
+	reload.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reload.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	reload.icon = _icon_texture("sparkle")
 
 
 ## The [value, label] pairs a row chooses among (Window size: only the sizes this screen holds).

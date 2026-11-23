@@ -6,6 +6,8 @@ const BUILD := preload("res://world/buildings/cloudominium/architecture_mesh.gd"
 const STAIR := preload("res://world/buildings/cloudominium/architecture_stair.gd")
 const KIT := preload("res://world/buildings/golden_oak/furniture_kit.gd")
 const LAYOUT := preload("res://world/buildings/boutique/layout.gd")
+## Where the threshold ends and the entry ramp's level landing begins (room metres, +Z out of the door).
+const ENTRY_BACK_Z := 4.95
 const COLOURS := {"wall":"9980ae","floor":"a182ad","ceiling":"ece0ef","column":"c9b5df","iron":"785687","gold":"eac064","cream":"f5e8dc","plum":"a5457d","pink":"d587ba","blue":"9ed4e6"}
 static func builder() -> BUILD:
 	var mesh:=BUILD.new()
@@ -50,15 +52,23 @@ static func build(parent:Node3D,layout:Dictionary)->Array[Vector3]:
 	mesh.quad("cream",Vector3(-jamb_x,3.6,jamb_z),Vector3(jamb_x,3.6,jamb_z),Vector3(.81,3.50,4.99),Vector3(-.81,3.50,4.99),Vector3.DOWN)
 	# Front threshold joins the circular floor to the source leaf; its approach is measured
 	# separately against live terrain by the runtime, with no terrain edits.
-	mesh.box("floor",Vector3(0,-.055,4.95),Vector3(1.74,.11,1.0))
+	# Play test 2026-11-16 (step flicker): the threshold used to run on to z 5.45, its top coplanar
+	# with the ramp's level landing (4.95-5.45, y 0) in the same lilac. The two faces took turns
+	# winning the depth test as the head moved, so the landing flickered between lit and a dark band.
+	# It now stops where the ramp begins.
+	mesh.box("floor",Vector3(0,-.055,(4.45+ENTRY_BACK_Z)*.5),Vector3(1.74,.11,ENTRY_BACK_Z-4.45))
 	# Join the lifted lining to the unchanged exterior landing with a visible,
 	# collidable slope over the original scenery steps, ending below published terrain.
 	# The hinge and exterior stay unchanged; the approach keeps its horizontal location.
 	var ramp := preload("res://world/buildings/stair_brush.gd").build({"center_x":0.0,
-		"width":1.74,"back_z":4.95,"height":0.0,"landing_z":LAYOUT.ENTRY_LANDING_Z,
+		"width":1.74,"back_z":ENTRY_BACK_Z,"height":0.0,"landing_z":LAYOUT.ENTRY_LANDING_Z,
 		"toe_z":LAYOUT.ENTRY_TOE_Z,"toe_y":LAYOUT.ENTRY_TOE_Y})
 	ramp.name="DoorwayFloorTransition";parent.add_child(ramp)
-	(ramp.get_node("StoneRamp") as MeshInstance3D).material_override=KIT.material(COLOURS.floor)
+	var stone:=ramp.get_node("StoneRamp") as MeshInstance3D
+	stone.material_override=KIT.material(COLOURS.floor)
+	# stair_brush.gd smooths normals across the hull's corners, which shaded the landing as a dark
+	# gradient running into the crease. Flat faces light the landing and slope evenly (play test 2026-11-16).
+	stone.mesh=_flat_normals(stone.mesh)
 	var structure:=mesh.commit(parent,"BoutiqueStructure")
 	for surface: int in mesh.baked_keys.size():
 		if mesh.baked_keys[surface] == "wall": structure.set_surface_override_material(surface, PAPER.boutique(true))
@@ -105,3 +115,19 @@ static func build(parent:Node3D,layout:Dictionary)->Array[Vector3]:
 	var path:Array[Vector3]=[];path.assign(built.path)
 	parent.set_meta("stair_path",path)
 	return path
+## The same triangles, each with its own face normal (same winding rule as SurfaceTool.generate_normals).
+static func _flat_normals(source:Mesh)->ArrayMesh:
+	var result:=ArrayMesh.new()
+	for s in source.get_surface_count():
+		var arrays:=source.surface_get_arrays(s)
+		var vertices:PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
+		var indices:PackedInt32Array=arrays[Mesh.ARRAY_INDEX]
+		var st:=SurfaceTool.new();st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var count:=indices.size() if not indices.is_empty() else vertices.size()
+		for i in range(0,count,3):
+			var corners:=PackedVector3Array()
+			for j in 3:corners.append(vertices[indices[i+j] if not indices.is_empty() else i+j])
+			st.set_normal(Plane(corners[0],corners[1],corners[2]).normal)
+			for corner:Vector3 in corners:st.add_vertex(corner)
+		st.set_material(source.surface_get_material(s));st.commit(result)
+	return result

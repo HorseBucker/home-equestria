@@ -18,7 +18,7 @@ const STALLION_ROSTER_VERSION := 2
 const STALLIONS := {
 	"drwhooves": "ponyville",
 	"soarin": "cloudsdale",
-	"thunderlane": "cloudsdale",
+	"thunderlane": "ponyville",
 	"braeburn": "appleloosa",
 	"caramel": "ponyville",
 	"pokey_pierce": "ponyville",
@@ -68,6 +68,10 @@ var newcomers_moved := false
 ## installs had her in Canterlot.
 const PONYVILLE_MOVES_2026_10_23 := ["sweetie_drops"]
 var bonbon_moved := false
+## Play test 2026-11-16: "Move the following ponies to Ponyville, and give them houses": the town's plan has a
+## home for each. Moved once in existing worlds; later roster edits stay authoritative.
+const PONYVILLE_MOVES_2026_11_16 := ["cloudchaser", "thunderlane", "sunshower_raindrops", "white_lightning"]
+var moved_2026_11_16 := false
 
 static func catalogue() -> Dictionary:
 	var result := SIX.duplicate()
@@ -87,7 +91,7 @@ static func regions() -> Array:
 	return WorldLayout.regions().filter(func(r): return int(r.get("phase", 0)) < 7)
 
 static func pony_name(id: String) -> String:
-	if id == "shoeshine": return "Linky (Shoeshine)"
+	if id == "shoeshine": return "Linky"      # (play test 2026-11-16: "Rename Linky (Shoeshine) to just Linky")
 	return id.replace("_", " ").capitalize()
 
 func defaults() -> void:
@@ -107,6 +111,7 @@ func defaults() -> void:
 	cheerilee_added = true
 	newcomers_moved = true
 	bonbon_moved = true
+	moved_2026_11_16 = true
 	nearby_limit = 24; social_groups = true; error = ""
 	# dev's own region setup is the default (2026-09-29): it overrides the code defaults above.
 	_add_default_background(catalogue(), true)
@@ -136,7 +141,7 @@ func _add_default_background(available: Dictionary, override := false) -> void:
 	background_added = true
 
 func as_dict() -> Dictionary:
-	return {"version": 1, "assignments": assignments.duplicate(), "nearby_limit": nearby_limit, "social_groups": social_groups, "stallions_added": true, "stallion_roster_version": STALLION_ROSTER_VERSION, "filly_households_added": filly_households_added, "zecora_added": zecora_added, "spike_added": spike_added, "cheerilee_added": cheerilee_added, "barbiepone": barbiepone, "background_added": background_added, "newcomers_moved": newcomers_moved, "bonbon_moved": bonbon_moved}
+	return {"version": 1, "assignments": assignments.duplicate(), "nearby_limit": nearby_limit, "social_groups": social_groups, "stallions_added": true, "stallion_roster_version": STALLION_ROSTER_VERSION, "filly_households_added": filly_households_added, "zecora_added": zecora_added, "spike_added": spike_added, "cheerilee_added": cheerilee_added, "barbiepone": barbiepone, "background_added": background_added, "newcomers_moved": newcomers_moved, "bonbon_moved": bonbon_moved, "moved_2026_11_16": moved_2026_11_16}
 
 func apply_data(data: Variant, available: Dictionary = {}) -> bool:
 	error = ""
@@ -165,6 +170,7 @@ func apply_data(data: Variant, available: Dictionary = {}) -> bool:
 	if not data.get("barbiepone", false) is bool: error = "Invalid summoned pony flag."; return false
 	if not data.get("newcomers_moved", false) is bool: error = "Invalid Ponyville newcomer migration flag."; return false
 	if not data.get("bonbon_moved", false) is bool: error = "Invalid Bon Bon migration flag."; return false
+	if not data.get("moved_2026_11_16", false) is bool: error = "Invalid Ponyville move flag."; return false
 	assignments = data.assignments.duplicate()
 	barbiepone = data.get("barbiepone", false)
 	for id: String in RETIRED:
@@ -198,6 +204,11 @@ func apply_data(data: Variant, available: Dictionary = {}) -> bool:
 		for id: String in PONYVILLE_MOVES_2026_10_23:
 			if available.has(id): assignments[id] = "ponyville"
 		bonbon_moved = true
+	moved_2026_11_16 = data.get("moved_2026_11_16", false)
+	if not moved_2026_11_16:
+		for id: String in PONYVILLE_MOVES_2026_11_16:
+			if available.has(id): assignments[id] = "ponyville"
+		moved_2026_11_16 = true
 	return true
 
 func _add_filly_households(available: Dictionary) -> void:
@@ -228,6 +239,12 @@ func load_file(path: String = LIVE_PATH) -> bool:
 	var needs_cheerilee_save: bool = not data.get("cheerilee_added", false) and cheerilee_added
 	var needs_newcomer_save: bool = not data.get("newcomers_moved", false)
 	var needs_bonbon_save: bool = not data.get("bonbon_moved", false)
+	var needs_move_save: bool = not data.get("moved_2026_11_16", false)
+	if needs_move_save:
+		var list_path := ProjectSettings.globalize_path(path)
+		var move_backup := list_path + ".before-ponyville-2026-11-16"
+		if not FileAccess.file_exists(move_backup) and DirAccess.copy_absolute(list_path, move_backup) != OK:
+			error = "Could not back up the resident list."; return false
 	if needs_bonbon_save:
 		var original_list := ProjectSettings.globalize_path(path)
 		var bonbon_backup := original_list + ".before-bonbon-ponyville"
@@ -255,7 +272,7 @@ func load_file(path: String = LIVE_PATH) -> bool:
 			error = "Could not back up the resident list."; return false
 		return save_file(path)
 	if needs_filly_save: return save_file(path)
-	if needs_zecora_save or needs_spike_save or needs_cheerilee_save or needs_newcomer_save or needs_bonbon_save: return save_file(path)
+	if needs_zecora_save or needs_spike_save or needs_cheerilee_save or needs_newcomer_save or needs_bonbon_save or needs_move_save: return save_file(path)
 	return true
 
 func assign(id: String, region_id: String) -> void:

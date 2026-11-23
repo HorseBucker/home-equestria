@@ -1,4 +1,5 @@
 extends Node3D
+const HOUSE_CEILINGS := preload("res://world/buildings/house_ceilings.gd")
 const HOUSE_SHELL_OPS := preload("res://world/buildings/house_shell_ops.gd")
 const HOUSE_FLOOR_FIT := preload("res://world/buildings/house_floor_fit.gd")
 const HOUSE_BEDS := preload("res://world/buildings/house_beds.gd")
@@ -172,6 +173,9 @@ func _ready() -> void:
 	_clear_ramp(house, terrain_ramp)
 	_place_bed.call_deferred()
 	INTERIOR_RANGE.start_door_detail(self)
+	# Roof, attic and porch roof count as ceilings for the walk grid, so it sees the room and the doorstep
+	# under them (house_ceilings.gd, from modChad's Pathfinding Fix). Plain town houses only.
+	if HOUSE_CEILINGS.is_town_house(self): HOUSE_CEILINGS.apply(self)
 	# The authored roof already has inward-facing surfaces. An extra flat sheet sampled
 	# above the floor cut through the sloping eaves and appeared as a blank slab indoors.
 
@@ -373,7 +377,15 @@ func _reach_squared() -> float:
 		_reach_sq=(r*r+h*h)*k*k+.01
 	return _reach_sq
 func inside() -> Vector3:return to_global(Vector3(doorway.x,floor_y,doorway.z-maxf(.20,door_width+.06)))
-func outside() -> Vector3:return to_global(approach)
+## The spot a pony goes in from. Where a building stands down in the ground (the Town Hall flat on its square, the
+## barn with its foundation buried: play test 2026-11-16) the toe of its ramp is under the grass, and ponies could
+## not go in from a spot under the ground: it is lifted onto the ground there.
+func outside() -> Vector3:
+	var at := to_global(approach)
+	if is_instance_valid(WorldTerrain.instance):
+		var ground: float = WorldTerrain.instance.height_at(at)
+		if is_finite(ground) and ground > at.y and ground - at.y < 1.5: at.y = ground
+	return at
 func center() -> Vector3:
 	var rect:Rect2=floors[0];var mid:=rect.get_center()
 	return to_global(Vector3(mid.x,floor_y,mid.y))
@@ -384,7 +396,8 @@ func slots() -> Array[Vector3]:
 		points.append(to_global(mid+offset))
 	return points
 func fits(profile:Resource) -> bool:
-	return door_width*global_basis.x.length()>profile.radius*2+.08 and .20*global_basis.y.length()>profile.clearance+.1
+	# her shoulders, not her navigation circle (2026-11-22: JRHNBR-size ponies were shut in A, B and C houses, most ponies in G ones)
+	return door_width*global_basis.x.length()>profile.radius*1.4+.06 and .20*global_basis.y.length()>profile.clearance+.1
 ## Two-room houses: where the rooms actually connect. Some designs have a wall between the
 ## main room and the wing with one opening in it; walking the straight line (or the old
 ## fixed corner) pinned ponies against that wall. Measured once with rays at pony height

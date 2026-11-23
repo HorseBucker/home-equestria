@@ -91,7 +91,8 @@
     "center_scale": 14.0
   },
   "barn": {
-    "place_id": "landmark:appleacres_barned_01",
+    "place_id": "house:sweet_apple_acres_barn",
+    "_place_id_why": "Was landmark:appleacres_barned_01, the id of the barn as a landmark too: the day tables send any pony to that landmark for an outing or a nap, and the house entry answered first, so they were sent inside the barn (Amethyst Star stood stuck in it, play test 2026-11-15). Its own id now; the landmark is the farmyard in front.",
     "label": "Sweet Apple Acres barn",
     "furnish": false,
     "reserved_for": "civic:sweet_apple_acres_barn",

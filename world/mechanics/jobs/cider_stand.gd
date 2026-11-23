@@ -98,6 +98,9 @@ func _ready() -> void:
 	_timer.timeout.connect(tick)
 	add_child(_timer)
 	_subscribe()
+	# Until the farm's cider stall exists (it is built once the ground by the orchard sign has streamed in), the
+	# stand has no place: keep it out of sight instead of standing at the world's origin (Ponyville overhaul).
+	visible = false
 	place()
 
 func _subscribe() -> void:
@@ -126,6 +129,7 @@ func place() -> bool:
 	var top: Transform3D = (display as Node3D).global_transform
 	global_transform = Transform3D(Basis(Vector3.UP, top.basis.get_euler().y), top.origin - Vector3.UP * 0.9)
 	_placed = true
+	visible = true
 	return true
 
 func _today() -> int:

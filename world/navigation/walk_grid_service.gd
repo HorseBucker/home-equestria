@@ -5,7 +5,8 @@ extends Node3D
 signal navigation_ready
 signal navigation_failed(message: String)
 signal rebuild_started
-const CACHE_VERSION := 7
+## 8: house roofs count as ceilings (world/buildings/house_ceilings.gd), which changes what a column samples.
+const CACHE_VERSION := 8
 const WATER_MASK := 1 << 15
 ## Resident chunks, ~250 KB each (arrays + published view): 384 is ~95 MB and holds a
 ## ~300 m town; 128 thrashed Ponyville's working set. One route still asks for at most
@@ -15,6 +16,27 @@ const WATER_MASK := 1 << 15
 const MAX_CHUNKS := 384
 var max_chunks := MAX_CHUNKS if OS.has_feature("android") else MAX_CHUNKS * 2
 const ROUTE_CHUNKS := 128
+## Route choice, from modChad's Pathfinding Fix 1.1.0 (walk_grid_service_fix.gd), folded in for the Ponyville
+## overhaul (a town of rivers and bridges needs the detours):
+## - the coarse chunk corridor scores every 16 m tile the same (no roads, slopes or water) and the exact search
+##   then stays inside that band; routes up to corridor_off_m search every resident tile instead, so the cheapest
+##   route wins (streets and bridges included). A search that runs out of budget is asked once more with the
+##   corridor, as before.
+## - a failed route grows its tile set by expand_step tiles per retry (it was 12) up to route_chunks (it was
+##   ROUTE_CHUNKS), so going round a river needs fewer re-searches and reaches further.
+## Standalone headsets get the lighter set; a quality tier that cut the search limit keeps the corridor.
+const ROUTE_FIX_QUEST := {"corridor_off_m": 80.0, "open_limit": 150000, "expand_step": 24, "route_chunks": ROUTE_CHUNKS}
+const ROUTE_FIX_DESKTOP := {"corridor_off_m": 200.0, "open_limit": 400000, "expand_step": 32, "route_chunks": ROUTE_CHUNKS * 2}
+const BUDGET_REASON := "Search budget reached"
+var route_fix: Dictionary = ROUTE_FIX_QUEST if OS.has_feature("android") else ROUTE_FIX_DESKTOP
+
+## True when this route search should stay inside the coarse corridor.
+func _wants_corridor(job: Dictionary) -> bool:
+	if bool(job.get("fix_force_corridor", false)): return true
+	if _search_limit < WalkPlanner.LIMIT: return true
+	var from: Vector3 = job.get("from", Vector3.ZERO)
+	var to: Vector3 = job.get("to", Vector3.ZERO)
+	return Vector2(from.x - to.x, from.z - to.z).length() > float(route_fix.corridor_off_m)
 const SAMPLE_BUDGET_US := 1000
 ## Share of the slice for speculative sampling while no route or spawn waits (2026-10-23 CPU pass:
 ## a cold cache burnt the full 1 ms on every physics step for minutes after load).
@@ -188,6 +210,8 @@ func _setup_geometry() -> void:
 	# persisted samples to the terrain import, while leaving collision-only fixtures alone.
 	if is_instance_valid(WorldTerrain.instance) and WorldTerrain.instance.navigation_revision != "":
 		hashes.append(["world_terrain", WorldTerrain.instance.navigation_revision])
+	# Ponyville overhaul: columns sampled before the ground merge (_merge_terrain) are measured again
+	hashes.append(["overhaul_ground_merge", 1])
 	_cache_dir = "user://navigation/walkgrid/%s_%s" % [zone_id,var_to_bytes([CACHE_VERSION,hashes]).hex_encode().sha256_text()]
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_cache_dir))
 	if _prune_worker < 0:
@@ -296,6 +320,8 @@ func _physics_process(delta: float) -> void:
 		if sampled <= 0:
 			_sample_column(chunk,_column)
 			sampled = 1
+		else:
+			for merged in range(_column, _column + sampled): _merge_terrain(chunk, merged)
 		_column += sampled; count += sampled
 		if _column == WalkGrid.CHUNK_CELLS*WalkGrid.CHUNK_CELLS:
 			chunk.state = WalkChunk.State.DERIVING
@@ -386,9 +412,12 @@ func _submit_native(job: Dictionary, snapshot: Dictionary) -> PackedInt64Array:
 		push_error("Native route search could not register a %s actor; using the GDScript search" % zone_id)
 		return PackedInt64Array()
 	_native_generation += 1
+	var corridor := _wants_corridor(job)
 	var intent := {"owner": key, "generation": _native_generation, "from": job.from, "goal": job.to,
 		"any_floor": bool(job.get("any_floor", false)), "relaxed": bool(job.get("relaxed", false)),
-		"expansion_limit": _search_limit, "priority": 1 if bool(job.get("priority", false)) else 0}
+		"expansion_limit": _search_limit if corridor else maxi(_search_limit, int(route_fix.open_limit)),
+		"use_corridor": corridor,
+		"priority": 1 if bool(job.get("priority", false)) else 0}
 	# Phase 2 follower options (only with -- --native-navigation follow): a cramped start may leave
 	# its nook along capsule-sized floor, and obstruction evidence keeps the search out of discs.
 	var extra: Dictionary = job.get("extra", {})
@@ -655,6 +684,7 @@ func _search(snapshot: Dictionary, job: Dictionary) -> void:
 	if job.kind == "wander":
 		_pending_result = {"destination":planner.wander(snapshot,job.from,job.profile,job.radius,job.interest,job.get("home",Vector3.INF),job.get("leash",INF),job.get("context",{})), "intent":job.get("intent", "Exploring")}
 	else:
+		planner.use_corridor = _wants_corridor(job)
 		_pending_result = planner.plan(snapshot,job.from,job.to,job.profile,job.get("any_floor",false),job.get("relaxed",false))
 
 func _sample_column(chunk: WalkChunk, column: int) -> void:
@@ -707,6 +737,8 @@ func _sample_column(chunk: WalkChunk, column: int) -> void:
 			if box.grow(.18).has_point(hit.position+Vector3.UP*.3): chunk.headroom[slot] = 0.0
 		found += 1
 		if found >= WalkGrid.SPANS: break
+	if found > 0:
+		_merge_terrain(chunk, column, water_y)
 	if found == 0 and is_instance_valid(WorldTerrain.instance):
 		# No physics floor here (unloaded zone, or outside Terrain3D's dynamic collision
 		# radius): the world heightmap is the ground.
@@ -729,6 +761,61 @@ func _sample_column(chunk: WalkChunk, column: int) -> void:
 			if not space.intersect_shape(_volume, 1).is_empty(): chunk.headroom[slot] = 0.0
 			for box in _blockers.values():
 				if box.grow(.18).has_point(Vector3(x,ground+.3,z)): chunk.headroom[slot] = 0.0
+
+## Ponyville overhaul (2026-11-23 play test; from PR #20 "Fix followers getting stuck at house entrances and on buried
+## approach ramps", ponywizard, its merge done after the native sampler too, which this game's library cannot change).
+## Terrain3D only has collision near the player: sampled farther off, a column's rays pass through the ground and
+## land on whatever lies under it, the Carousel Boutique's buried entry ramp (0.55 m under the street, a false drop
+## no pony could step down, cached for good), a lowered building's foundation, the bank under a bridge. Seen from
+## near, the same column has the ground on top. The heightmap's ground joins the column's floors in height order
+## unless a floor already lies on it, so a column reads the same however far the player stood when it was sampled.
+func _merge_terrain(chunk: WalkChunk, column: int, water_y := NAN) -> void:
+	var terrain: Node = WorldTerrain.instance if is_instance_valid(WorldTerrain.instance) else null
+	if terrain == null: return
+	var cell := chunk.coord*WalkGrid.CHUNK_CELLS + Vector2i(column%WalkGrid.CHUNK_CELLS,column/WalkGrid.CHUNK_CELLS)
+	var x := (cell.x+.5)*WalkGrid.CELL
+	var z := (cell.y+.5)*WalkGrid.CELL
+	var first := column*WalkGrid.SPANS
+	var found := 0
+	while found < WalkGrid.SPANS and is_finite(chunk.floor_y[first+found]) and chunk.flags[first+found] & WalkGrid.SOLID: found += 1
+	if found == 0: return                        # (the sampler's own heightmap fallback has it)
+	var ground: float = terrain.height_at(Vector3(x,0,z))
+	if not is_finite(ground): return              # a terrain hole (under a building) or no region
+	var index := 0
+	while index < found and chunk.floor_y[first+index] > ground+.025: index += 1
+	if index == WalkGrid.SPANS: return
+	var slot := first+index
+	if index < found:
+		if chunk.floor_y[slot] >= ground-.025: return     # the ground itself, or a floor on it
+		if index+1 < WalkGrid.SPANS:
+			chunk.floor_y[slot+1] = chunk.floor_y[slot]
+			chunk.slope_deg[slot+1] = chunk.slope_deg[slot]
+			chunk.water_depth[slot+1] = chunk.water_depth[slot]
+			chunk.flags[slot+1] = chunk.flags[slot]
+			chunk.headroom[slot+1] = minf(chunk.headroom[slot], ground-chunk.floor_y[slot])
+	var space := get_world_3d().direct_space_state
+	if is_nan(water_y):
+		_ray.from = Vector3(x,bounds.end.y+5.0,z); _ray.to = Vector3(x,bounds.position.y-5.0,z)
+		_ray.collision_mask = WATER_MASK; _ray.hit_from_inside = false
+		var water := space.intersect_ray(_ray)
+		water_y = water.position.y if not water.is_empty() else -INF
+		_ray.collision_mask = 1
+	var normal: Vector3 = terrain.normal_at(Vector3(x,ground,z))
+	chunk.floor_y[slot] = ground
+	chunk.slope_deg[slot] = ceili(rad_to_deg(acos(clampf(normal.y,-1,1)))-.001)
+	chunk.water_depth[slot] = maxf(0.0,water_y-ground)
+	chunk.flags[slot] = WalkGrid.SOLID | (WalkGrid.WATER if chunk.water_depth[slot] > .001 else 0)
+	# its clearance against the same scenery and blockers as any other floor
+	_ray.from = Vector3(x, ground + .03, z)
+	_ray.to = Vector3(x, maxf(ground + 3.0, bounds.end.y + 5.0), z)
+	_ray.hit_from_inside = true
+	var ceiling := space.intersect_ray(_ray)
+	chunk.headroom[slot] = ceiling.position.y-ground if not ceiling.is_empty() else INF
+	_volume.transform = Transform3D(Basis.IDENTITY, Vector3(x, ground + .237, z))
+	if not space.intersect_shape(_volume, 1).is_empty(): chunk.headroom[slot] = 0.0
+	for box in _blockers.values():
+		if box.grow(.18).has_point(Vector3(x,ground+.3,z)): chunk.headroom[slot] = 0.0
+
 
 ## Trail weights of the chunk being painted (terrain_paths.chunk_weights).
 var _trail_chunk: WalkChunk
@@ -1460,6 +1547,11 @@ func _enqueue_path(job: Dictionary) -> void:
 
 func _expand_route(job: Dictionary, result: Dictionary) -> bool:
 	if job.kind != "path" or not result.get("path",PackedVector3Array()).is_empty(): return false
+	# An open search that ran out of budget: once more inside the corridor.
+	if str(result.get("reason", "")) == BUDGET_REASON and not _wants_corridor(job):
+		job["fix_force_corridor"] = true
+		_enqueue_path(job)
+		return true
 	var candidates: Array = result.get("frontier",[])
 	var end_chunk := WalkGrid.chunk_of(WalkGrid.column(job.to))
 	candidates.sort_custom(func(a,b): return Vector2(a-end_chunk).length_squared()<Vector2(b-end_chunk).length_squared())
@@ -1468,11 +1560,11 @@ func _expand_route(job: Dictionary, result: Dictionary) -> bool:
 		var center := Vector3((c.x+.5)*16.0,0,(c.y+.5)*16.0)
 		if center.x+8 < bounds.position.x or center.x-8 > bounds.end.x or center.z+8 < bounds.position.z or center.z-8 > bounds.end.z: continue
 		if c in job.chunks: continue
-		if job.chunks.size() >= ROUTE_CHUNKS:
+		if job.chunks.size() >= int(route_fix.route_chunks):
 			result.reason = "Route needs more than the resident chunk budget; no unsafe shortcut returned"
 			break
 		job.chunks.append(c); added += 1
-		if added >= 12: break
+		if added >= int(route_fix.expand_step): break
 	if added == 0: return false
 	_enqueue_path(job)
 	return true

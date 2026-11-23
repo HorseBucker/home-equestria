@@ -198,6 +198,10 @@ static func _view_rect(view: Control) -> Rect2:
 static func _image_path(relative: String) -> String:
 	if relative.is_empty() or relative.is_absolute_path() or ".." in relative: return ""
 	var resource := ROOT + relative
+	# Ponyville at a lower town density (town_density.gd): that town's own picture where it has one
+	# (density/<setting>/, tools/town_planner/build/make_map_tiles.py --density).
+	var density: String = preload("res://world/towns/ponyville/town_density.gd").current()
+	if density != "high" and FileAccess.file_exists(ROOT + "density/" + density + "/" + relative): resource = ROOT + "density/" + density + "/" + relative
 	var absolute := ProjectSettings.globalize_path(resource)
 	return absolute if FileAccess.file_exists(absolute) else resource
 

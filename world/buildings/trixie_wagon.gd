@@ -21,8 +21,8 @@ const BUNK_FRAME := Vector3(.70 * 1.20 / .67, .13, 1.78 * 2.15 / 1.74)
 const BUNK_GROW_SHIFT := Vector3(-(BUNK_FRAME.x - .70) * .5, 0, -(BUNK_FRAME.z - 1.78) * .5)
 ## A 1.281m shift and 10-degree turn clear the fair tent without terrain changes.
 ## Native wheel support, ramp and drawn neighbor geometry: test_trixie_placed.gd.
-const SPOT := Vector3(316.8, 3.815, -229.0)
-const YAW := 5.93453292519943
+const SPOT := Vector3(198.5, -11.981, -158.5)
+const YAW := -2.617980
 const FLOOR := 0.88
 const DOOR := AABB(Vector3(-0.475, 0.89, -1.80), Vector3(0.95, 1.83, 0.24))
 ## The doorknob (inside and outside halves) pokes past DOOR's faces, so the cut left it floating in

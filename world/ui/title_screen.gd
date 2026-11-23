@@ -112,6 +112,8 @@ var scenery: Node3D
 var _clock: Dictionary = {}
 var _saved_cap := 0
 var _request := ""
+var _town_request := ""
+const TOWN_DENSITY := preload("res://world/towns/ponyville/town_density.gd")
 var _request_kind := ""
 var _asset_requests: Array[String] = []
 var _focused := 0
@@ -1106,11 +1108,21 @@ func _request_asset(path: String, kind: String) -> void:
 	_request = path
 	_request_kind = kind
 	if path not in _asset_requests: _asset_requests.append(path)
+	# The town is not in main.tscn (its density is chosen when the world loads, town_density.gd): it loads
+	# alongside, and game.gd takes it from the loader.
+	_town_request = ""
+	if path == GAME:
+		var town := TOWN_DENSITY.scene_path(TOWN_DENSITY.chosen())
+		if ResourceLoader.load_threaded_get_status(town) == ResourceLoader.THREAD_LOAD_INVALID_RESOURCE and ResourceLoader.load_threaded_request(town, "PackedScene") != OK: town = ""
+		_town_request = town
 
 func _poll_asset() -> void:
 	if _request.is_empty(): return
 	var progress: Array = []
 	var state := ResourceLoader.load_threaded_get_status(_request, progress)
+	# The world waits for its town too (it is most of the loading).
+	if state == ResourceLoader.THREAD_LOAD_LOADED and not _town_request.is_empty() and ResourceLoader.load_threaded_get_status(_town_request, progress) == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+		state = ResourceLoader.THREAD_LOAD_IN_PROGRESS
 	if state == ResourceLoader.THREAD_LOAD_IN_PROGRESS:
 		var fraction := float(progress[0]) if not progress.is_empty() else 0.0
 		if is_instance_valid(_cover):

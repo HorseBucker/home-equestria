@@ -1,8 +1,16 @@
 {
   "id": "ponyville_river_fishing",
-  "origin": [261.2, -21.40, 94.6],
-  "bank_direction": [-0.8, 0.0, 0.6],
+  "origin": [
+    211.47,
+    -12.2,
+    -111.65
+  ],
+  "bank_direction": [
+    0.032,
+    0.0,
+    0.999
+  ],
   "width": 3.6,
   "length": 8.0,
-  "survey": "captures/fishing/bank-profile.json"
+  "survey": "tools/town_planner/build/plan_navigation.py (Ponyville overhaul: Marigold Lake)"
 }

@@ -1,0 +1,112 @@
+{
+	"_about": "The town's design for layout_town.py, in metres on the shrunken map (factor x the source plan, about the town's middle). streets: each street's middle line, its width between roofs, and which sides get a row of houses (both, left, right or none; left and right as you walk from the first point to the last). squares: open town ground. roads: the dirt roads out of town (they replace the source plan's). landmarks: where a landmark stands and what its front faces ('toward'); a landmark not named here stays where the source plan has it. reserved: circles kept free of houses. springs: how the rivers that ran off the map begin or end instead.",
+	"factor": 0.6667,
+	"house": 0.9,
+	"home": 0.95,
+	"yard": 0.5,
+	"streets": [
+		{"name": "Main Street", "width": 6.0, "points": [[96,-187],[70,-185],[42,-181],[15,-176],[-8,-172],[-32,-173],[-52,-174]]},
+		{"name": "Library Street", "width": 5.0, "points": [[92,-200],[66,-214],[40,-230],[14,-242],[-6,-246]]},
+		{"name": "Hospital Street", "width": 5.0, "points": [[104,-204],[90,-232],[74,-258],[54,-280],[30,-294],[14,-292]]},
+		{"name": "Lake Street", "width": 5.0, "points": [[124,-203],[122,-232],[118,-258],[112,-282],[106,-302]]},
+		{"name": "Inner Ring", "width": 4.5, "points": [[52,-183],[50,-205],[58,-224],[76,-240],[98,-250],[118,-254]]},
+		{"name": "Outer Ring", "width": 4.5, "points": [[8,-175],[6,-205],[14,-232],[30,-256],[54,-276],[84,-288],[110,-290]]},
+		{"name": "West Row", "width": 5.0, "points": [[-45,-312],[-45,-272],[-40,-240],[-36,-205],[-33,-173],[-33,-146],[-26,-124],[-8,-112],[18,-108]]},
+		{"name": "Station Lane", "width": 4.5, "points": [[-45,-290],[-18,-286],[10,-280],[30,-294]]},
+		{"name": "South Street", "width": 5.0, "points": [[96,-158],[70,-156],[40,-155],[12,-154],[-10,-155],[-33,-157]]},
+		{"name": "Sugarcube Lane", "width": 4.5, "points": [[118,-136],[92,-132],[62,-131],[32,-131],[4,-132],[-24,-136]]},
+		{"name": "Tranquility Row", "width": 4.5, "points": [[18,-108],[45,-107],[75,-106],[92,-108]]},
+		{"name": "Bakers Cross", "width": 4.5, "points": [[66,-185],[66,-156],[64,-131],[62,-107]]},
+		{"name": "Fountain Cross", "width": 4.5, "points": [[8,-175],[6,-154],[4,-132],[6,-110]]},
+		{"name": "Plaza Cross", "width": 4.5, "points": [[104,-170],[100,-150],[96,-132],[92,-108]]},
+		{"name": "South Gate", "width": 5.0, "sides": "none", "points": [[50,-107],[52,-96],[52,-88]]},
+		{"name": "Marigold Gate", "width": 5.0, "sides": "none", "points": [[138,-158],[139,-146],[138,-138]]},
+		{"name": "East Gate", "width": 6.0, "sides": "none", "points": [[150,-176],[160,-174],[166,-173]]},
+		{"name": "Uptown Cross", "width": 5.0, "points": [[118,-256],[140,-256],[165,-256],[190,-256],[212,-254]]},
+		{"name": "Market Row", "width": 5.0, "points": [[150,-256],[150,-285],[150,-315],[152,-342]]},
+		{"name": "Uptown Row", "width": 4.5, "points": [[178,-256],[178,-285],[178,-315],[180,-342]]},
+		{"name": "Hill Row", "width": 4.5, "points": [[205,-252],[206,-285],[206,-315],[208,-340]]},
+		{"name": "Sparkling Row", "width": 4.5, "points": [[152,-342],[180,-344],[208,-342],[230,-332]]},
+		{"name": "Riverside", "width": 4.5, "points": [[230,-332],[230,-306],[227,-284],[216,-264],[204,-250],[192,-232],[182,-216],[166,-202]]},
+		{"name": "West Gate", "width": 4.5, "sides": "none", "points": [[-33,-146],[-44,-143],[-54,-141]]},
+		{"name": "Station Road", "width": 4.5, "sides": "none", "points": [[-6,-246],[-12,-231],[-38,-229.5],[-50,-233]]},
+		{"name": "Windmill Gate", "width": 4.0, "sides": "none", "points": [[-8,-112],[-8,-103]]},
+		{"name": "East Lane", "width": 4.0, "sides": "none", "points": [[206,-308],[240,-308]]},
+		{"name": "East Lane South", "width": 4.0, "sides": "none", "points": [[206,-288],[238,-289]]}
+	],
+	"squares": [
+		{"name": "Town Square", "points": [[96,-204],[150,-204],[166,-196],[168,-160],[150,-146],[112,-148],[96,-162]]},
+		{"name": "Market Square", "points": [[121,-302],[147.6,-302],[147.6,-258.4],[121,-258.4]]}
+	],
+	"reserved": [
+		{"name": "Balloon Green", "x": -12, "z": -267, "radius": 12}
+	],
+	"landmarks": [
+		{"id": "trainstation_01", "toward": [-70, -245]},
+		{"id": "goldenoaklibrary_01", "toward": [-6, -246]},
+		{"id": "burger_joint_01", "toward": [-10, -173]},
+		{"id": "spa_01", "toward": [140, -190]},
+		{"id": "tent_friagram_red_01", "toward": [157, -190]},
+		{"id": "rarityboutique_01", "x": 106, "z": -96, "toward": [96, -108]},
+		{"id": "general_hospital_01", "toward": [14, -292]},
+		{"id": "schoolhouse_01", "toward": [52, -68]},
+		{"id": "sweetappleacres_carrot_farmhouse_01", "toward": [358.7, -170]},
+		{"id": "tent_friagram_orange_01", "x": 214, "z": -191, "toward": [203, -189]},
+		{"id": "tent_friagram_purple_01", "x": 186, "z": -160},
+		{"id": "trixie_wagon_01", "x": 198.5, "z": -158.5},
+		{"id": "schoolhouse_theatre_01", "x": 214, "z": -161.5},
+
+		{"id": "tent_friagram_lightbrown_01", "x": 128, "z": -296, "toward": [128, -280]},
+		{"id": "tent_friagram_pinkish_01", "x": 141, "z": -296, "toward": [141, -280]},
+		{"id": "kiosk_01_02", "x": 124.6, "z": -281.5, "toward": [134, -281.5]},
+		{"id": "cloudsdale_hotdogstand_02", "x": 125, "z": -272.5, "toward": [134, -272.5]},
+		{"id": "kiosk_02_02", "x": 144, "z": -280.5, "toward": [134, -283]},
+		{"id": "cloudsdale_hotdogstand_01", "x": 144.6, "z": -272, "toward": [134, -272]},
+		{"id": "kiosk_01_01", "x": 126.5, "z": -264.6, "toward": [126.5, -275]},
+		{"id": "kiosk_02_01", "x": 142.5, "z": -265.2, "toward": [142.5, -275]},
+		{"id": "appleacres_wagon_02", "x": 131.5, "z": -277, "yaw": 1.2217},
+
+		{"id": "airballoon_01", "x": -12, "z": -269, "yaw": 1.2223},
+		{"id": "picnictable_03", "x": -22.5, "z": -263, "yaw": 2.1721},
+		{"id": "picnictable_04", "x": -2.5, "z": -264, "yaw": 0.9}
+	],
+	"anchors": [
+		{"id": "painting_easel", "label": "Painting easel", "x": -13, "z": -259.5, "toward": [-12, -269]}
+	],
+	"roads": [
+		{"name": "Heartland Road", "width": 3.5, "points": [[-45,-312],[-54,-316],[-66,-317],[-82,-316],[-100,-323],[-118,-338],[-140,-342],[-180,-343],[-225,-348],[-268,-358],[-300,-388]]},
+		{"name": "Station Path", "width": 3.0, "points": [[-50,-233],[-64,-231],[-78,-229],[-83,-240],[-83,-262]]},
+		{"name": "West Road", "width": 3.5, "points": [[-62,-174],[-82,-176],[-104,-170],[-126,-160],[-150,-160],[-172,-163],[-196,-158],[-218,-148],[-240,-138],[-268,-126],[-300,-113]]},
+		{"name": "Hamlet Path", "width": 2.5, "points": [[-196,-158],[-208,-168],[-204,-180]]},
+		{"name": "West Gate Road", "width": 3.0, "points": [[-62,-141],[-76,-146],[-92,-158],[-104,-170]]},
+		{"name": "Windmill Path", "width": 2.5, "points": [[-12,-96],[-12,-88],[-10,-82]]},
+		{"name": "Apple Road", "width": 3.5, "points": [[53,-78],[52,-60],[50,-30],[46,0],[43,20],[47,48],[40,62],[20,72],[0,80],[-12,96],[-16,108]]},
+		{"name": "Sweet Apple Lane", "width": 3.0, "points": [[40,62],[18,68],[2,64],[-10,58]]},
+		{"name": "School Path", "width": 2.5, "points": [[52,-67],[47,-67.5]]},
+		{"name": "Clubhouse Path", "width": 2.5, "points": [[49,-22],[32,-18],[18,-14]]},
+		{"name": "Farm Road", "width": 3.5, "points": [[172,-172],[188,-174],[220,-177],[260,-178],[300,-178],[340,-177],[352,-176.5]]},
+		{"name": "Mill Path", "width": 2.5, "points": [[304,-178],[307,-192]]},
+		{"name": "Cloud Road", "width": 3.0, "points": [[352,-176.5],[366,-172],[388,-174],[412,-186],[424,-202]]},
+		{"name": "Fair Path", "width": 3.0, "points": [[198,-214],[204,-200],[200,-186],[192,-175]]},
+		{"name": "Canterlot Road", "width": 3.5, "points": [[246,-308],[256,-306],[262,-320],[268,-345],[280,-378],[300,-402],[330,-440],[352,-470],[372,-498],[400,-515],[430,-545],[452,-572],[468,-588]]},
+		{"name": "Riverside Path", "width": 3.0, "points": [[246,-289],[255,-292],[259,-304]]},
+		{"name": "Everfree Road", "width": 3.5, "points": [[143,-126],[152,-112],[170,-100],[196,-92],[222,-82],[250,-76],[280,-66],[310,-58],[345,-46],[378,-36],[400,-32]]},
+		{"name": "Meadow Road", "width": 3.0, "points": [[400,-32],[420,-46],[445,-60],[470,-64],[498,-62]]},
+		{"name": "Cottage Path", "width": 2.5, "points": [[400,-17],[402,-8]]},
+		{"name": "Caballeron Path", "width": 2.5, "points": [[262,-71],[262,-64]]}
+	],
+	"springs": {
+		"inset": 60,
+		"radius": 6.5,
+		"named": [
+			{"near": [500, -10], "name": "Froggy Bottom Bog", "kind": "bog", "inset": 78, "rx": 18, "rz": 13},
+			{"near": [455, -588], "name": "Canterlot Springs", "radius": 10},
+			{"near": [140, -588], "name": "Sparkling Spring", "radius": 8},
+			{"near": [-300, -135], "name": "Autumn Run Spring", "radius": 7.5},
+			{"near": [500, -158], "name": "Rolling Spring"},
+			{"near": [500, -88], "name": "Meadow Spring", "inset": 28},
+			{"near": [213, 188], "name": "Everfree Spring"},
+			{"near": [9, 193], "name": "Winsome Spring"}
+		]
+	}
+}

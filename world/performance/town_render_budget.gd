@@ -21,6 +21,9 @@ extends Node
 ##   cards, MultiMeshes, skinned meshes and anything with a short draw distance keep their own.
 
 const HOUSE := preload("res://world/buildings/house_interior.gd")
+## HULLS: Ponyville overhaul hook 1/4 (2026-11-22): houses cast from simplified hulls (world/performance/house_shadow_hulls.gd).
+const HULLS := preload("res://world/performance/house_shadow_hulls.gd")
+var _hulls: RefCounted = HULLS.new()
 const SMALL_CASTER := 1.6
 ## Anything lower than this casts a sliver at most.
 const FLAT_CASTER := 0.4
@@ -145,8 +148,11 @@ func _merge_shadows() -> void:
 		var double := mi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_DOUBLE_SIDED
 		var centre := (mi.global_transform * mi.get_aabb()).get_center()
 		var own: Array[int] = []
+		# HULLS hook 2/4: a house exterior's plain opaque surfaces cast through its hull instead
+		var hulled: bool = _hulls.take(mi, kinds, town, double, SHADOW_CELL, _occluders.get(mi.mesh))
 		for s in kinds.size():
 			if typeof(kinds[s]) == TYPE_INT: own.append(s); continue
+			if hulled and kinds[s] == null: continue
 			var material: Material = kinds[s]
 			var id := 0 if material == null else material.get_instance_id()
 			if material != null: materials[id] = material
@@ -206,6 +212,8 @@ func _merge_shadows() -> void:
 		statistics.shadow_cells += 1
 		statistics.merged_triangles += cell.indices.size() / 3
 		_queue_lods(arrays, shadow, material)
+	_hulls.build(holder)   # HULLS hook 3/4: the hull cells
+	print("[render budget] house shadow hulls: %s" % _hulls.statistics)
 	print("[render budget] shadows: %d casters merged into %d shadow meshes (%d triangles) in %d ms; %d late indoor/flat/small casters off" % [
 		statistics.merged_casters, statistics.shadow_cells, statistics.merged_triangles, Time.get_ticks_msec() - started, statistics.late_trimmed])
 	_merge_tree_shadows()
@@ -946,6 +954,7 @@ func _process(delta: float) -> void:
 	var camera := preload("res://world/player_view.gd").camera(self)
 	if camera == null: return
 	var home := HOUSE.at(get_tree(), camera.global_position)
+	_hulls.update(camera.global_position, home)   # HULLS hook 4/4: houses near the camera (and the one it is in) cast in full
 	if home != _door_home:
 		_set_door_shadows(_door_home, false)
 		_set_door_shadows(home, true)

@@ -16,8 +16,17 @@ const STEP_SECONDS := 0.1
 const RIDERS_SECONDS := 1.0
 ## Past this the player cannot tell: no transforms, and the next step lands on the true pose.
 const FAR_METRES := 500.0
-## One turn an hour.
+## One turn an hour: the old turn, kept for the rollback of FACE_TOWN.
 const TURN_SECONDS := 3600.0
+## The door faces the town wherever the wind takes the home (play test 2026-11-16: "Rainbow Dash's
+## house moves around, which is fine, but I want it always facing the town"). The yaw is a function
+## of the drifted position, so it stays a pure function of the clock (the save needs nothing new) and
+## turns only as fast as the drift moves the bearing: a few hundredths of a degree a second.
+## Riders follow through the same step as before (the hourly turn already rotated them about the
+## pivot). Rollback: FACE_TOWN = false (one turn an hour again).
+const FACE_TOWN := true
+## The town's centre, the Town Hall (the soundscape's source of truth for it).
+const TOWN: Vector3 = preload("res://world/audio/soundscape.gd").TOWN
 ## Metres and seconds of the slow waves. Periods share no factor, so the path never repeats soon.
 const WAVES_X := [[6.0, 1373.0, 0.0], [2.0, 531.0, 1.1]]
 const WAVES_Z := [[5.0, 1109.0, 0.6], [2.0, 613.0, 0.0]]
@@ -32,6 +41,8 @@ const LOOSE_MAX := 64
 var shell: Node3D
 var frame: Node3D
 var pivot := Vector3.ZERO
+## The door side (layout frame +Z, shell.gd FRAME) at rest, in world space.
+var front := Vector3.BACK
 var _shell_rest := Transform3D.IDENTITY
 var _frame_rest := Transform3D.IDENTITY
 var _applied := Transform3D.IDENTITY
@@ -51,6 +62,7 @@ func bind(existing: Node3D, runtime: Node3D) -> void:
 	_shell_rest = existing.global_transform
 	_frame_rest = runtime.global_transform
 	pivot = _frame_rest.origin
+	front = _frame_rest.basis.z
 	_move(_clock(), null)
 
 static func _wave(rows: Array, t: float) -> float:
@@ -59,9 +71,15 @@ static func _wave(rows: Array, t: float) -> float:
 	return sum
 
 ## Where the home is at clock time t, as a transform of its resting pose about the tower.
-static func motion(t: float, around: Vector3) -> Transform3D:
+## `ahead` is the resting door direction: the turn points it at the town from the drifted tower.
+static func motion(t: float, around: Vector3, ahead: Vector3) -> Transform3D:
 	var offset := Vector3(_wave(WAVES_X, t), _wave(WAVES_Y, t), _wave(WAVES_Z, t))
 	var turn := Basis(Vector3.UP, TAU * fposmod(t, TURN_SECONDS) / TURN_SECONDS)
+	if FACE_TOWN:
+		var level := Vector3(ahead.x, 0.0, ahead.z)
+		var to_town := Vector3(TOWN.x - around.x - offset.x, 0.0, TOWN.z - around.z - offset.z)
+		# A flat or degenerate bearing (never in Ponyville: the home floats far from the hall) keeps rest.
+		turn = Basis(Vector3.UP, level.signed_angle_to(to_town, Vector3.UP)) if level.length_squared() > 0.000001 and to_town.length_squared() > 1.0 else Basis.IDENTITY
 	return Transform3D(turn, around + offset) * Transform3D(Basis.IDENTITY, -around)
 
 func _clock() -> float:
@@ -104,7 +122,7 @@ func _physics_process(delta: float) -> void:
 	_move(_clock(), player)
 
 func _move(t: float, player: Node3D) -> void:
-	var next := motion(t, pivot)
+	var next := motion(t, pivot, front)
 	var step := next * _applied.affine_inverse()
 	var aboard := player != null and holds(_feet(player))
 	_applied = next
@@ -157,12 +175,16 @@ func _feet(player: Node3D) -> Vector3:
 
 func _update_riders() -> void:
 	_update_loose()
-	for pony: Node in _riders.duplicate():
-		if not is_instance_valid(pony):
-			_riders.erase(pony)
-		elif pony.moving_support != frame or not holds(pony.global_position):
+	# Untyped: a rider freed while aboard (despawned with the player far away) cannot be assigned to a typed
+	# loop variable, and the error then repeated every physics frame (found by the Ponyville overhaul's lab).
+	# (A freed rider cannot be erased from the typed list either: the riders still aboard are kept instead.)
+	var aboard: Array[Node] = []
+	for pony in _riders:
+		if not is_instance_valid(pony): continue
+		if pony.moving_support != frame or not holds(pony.global_position):
 			if pony.moving_support == frame: pony.set_moving_support(null)
-			_riders.erase(pony)
+		else: aboard.append(pony)
+	_riders = aboard
 	for navigator: Node in get_tree().get_nodes_in_group("pony_navigators"):
 		var pony: Node3D = navigator.get("pony") as Node3D
 		if pony == null or not pony.has_method("set_moving_support") or pony.moving_support != null: continue

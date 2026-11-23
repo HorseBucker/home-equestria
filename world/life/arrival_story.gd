@@ -36,7 +36,7 @@ const TELEPORT_TALK_RANGE := 12.0
 ## Twilight's teleport lands in Ponyville itself, on open level ground 50 m north of Town Hall
 ## (dev 2026-10-02: from the Everfree's edge at (60, 312) it was "like a 5 minute walk", and her lead
 ## got stuck at a river bridge). Probed clear of buildings and water: tools/life/probe_landing_spots.gd.
-const FOREST_EDGE := Vector3(95.8, 0.0, -161.2)
+const FOREST_EDGE := Vector3(124.0, 0.0, -154.0)
 const POCKET := preload("res://world/life/arrival_pocket.gd")
 const WAKE_SCENE := preload("res://world/life/arrival_wake.gd")
 const TUTORIAL := preload("res://world/life/arrival_tutorial.gd")
@@ -49,7 +49,7 @@ const TUTORIAL_PATIENCE := 90.0
 const LIBRARY := "house:golden_oak_library"
 const RESCUE := "arrival_rescue"
 const SHELTER := "arrival_shelter"
-const GOLDEN_OAK := Vector3(-24.5, -11.3, -259.2)
+const GOLDEN_OAK := Vector3(-8.08, -10.757, -257.208)
 const STARTING_BITS := 50
 const BASKET := ["food:red-apple", "food:red-apple", "food:red-apple", "food:red-apple", "food:carrot",
 	"food:carrot", "food:carrot", "food:carrot", "food:bread-loaf", "food:hayburger", "food:hayburger"]
@@ -140,6 +140,8 @@ func prepare(host: Node, resumed: Dictionary) -> void:
 	# A saved AnonPony is the player in every stage, finished worlds included. Here, after the
 	# save's context is restored and before anything places him, under the loading cover.
 	_apply_form()
+	# A world from before the Ponyville overhaul: its home, furniture and places move into the new town, once.
+	preload("res://world/towns/ponyville/overhaul_migration.gd").run(self, resumed)
 	if resume_teleport: _place_player(FOREST_EDGE, Vector3.FORWARD)
 	if stage() == "done": return
 	if stage() in FOREST_STAGES:
@@ -1019,6 +1021,9 @@ func _home_reserved() -> void:
 	if str(data.get("home", "")) == "": return
 	var house := _home_house()
 	if house == null: return
+	# Kept at every town density (town_density.gd): where this world's home stands.
+	if game.world_context != null and str(game.world_context.get("path")) != "":
+		preload("res://world/towns/ponyville/town_density.gd").remember_home(str(game.world_context.path).get_base_dir(), house)
 	# New grants reserve a real table before optional decoration. Persist that layout
 	# choice for streamed/reloaded homes, without rearranging older completed homes.
 	# A later pony's grant has no welcome basket, so its furniture is left as it stands.

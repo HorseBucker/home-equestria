@@ -1,0 +1,41 @@
+{
+  "_what": "Cherry Berry's balloon flights (play test 2026-11-16: \"Cherry Berry should be able to get in the hot air balloon and go flying around town on her own\"), merged over day_tables.json by day_planner.gd. Only she gets the step; weighted so that most afternoons' cards hold one. The handler (world/life/day/actions/fly_balloon.gd) still refuses it in foul weather, while Anon is flying the balloon, without the balloon on its pad, or too near her bedtime. minutes: game minutes of cruising (real seconds through day_action.duration, 150 to 600 s).",
+  "actions": {
+    "balloon_flight": {
+      "weight": 14.0,
+      "handler": "fly_balloon",
+      "hours": [
+        12.5,
+        16.5
+      ],
+      "target": "balloon_pad",
+      "when": {
+        "only_id": [
+          "cherry_berry"
+        ]
+      },
+      "minutes": [
+        100,
+        150
+      ],
+      "phrase": "take Ponyville's hot-air balloon up for a flight over the town",
+      "reasons": "balloon"
+    }
+  },
+  "targets": {
+    "balloon_pad": {
+      "places": [
+        "landmark:airballoon_01"
+      ]
+    }
+  },
+  "reasons": {
+    "balloon": [
+      "because the sky is clear",
+      "because the balloon needs a good airing",
+      "to see Ponyville from up high",
+      "because she can't stay on the ground for long",
+      "while the afternoon air is calm"
+    ]
+  }
+}

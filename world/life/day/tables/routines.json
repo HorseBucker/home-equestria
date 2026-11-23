@@ -1,0 +1,453 @@
+{
+	"_what": "Fixed daily routines (play test 2026-11-16), merged by day_planner.gd (_routines) into every card they fit: school for Ponyville's foals and Cheerilee on school days (Monday to Friday, not in the Hearth's Warming holidays: day_planner.school_day), the Cutie Mark Crusaders meeting at their clubhouse and going crusading together, and Carrot Top (golden_harvest) tending her carrot beds from spring to autumn. start: she sets off; until: the latest she may still set off; end: her handler finishes then (card hours, past midnight counts on from 24). Rolled steps that overlap a routine are dropped. when: as day_tables.json actions, plus filly (identity's filly flag) and school_day.",
+	"routines": {
+		"school_teach": {
+			"handler": "school",
+			"role": "teacher",
+			"target": "landmark:schoolhouse_01",
+			"start": 7.3,
+			"until": 11.0,
+			"end": 15.0,
+			"when": {
+				"only_id": [
+					"cheerilee"
+				],
+				"school_day": true
+			},
+			"phrase": "teach her class at the {target}",
+			"reasons": "school_teach"
+		},
+		"school_pupil": {
+			"handler": "school",
+			"role": "pupil",
+			"target": "landmark:schoolhouse_01",
+			"start": 7.55,
+			"until": 11.0,
+			"end": 14.75,
+			"when": {
+				"filly": true,
+				"school_day": true,
+				"not_id": [
+					"spike"
+				]
+			},
+			"phrase": "go to school at the {target}",
+			"reasons": "school_pupil"
+		},
+		"crusade_after_school": {
+			"handler": "crusade",
+			"target": "landmark:cutiemarkcrusaders_clubhouse_01",
+			"start": 15.0,
+			"until": 16.25,
+			"end": 17.75,
+			"members": [
+				"apple_bloom",
+				"sweetie_belle",
+				"scootaloo"
+			],
+			"when": {
+				"only_id": [
+					"apple_bloom",
+					"sweetie_belle",
+					"scootaloo"
+				],
+				"school_day": true
+			},
+			"phrase": "meet the other Crusaders at the {target} after school, then go crusading together at {item}, trying for cutie marks in {idea}",
+			"reasons": "crusade",
+			"places": [
+				{
+					"id": "landmark:windmill_02",
+					"label": "the windmill by the orchard",
+					"ideas": [
+						"windmill fixing",
+						"kite flying in the windmill's breeze"
+					]
+				},
+				{
+					"id": "landmark:appleacres_barned_01",
+					"label": "the Sweet Apple Acres barn",
+					"ideas": [
+						"hay bale stacking",
+						"barn painting"
+					]
+				},
+				{
+					"id": "landmark:schoolhouse_theatre_01",
+					"label": "the outdoor stage",
+					"ideas": [
+						"acting",
+						"putting on a talent show"
+					]
+				},
+				{
+					"id": "landmark:schoolhouse_01",
+					"label": "the schoolhouse playground",
+					"ideas": [
+						"playground stunts",
+						"tetherball"
+					]
+				},
+				{
+					"id": "landmark:fountain_01",
+					"label": "the fountain in the square",
+					"ideas": [
+						"coin wishing",
+						"fountain diving (from the edge only)"
+					]
+				},
+				{
+					"id": "landmark:town_hall",
+					"label": "the Town Hall",
+					"ideas": [
+						"giving speeches like the mayor",
+						"ringing the town bell"
+					]
+				},
+				{
+					"id": "landmark:sugarcube_corner",
+					"label": "Sugarcube Corner",
+					"ideas": [
+						"cupcake baking",
+						"cake decorating"
+					]
+				},
+				{
+					"id": "landmark:trainstation_01",
+					"label": "the train station",
+					"ideas": [
+						"train spotting",
+						"being conductors"
+					]
+				},
+				{
+					"id": "landmark:ponyville_market",
+					"label": "Ponyville Market",
+					"ideas": [
+						"market selling",
+						"fruit juggling"
+					]
+				},
+				{
+					"id": "landmark:goldenoaklibrary_01",
+					"label": "the Golden Oak Library",
+					"ideas": [
+						"book reading",
+						"being librarians"
+					]
+				},
+				{
+					"id": "landmark:rarityboutique_01",
+					"label": "the Carousel Boutique",
+					"ideas": [
+						"dress designing",
+						"hat making"
+					]
+				},
+				{
+					"id": "landmark:burger_joint_01",
+					"label": "the Hayburger",
+					"ideas": [
+						"hayburger cooking",
+						"being waitresses"
+					]
+				},
+				{
+					"id": "landmark:spa_01",
+					"label": "the day spa",
+					"ideas": [
+						"mane styling",
+						"giving hoof massages"
+					]
+				},
+				{
+					"id": "landmark:general_hospital_01",
+					"label": "the hospital",
+					"ideas": [
+						"being nurses",
+						"bandaging"
+					]
+				},
+				{
+					"id": "landmark:balloon",
+					"label": "the hot-air balloon",
+					"ideas": [
+						"ballooning",
+						"being sky pilots"
+					]
+				},
+				{
+					"id": "landmark:windmill_01",
+					"label": "the windmill by the carrot farm",
+					"ideas": [
+						"flour grinding",
+						"windmill climbing (carefully)"
+					]
+				},
+				{
+					"id": "landmark:sweetappleacres_carrot_farmhouse_01",
+					"label": "Carrot Top's farm",
+					"ideas": [
+						"carrot farming",
+						"scarecrow making"
+					]
+				},
+				{
+					"id": "landmark:snazzys_fluttershy_cottage_01",
+					"label": "Fluttershy's cottage",
+					"ideas": [
+						"animal caring",
+						"critter taming"
+					]
+				},
+				{
+					"id": "landmark:bridge_02",
+					"label": "the market road bridge",
+					"ideas": [
+						"fishing",
+						"bridge building"
+					]
+				}
+			],
+			"chance": 0.55
+		},
+		"crusade_free_day": {
+			"handler": "crusade",
+			"target": "landmark:cutiemarkcrusaders_clubhouse_01",
+			"start": 10.0,
+			"until": 11.5,
+			"end": 13.0,
+			"members": [
+				"apple_bloom",
+				"sweetie_belle",
+				"scootaloo"
+			],
+			"when": {
+				"only_id": [
+					"apple_bloom",
+					"sweetie_belle",
+					"scootaloo"
+				],
+				"school_day": false
+			},
+			"phrase": "meet the other Crusaders at the {target}, then go crusading together at {item}, trying for cutie marks in {idea}",
+			"reasons": "crusade",
+			"places": [
+				{
+					"id": "landmark:windmill_02",
+					"label": "the windmill by the orchard",
+					"ideas": [
+						"windmill fixing",
+						"kite flying in the windmill's breeze"
+					]
+				},
+				{
+					"id": "landmark:appleacres_barned_01",
+					"label": "the Sweet Apple Acres barn",
+					"ideas": [
+						"hay bale stacking",
+						"barn painting"
+					]
+				},
+				{
+					"id": "landmark:schoolhouse_theatre_01",
+					"label": "the outdoor stage",
+					"ideas": [
+						"acting",
+						"putting on a talent show"
+					]
+				},
+				{
+					"id": "landmark:schoolhouse_01",
+					"label": "the schoolhouse playground",
+					"ideas": [
+						"playground stunts",
+						"tetherball"
+					]
+				},
+				{
+					"id": "landmark:fountain_01",
+					"label": "the fountain in the square",
+					"ideas": [
+						"coin wishing",
+						"fountain diving (from the edge only)"
+					]
+				},
+				{
+					"id": "landmark:town_hall",
+					"label": "the Town Hall",
+					"ideas": [
+						"giving speeches like the mayor",
+						"ringing the town bell"
+					]
+				},
+				{
+					"id": "landmark:sugarcube_corner",
+					"label": "Sugarcube Corner",
+					"ideas": [
+						"cupcake baking",
+						"cake decorating"
+					]
+				},
+				{
+					"id": "landmark:trainstation_01",
+					"label": "the train station",
+					"ideas": [
+						"train spotting",
+						"being conductors"
+					]
+				},
+				{
+					"id": "landmark:ponyville_market",
+					"label": "Ponyville Market",
+					"ideas": [
+						"market selling",
+						"fruit juggling"
+					]
+				},
+				{
+					"id": "landmark:goldenoaklibrary_01",
+					"label": "the Golden Oak Library",
+					"ideas": [
+						"book reading",
+						"being librarians"
+					]
+				},
+				{
+					"id": "landmark:rarityboutique_01",
+					"label": "the Carousel Boutique",
+					"ideas": [
+						"dress designing",
+						"hat making"
+					]
+				},
+				{
+					"id": "landmark:burger_joint_01",
+					"label": "the Hayburger",
+					"ideas": [
+						"hayburger cooking",
+						"being waitresses"
+					]
+				},
+				{
+					"id": "landmark:spa_01",
+					"label": "the day spa",
+					"ideas": [
+						"mane styling",
+						"giving hoof massages"
+					]
+				},
+				{
+					"id": "landmark:general_hospital_01",
+					"label": "the hospital",
+					"ideas": [
+						"being nurses",
+						"bandaging"
+					]
+				},
+				{
+					"id": "landmark:balloon",
+					"label": "the hot-air balloon",
+					"ideas": [
+						"ballooning",
+						"being sky pilots"
+					]
+				},
+				{
+					"id": "landmark:windmill_01",
+					"label": "the windmill by the carrot farm",
+					"ideas": [
+						"flour grinding",
+						"windmill climbing (carefully)"
+					]
+				},
+				{
+					"id": "landmark:sweetappleacres_carrot_farmhouse_01",
+					"label": "Carrot Top's farm",
+					"ideas": [
+						"carrot farming",
+						"scarecrow making"
+					]
+				},
+				{
+					"id": "landmark:snazzys_fluttershy_cottage_01",
+					"label": "Fluttershy's cottage",
+					"ideas": [
+						"animal caring",
+						"critter taming"
+					]
+				},
+				{
+					"id": "landmark:bridge_02",
+					"label": "the market road bridge",
+					"ideas": [
+						"fishing",
+						"bridge building"
+					]
+				}
+			],
+			"chance": 0.55
+		},
+		"carrot_fields_morning": {
+			"handler": "tend_fields",
+			"target": "landmark:sweetappleacres_carrot_farmhouse_01",
+			"start": 8.0,
+			"until": 10.5,
+			"end": 11.75,
+			"when": {
+				"only_id": [
+					"golden_harvest"
+				],
+				"season": [
+					"spring",
+					"summer",
+					"autumn"
+				]
+			},
+			"phrase": "tend the carrot beds in her fields",
+			"reasons": "carrots"
+		},
+		"carrot_fields_afternoon": {
+			"handler": "tend_fields",
+			"target": "landmark:sweetappleacres_carrot_farmhouse_01",
+			"start": 13.75,
+			"until": 15.5,
+			"end": 16.75,
+			"when": {
+				"only_id": [
+					"golden_harvest"
+				],
+				"season": [
+					"spring",
+					"summer",
+					"autumn"
+				]
+			},
+			"phrase": "tend the carrot beds in her fields",
+			"reasons": "carrots"
+		}
+	},
+	"reasons": {
+		"school_teach": [
+			"like every school day",
+			"with a new lesson planned",
+			"and mark yesterday's homework"
+		],
+		"school_pupil": [
+			"to be taught by Cheerilee",
+			"for today's lessons with Cheerilee",
+			"for class with Cheerilee"
+		],
+		"crusade": [
+			"to try for their cutie marks",
+			"to try out a new crusading idea",
+			"for some crusading adventure"
+		],
+		"carrots": [
+			"the carrots need water",
+			"to pull the weeds between the rows",
+			"to check how the carrots are coming along",
+			"because a farm pony's work is never done"
+		]
+	}
+}

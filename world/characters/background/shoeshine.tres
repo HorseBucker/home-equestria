@@ -6,7 +6,7 @@
 [resource]
 script = ExtResource("1")
 id = "shoeshine"
-display_name = "Linky (Shoeshine)"
+display_name = "Linky"
 race = 0
 coat_fill = Color(0.57254905, 0.84313726, 0.9647059, 1)
 coat_line = Color(0.4117647, 0.60784316, 0.69411767, 1)

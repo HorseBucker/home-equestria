@@ -467,6 +467,12 @@ func _choose_activity(resident: Dictionary) -> Dictionary:
 				and not nearby.any(func(entry): return entry.id == place_id):
 			nearby.append({"id":place_id,"distance":0.0})
 	var local_choices := nearby.size() * kinds.size()
+	# How far an outing may go: 180 m, or for a pony living out of town (Ponyville overhaul, 2026-11-19 play test: Sweet
+	# Apple Acres is some 230 m from the town's middle, so Big Mac's only places within 180 m were the farm and the
+	# schoolyard, where he kept turning up) far enough to reach the town's middle and a little beyond.
+	var reach := 180.0
+	var home_town: Rect2 = town_bounds.get(resident.home_region, Rect2())
+	if home_town.has_area(): reach = maxf(reach, origin.distance_to(Vector3(home_town.get_center().x, origin.y, home_town.get_center().y)) + 60.0)
 	for i in mini(CHOICES_PER_REVIEW, count):
 		var index := posmod(int(resident.get("choice_cursor", 0)), count)
 		var place: Dictionary
@@ -508,7 +514,7 @@ func _choose_activity(resident: Dictionary) -> Dictionary:
 			continue
 		var settled:=_settled_place(place,resident.id)
 		var returning:=int(resident.get("wander_stops",0))>=3 and settled
-		if (place.region==resident.region and distance > 180 and not returning) or distance < float(KINDS[kind].get("min_distance", 0)):
+		if (place.region==resident.region and distance > reach and not returning) or distance < float(KINDS[kind].get("min_distance", 0)):
 			continue
 		if int(resident.get("wander_stops",0))>=3 and not settled:continue
 		var distance_cost := minf(distance,180) / (80.0 if place.region == resident.region else 600.0)

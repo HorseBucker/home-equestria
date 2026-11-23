@@ -1,6 +1,6 @@
 {
   "id": "shoeshine",
-  "name": "Linky (Shoeshine)",
+  "name": "Linky",
   "tag": "shoeshine",
   "prompt": "res://world/characters/background/ai/shoeshine.md",
   "tts_speaker_id": 6,

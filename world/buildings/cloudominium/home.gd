@@ -57,6 +57,57 @@ func configure(room: Dictionary, built: Node3D, furnishing: Node3D, door_leaf: N
 	for target: Node3D in [bed, _guest_bed()]:
 		if target != null: target.set_meta("house", self)
 	_install_guest_rest()
+	# (once the town has set the house in its place: it is moved and scaled after this)
+	if is_inside_tree(): get_tree().create_timer(4.0).timeout.connect(_add_porch)
+	else: ready.connect(func() -> void: get_tree().create_timer(4.0).timeout.connect(_add_porch), CONNECT_ONE_SHOT)
+
+## Ponyville overhaul (2026-11-23 play test: brought down in front of her door, Rainbow Dash "couldn't walk inside.
+## She couldn't follow me inside either"; "go_to house:cloudominium failed: No safe floor at start or destination").
+## The cloud in front of the door is on the pegasus-only cloud layer, which the walk grid does not see, so a pony
+## standing there (where a flight home lands, navigator_routes.gd flight_landing) had no floor to start a route from.
+## A walkable porch on the world layer: a landing pad level with the cloud at the approach (where she lands and
+## stands; the door point lies on the cloud, 0.7 m under the doorway) and a ramp from it up to the doorway. Marked as
+## an entrance's support, so a flight may land on it (placement_recovery.gd _roof) and it is no roof.
+func _add_porch() -> void:
+	if not is_inside_tree(): return
+	var old := get_node_or_null("WalkablePorch")
+	if old != null: old.free()
+	# in world space: this home is scaled, and a shape's size does not scale with it the way its position does
+	var scale_m := global_basis.x.length()
+	var at := outside()
+	var door := to_global(Vector3(doorway.x, floor_y, doorway.z))
+	var out := at - door; out.y = 0.0
+	if out.length() < 0.1: return
+	out = out.normalized()
+	var facing := Basis.looking_at(-out, Vector3.UP)        # its -z toward the door, +z out over the cloud
+	var body := StaticBody3D.new(); body.name = "WalkablePorch"
+	body.collision_layer = 1; body.collision_mask = 0
+	body.set_meta(&"house_entrance_support", true)
+	# a child, so it drifts with the cloud (cloud_drift.gd), but unscaled: the house is scaled up, and a shape's size
+	# does not scale with it the way its position does
+	add_child(body)
+	body.global_transform = Transform3D.IDENTITY
+	var width := door_width * scale_m + 1.0
+	var pad_depth := 2.0
+	var pad := CollisionShape3D.new(); pad.name = "Pad"
+	var pad_box := BoxShape3D.new(); pad_box.size = Vector3(width + 0.6, 0.2, pad_depth)
+	pad.shape = pad_box
+	body.add_child(pad)
+	pad.global_transform = Transform3D(facing, at + out * (pad_depth * 0.5 - 0.4) + Vector3.DOWN * 0.1)
+	var rise := door.y - at.y
+	var run := Vector2(at.x - door.x, at.z - door.z).length()
+	if run > 0.1 and rise > 0.02:
+		var angle := atan2(rise, run)
+		var ramp := CollisionShape3D.new(); ramp.name = "Ramp"
+		var ramp_box := BoxShape3D.new(); ramp_box.size = Vector3(width, 0.2, sqrt(rise * rise + run * run) + 0.3)
+		ramp.shape = ramp_box
+		var tilted := facing * Basis(Vector3.RIGHT, angle)          # its +z end (out on the cloud) down
+		var up := tilted.y
+		body.add_child(ramp)
+		ramp.global_transform = Transform3D(tilted, (at + door) * 0.5 - up * 0.1)
+	# the walk grid sees it from now on (a column sampled before kept no floor there)
+	for service: Node in get_tree().get_nodes_in_group("pony_navigation"):
+		if service.has_method("notify_geometry_changed"): service.call("notify_geometry_changed", AABB(at, Vector3.ZERO).expand(door).grow(3.0))
 
 ## Anon's existing physical bed rest (shared_bed.gd, no relationship needed), as in Golden Oak.
 func _install_guest_rest() -> void:

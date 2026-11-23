@@ -9,7 +9,7 @@ const KEY := "station:balloon-hill"
 ## Easel origin on the ground; +Z (where the painter stands) faces away from the market.
 ## Measured 2026-10-22: the first spot (266, -281) sits on a 21 cm slope, so the lab moved it
 ## 4.5 m along the hill edge to flat, clear ground beside the picnic table.
-const POSE := Transform3D(Basis(Vector3.UP, 2.5113), Vector3(266.0, 6.781, -285.5))
+const POSE := Transform3D(Basis(Vector3.UP, -1.9199), Vector3(260.1, -11.998, -285.06))
 
 static func attach(town: Node) -> void:
 	if not town is Node3D or not town.is_inside_tree() or town.get_node_or_null("PaintingStation") != null: return

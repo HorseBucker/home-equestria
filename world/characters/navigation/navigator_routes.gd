@@ -127,7 +127,12 @@ static func next_leg(nav: Node) -> void:
 	# Pegasi hop long legs through the air when the corridor and landing allow it.
 	if nav._flight_shortcuts and pony.has_method("request_flight") and pony.identity != null and pony.identity.has_wings() and nav._journey_flights < 40:
 		var landing := journey if _flat(from, journey) < 400.0 else from + toward.normalized() * minf(toward.length(), 380.0)
-		if is_instance_valid(WorldTerrain.instance):
+		# Ponyville overhaul (2026-11-23 play test: sent to bed in her Cloudominium, Rainbow Dash "landed on her roof
+		# and floated there ... before hovering down onto her roof and getting stuck"): a last leg into a house lands
+		# at its door, as a short flight does (flight_landing); the walk in is planned once she is down.
+		var door := landing == journey and flight_landing(nav, journey) != journey
+		if door: landing = flight_landing(nav, journey)
+		if is_instance_valid(WorldTerrain.instance) and not door:      # (a door keeps its own height: the cloud's)
 			var lh: float = WorldTerrain.instance.height_at(landing)
 			if is_finite(lh): landing.y = maxf(landing.y, lh) if landing == journey else lh
 		if pony.request_flight(landing, 0.0, true):

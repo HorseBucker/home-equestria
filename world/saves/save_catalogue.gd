@@ -64,6 +64,7 @@ static func header_from_doc(doc: Dictionary, path: String) -> Dictionary:
 	var clock: Dictionary = doc.get("clock") if doc.get("clock") is Dictionary else {}
 	return {"format": format_of(doc), "world_id": str(doc.get("world_id", _world_of(path))),
 		"saved_at": _number(doc.get("saved_at")), "day": _number(doc.get("day")), "hours": _number(doc.get("hours")),
+		"start_day": _number(context.get("world_start_day")) if context.get("world_start_day") != null else start_day_for(_number(doc.get("day"))),
 		"kind": kind, "place": place, "form": form_text(FORM.saved(context)),
 		"play_seconds": _number(clock.get("active_seconds"))}
 
@@ -128,10 +129,20 @@ static func world_started(world_id: String) -> String:
 
 
 # ------------------------------------------------------------------ text for menus
-## "Day 5, 14:20" (day 0 is the first day).
+## "Day 5, 14:20": days since the world began, Day 1 its first (Ponyville overhaul, 2026-11-22: the menus showed a new
+## game on "Day 35", the clock's day, while the watch counted from the world's start: world/life/world_days.gd).
 static func game_time_text(entry: Dictionary) -> String:
 	var hours := clampf(float(entry.get("hours", 0.0)), 0.0, 23.99)
-	return "Day %d, %02d:%02d" % [int(entry.get("day", 0)) + 1, int(hours), int((hours - int(hours)) * 60.0)]
+	var day := int(entry.get("day", 0))
+	var start := int(entry.get("start_day")) if entry.get("start_day") != null else start_day_for(day)
+	return "Day %d, %02d:%02d" % [maxi(0, day - start) + 1, int(hours), int((hours - int(hours)) * 60.0)]
+
+
+## A world's first day when its save does not say (saved before the watch first counted): world_days.gd's rule with
+## the default 20-day seasons: a world already past the late-summer start began there, else on day 0.
+static func start_day_for(day: float) -> int:
+	const LATE_SUMMER := 34
+	return LATE_SUMMER if int(day) >= LATE_SUMMER else 0
 
 
 ## Local wall-clock time of a save: "today 21:03", "yesterday 08:10", "Oct 12, 21:03", "Oct 12 2025, 21:03".
@@ -261,6 +272,7 @@ static func _entry(path: String, header: Dictionary, shelf: Dictionary = {}) -> 
 	var own: Dictionary = (shelf.get("saves", {}) as Dictionary).get(SHELF.key_of(path), {})
 	return {"path": path, "world_id": world_id, "label": label, "saved_at": _number(header.get("saved_at")),
 		"hours": _number(header.get("hours")), "day": _number(header.get("day")), "archived": archived, "newer": newer,
+		"start_day": _number(header.get("start_day")) if header.get("start_day") != null else start_day_for(_number(header.get("day"))),
 		"backup": bool(header.get("backup", false)), "kind": str(header.get("kind", _kind_from_path(path))),
 		"place": str(header.get("place", "")), "form": str(header.get("form", "Human")),
 		"play_seconds": _number(header.get("play_seconds")),

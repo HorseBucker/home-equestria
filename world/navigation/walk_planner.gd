@@ -360,7 +360,11 @@ func _portal(a: Vector2i, b: Vector2i) -> bool:
 				if _room(next) and _link(_sample(k),_sample(next),WalkGrid.CELL): return true
 	return false
 
+## Off: the exact search sees every resident tile (walk_grid_service.gd, route choice).
+var use_corridor := true
+
 func _chunk_corridor(start: Vector3i, goal: Vector3i) -> Dictionary:
+	if not use_corridor: return {}
 	var a := WalkGrid.chunk_of(Vector2i(start.x,start.z))
 	var b := WalkGrid.chunk_of(Vector2i(goal.x,goal.z))
 	if a == b or data.size() < 16: return {}

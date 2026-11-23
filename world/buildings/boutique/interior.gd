@@ -2,8 +2,12 @@ extends Node3D
 const ARCHITECTURE := preload("res://world/buildings/boutique/architecture.gd")
 const KIT := preload("res://world/buildings/golden_oak/furniture_kit.gd")
 const PROPS := preload("res://world/buildings/boutique/props.gd")
+const LAYOUT := preload("res://world/buildings/boutique/layout.gd")
 const REST := preload("res://world/relationships/shared_bed.gd")
 const SEAT := preload("res://world/life/seat.gd")
+## The chaise's wall spot (degrees, room frame: 0 is the door, 90 is +X) and its fitted size.
+const CHAISE_ANGLE := 270.0
+const CHAISE_SIZE := Vector3(1.7, 1.05, .72)
 var beds: Dictionary = {}
 var stair_path: Array[Vector3] = []
 func build(layout: Dictionary) -> void:
@@ -18,7 +22,10 @@ func build(layout: Dictionary) -> void:
 	var sewing := PROPS.place(self, "sewing_table", Vector3(.2, 0, -2.6), Vector3(1.65, 1.65, .65), PI)
 	var sewing_size: Vector3 = sewing.get_meta("size")
 	KIT.box_body(sewing, "WorkTable", Vector3(sewing_size.x, .76, sewing_size.z), Vector3(0, .38, 0))
-	var chaise := PROPS.place(self, "boutique_chaise", Vector3(-2.6, 0, .25), Vector3(1.7, 1.05, .72), PI*.5)
+	# Play test 2026-11-16 ("push the chaise back against the wall"): it stood 2 m out in the room.
+	# Back to the west wall now, centred under the 270 degree window, beneath the open upper flight
+	# (about 3.7 m headroom there); its seat still faces the room's centre.
+	var chaise := PROPS.place(self, "boutique_chaise", LAYOUT.against_wall(layout.radius, CHAISE_ANGLE, CHAISE_SIZE.x*.5, CHAISE_SIZE.z*.5), CHAISE_SIZE, deg_to_rad(CHAISE_ANGLE)+PI)
 	var chaise_size: Vector3 = chaise.get_meta("size")
 	KIT.box_body(chaise, "SeatSupport", Vector3(chaise_size.x, .38, chaise_size.z), Vector3(0, .19, 0))
 	var seat := SEAT.new(); seat.position = Vector3(0, .4, 0); seat.rotation.y = PI; seat.depth = .45; chaise.add_child(seat)

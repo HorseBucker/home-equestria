@@ -207,6 +207,9 @@ func sample(id: String, observer: Node3D, characters: Dictionary, player: Node3D
 		"asleep": observer.get("sleeping") == true,
 		"cradle": CRADLE_REST.situation(observer),
 		"riding": observer.has_meta("balloon_passenger"),
+		# Flying it herself (world/vehicles/balloon/pony_pilot.gd), with or without Anon aboard.
+		"piloting": observer.has_meta("balloon_pilot"),
+		"anon_aboard": observer.has_meta("balloon_passenger") and is_instance_valid(observer.get_meta("balloon_passenger")) and observer.get_meta("balloon_passenger").has_method("holds_player") and bool(observer.get_meta("balloon_passenger").holds_player(observer.get_meta("balloon_passenger").get("_player"))),
 		"aloft": observer.has_meta("balloon_passenger") and is_instance_valid(observer.get_meta("balloon_passenger")) and not bool(observer.get_meta("balloon_passenger").get("landed"))}
 	var previous: Dictionary = _observations.get(id, {})
 	var named: Array = []
@@ -342,6 +345,10 @@ func sample(id: String, observer: Node3D, characters: Dictionary, player: Node3D
 		sample.footing = footing(observer, position)
 		var around := season_note(observer.get_tree(), position)
 		if not around.is_empty(): sample.season_note = around
+	# how she rests and on what (Ponyville overhaul, 2026-11-21: Lyra sat on the bench by the fountain and said she sat
+	# on the grass: her prompt only said what ground she stood over); and a free seat near her
+	sample.rest = rest_words(observer)
+	sample.seat_near = seat_near(observer)
 	# Luna's dream (world/life/luna_dream.gd, player report 2026-10-25): the moon stands far above
 	# the world, so the town's region, weather, landmarks and "metres above the ground" footing
 	# told her Anon was not on the moon. Only a pony inside the dream's MoonDream scene gets this.
@@ -357,6 +364,14 @@ func sample(id: String, observer: Node3D, characters: Dictionary, player: Node3D
 		sample.sky = "the black sky of space, full of stars; no air, wind or weather here"
 		sample.erase("season")
 		sample.erase("season_note")
+	# A quick lift (Ponyville overhaul, 2026-11-21: "if you pick her up only for a second, then her AI wouldn't be told
+	# about it", to set a pony stuck on a step back on her way without her complaining): she counts as held only once
+	# Anon has held her QUIET_LIFT seconds; a lift shorter than that, however often, is never told to her. (Carrying
+	# her 1.5 m away still is, by carry_reaction.gd.)
+	var lifted: bool = bool(sample.held)
+	sample["held_since"] = float(previous.get("held_since", now)) if lifted and bool(previous.get("lifted", false)) else now
+	sample["lifted"] = lifted
+	sample.held = lifted and now - float(sample.held_since) >= QUIET_LIFT
 	var events: Array = previous.get("events", []).filter(func(event): return now - event.time < EVENT_LIFETIME)
 	# Recent events are timed in real seconds; a sleep skips game hours in a few of them (player bug
 	# board #36: a pickup before a full day's sleep read as "18 s ago"). A jump forgets them.
@@ -385,6 +400,60 @@ func sample(id: String, observer: Node3D, characters: Dictionary, player: Node3D
 	return sample
 
 
+## How she rests and on what, from the game's own state: "sitting on a bench", "lying on the couch", "lying in bed",
+## "sitting on the ground"... or "" when she is on her feet. The seat's name comes from its furniture (a couch's or
+## bed's rest_word) or the prop it belongs to.
+static func rest_words(observer: Node3D) -> String:
+	if not is_instance_valid(observer) or not observer.has_method("posture_status"): return ""
+	var kind := str(observer.posture_status().get("kind", "stand"))
+	var lying := kind == "lie_down"
+	var pose := "lying" if lying else "sitting"
+	var seating: Node = observer.get_tree().get_first_node_in_group("pony_seating") if observer.is_inside_tree() else null
+	var seat: Node3D = seating.call("seat_of", observer) if seating != null and seating.has_method("seat_of") else null
+	if seat != null:
+		var furniture: Variant = seat.get_meta("couch") if seat.has_meta("couch") else null
+		var word := str(furniture.call("rest_word")) if is_instance_valid(furniture) and (furniture as Object).has_method("rest_word") else ""
+		if word == "bed": return "lying in bed" if lying else "sitting on the bed"
+		if not word.is_empty(): return pose + " on the " + word
+		if seat.get_meta("floor_sit", false): return pose + " on the floor"
+		return pose + " on " + seat_name(seat)
+	if kind == "stand" and not observer.has_meta("seated"): return ""
+	if observer.get("sleeping") == true: return ""        # (asleep in bed: told elsewhere)
+	if observer.has_meta("seated"): return pose + " on a seat"
+	return pose + (" on the floor" if preload("res://world/buildings/house_interior.gd").at(observer.get_tree(), observer.global_position) != null else " on the ground")
+
+
+## A seat's name from the prop it belongs to: "a bench", "a picnic table's bench", "a chair", "a tree stump"...
+static func seat_name(seat: Node3D) -> String:
+	var node: Node = seat
+	for i in 4:
+		if node == null: break
+		if node.has_meta("ai_label") and str(node.get_meta("ai_label")).strip_edges() != "":
+			var label := str(node.get_meta("ai_label")).strip_edges().left(60)
+			var lower := label.to_lower()
+			return label if lower.begins_with("a ") or lower.begins_with("an ") or lower.begins_with("the ") else "the " + label
+		var name := (str(node.name) + " " + str(node.get_meta("kit_spot_id", "")) + " " + str(node.scene_file_path.get_file())).to_lower()
+		for pair: Array in [["picnic", "a picnic table's bench"], ["table", "a table's bench"], ["bench", "a bench"], ["stump", "a tree stump"],
+				["chair", "a chair"], ["stool", "a stool"], ["sofa", "the sofa"], ["couch", "the couch"]]:
+			if name.contains(pair[0]): return pair[1]
+		node = node.get_parent()
+	return "a seat"
+
+
+## The nearest free seat within 8 m she could sit on, in words ("a bench about 3 m away"), or "".
+static func seat_near(observer: Node3D) -> String:
+	if not is_instance_valid(observer) or not observer.is_inside_tree(): return ""
+	var seating: Node = observer.get_tree().get_first_node_in_group("pony_seating")
+	if seating == null or not seating.has_method("free_seat_near") or not seating.has_method("seat_of") or seating.call("seat_of", observer) != null: return ""
+	var seat: Node3D = seating.call("free_seat_near", observer.global_position, 8.0, observer)
+	if seat == null: return ""
+	return "%s about %d m away" % [seat_name(seat), maxi(1, roundi(seat.global_position.distance_to(observer.global_position)))]
+
+
+## Seconds a pony may be lifted without being told she was picked up (see the quick lift in sample()).
+const QUIET_LIFT := 1.0
+
+
 ## What she physically stands on when it is not the open ground: a roof, a bridge,
 ## a cloud house, a prop. Read from the collider under her hooves, never guessed.
 func footing(observer: Node3D, position: Vector3) -> String:
@@ -404,6 +473,9 @@ func footing(observer: Node3D, position: Vector3) -> String:
 	var node := collider as Node
 	for i in 10:
 		if node == null: break
+		# The balloon's basket floor is not the "top of" the balloon (play test 2026-11-16).
+		if node.is_in_group("hot_air_balloons"):
+			return "in the basket of the hot-air balloon, about %d m above the ground" % roundi(height) if height > 2.0 else "in the basket of the hot-air balloon"
 		var interior := node.get_node_or_null("HouseInterior")
 		if interior != null:
 			what = "the roof of " + str(PLACES.find(observer.get_tree(), interior.place_id()).get("label", "a house"))
@@ -440,7 +512,10 @@ func describe(sample: Dictionary, player_name: String, now: float) -> PackedStri
 		# The older wording ("if someone needs to get through") had ponies hearing knocks at the door
 		# in every indoor chat (2026-10-28 player report). Nobody is at the door unless an event says so.
 		lines.append("- You are standing in a doorway. If somepony walks up to pass, step out of the way with [step: aside]; nobody is at the door otherwise.")
-	if sample.get("riding", false):
+	if sample.get("piloting", false):
+		# Her own flight (play test 2026-11-16): she is the pilot, Anon at most a passenger.
+		lines.append("- You are flying Ponyville's hot-air balloon yourself, standing at the helm in its basket; you look after this balloon. " + ("It is up in the air; you will bring it back down onto its pad yourself." if sample.get("aloft", false) else "It is resting on the ground at its pad.") + (" Anon is aboard as your passenger." if sample.get("anon_aboard", false) else ""))
+	elif sample.get("riding", false):
 		lines.append("- You are riding in Anon's hot-air balloon, in its basket with him. " + ("It is up in the air, drifting over Equestria; you step off once it lands with the gate open." if sample.get("aloft", false) else "It is resting on the ground with the gate open."))
 	if sample.get("asleep", false):
 		if sample.get("cradle", "") == "asleep": lines.append(CRADLE_REST.ASLEEP_LINE)
@@ -450,9 +525,17 @@ func describe(sample: Dictionary, player_name: String, now: float) -> PackedStri
 	# Bridal carried (cradle_rest.gd), she knows how she is being held.
 	var cradled: bool = sample.get("cradle", "") in ["cradled", "drowsy"]
 	var body := (CRADLE_REST.BODY_WORDS if cradled else "being held in the player's arms right now") if sample.held else ("moving" if sample.moving else "at rest")
-	if str(sample.get("ground", "")) != "": body += ", " + str(sample.ground)
+	var rest := str(sample.get("rest", ""))
+	if rest != "" and not sample.held: body = rest
+	# (the ground under her is not where she is when she is up on a seat, couch or bed)
+	if str(sample.get("ground", "")) != "" and not (rest.contains(" on ") and not rest.ends_with("on the ground") and not rest.ends_with("on the floor")) and not rest.contains(" in bed"):
+		body += ", " + str(sample.ground)
 	if str(sample.get("facing", "")) != "": body += ", facing " + str(sample.facing)
 	lines.append("- Your body: %s." % body)
+	if rest.contains(" on ") and not rest.ends_with("ground") and not rest.ends_with("floor"):
+		lines.append("- You are %s right now. This is certain: never say you are on the ground or the grass." % rest)
+	elif str(sample.get("seat_near", "")) != "" and not sample.held:
+		lines.append("- Seat near you: %s (sit_on_seat sits you on it)." % sample.seat_near)
 	if sample.get("cradle", "") == "drowsy": lines.append(CRADLE_REST.DROWSY_LINE)
 	if str(sample.get("sky", "")) != "": lines.append("- Light: %s." % sample.sky)
 	if str(sample.get("season_note", "")) != "": lines.append("- Around you: %s." % sample.season_note)

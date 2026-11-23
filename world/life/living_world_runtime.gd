@@ -566,6 +566,11 @@ func _discover(id: String) -> void:
 		at.x = snappedf(at.x, 16)
 		at.z = snappedf(at.z, 16)
 		place_id = "%s:outdoor:%d:%d:%d" % [region, at.x, at.z, roundi(at.y / 8)]
+		# Not across the water from where she stands: a meeting spot found over a stream drew ponies onto land
+		# they could only leave by walking round the river's head (Pinkie stood at X 134, Z -55, play test
+		# 2026-11-15). Spots on her own bank only; the far bank is found from the far bank.
+		var here := actor.global_position
+		if preload("res://world/navigation/river_crossings.gd").crosses(Vector2(here.x, here.z), Vector2(at.x, at.z)): return
 	if not at.is_finite() or at.distance_to(actor.global_position) > 90:
 		return
 	at = nav.command_support(at)

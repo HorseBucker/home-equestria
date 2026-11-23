@@ -29,13 +29,14 @@
 	// wet ground and puddles. A dry, snowless, leafless pixel pays these three uniform tests only.
 	if (season_snow_cover > .001 || season_leaf_litter > .001 || season_wetness > .001) {
 		vec3 s_n = normalize(w_normal);
-		float s_road = 0.0; float s_forest = 0.0; float s_rock = 0.0;
+		float s_road = 0.0; float s_forest = 0.0; float s_rock = 0.0; float s_street = 0.0;
 		for (int si = 0; si < 4; si++) {
 			float sw = bilerp ? weights[si] : (si == 3 ? 1.0 : 0.0);
 			if (sw <= 0.0) continue;
 			uint sc = control[si];
 			int sb = DECODE_BASE(sc); int so = DECODE_OVER(sc); float sm = DECODE_BLEND(sc);
 			s_road += sw * mix(season_road_id(sb), season_road_id(so), sm);
+			s_street += sw * mix(sb == 22 ? 1.0 : 0.0, so == 22 ? 1.0 : 0.0, sm);
 			s_forest += sw * mix(season_forest_id(sb), season_forest_id(so), sm);
 			s_rock += sw * mix(gaea_rock(sb), gaea_rock(so), sm);
 		}
@@ -68,6 +69,10 @@
 				// Look 2026-11-10: in deep winter the roads are trodden snow, not bare strips (a light
 				// dusting still leaves them clear). Old rule: s_trodden * .85 at every depth.
 				float s_road_clear = mix(.85, .42, smoothstep(.5, .9, season_snow_cover));
+				// The town's streets and squares (texture 22) are swept, not just trodden (play test 2026-11-16:
+				// "The town streets should be visible in Winter, similar to how dirt roads are"): their pale
+				// sage under trodden snow read as plain snow, so they keep most of their own colour at any depth.
+				s_road_clear = mix(s_road_clear, .88, s_street);
 				s_cover *= 1.0 - max(s_trodden * s_road_clear, max(s_forest, s_canopy * .85));
 			}
 			if (s_cover > .001) {

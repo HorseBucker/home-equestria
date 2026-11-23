@@ -45,8 +45,27 @@ static func read_json(path: String) -> Dictionary:
 
 static func index_at(folder: String, surface := false) -> Dictionary:
 	var bundle := read_json(folder.path_join("bundle.json"))
-	if not bundle.is_empty(): return bundle.get("surface" if surface else "biomes", {})
-	return read_json(folder.path_join("surface_index.json" if surface else "index.json"))
+	var found: Dictionary = bundle.get("surface" if surface else "biomes", {}) if not bundle.is_empty() else read_json(folder.path_join("surface_index.json" if surface else "index.json"))
+	return _town_density_paint(folder, found) if surface else found
+
+
+## The town's ground paint at the chosen town density (Ponyville overhaul, 2026-11-19: door paths only to the houses
+## that setting builds): a tile painted by the overhaul has a copy for each lower density beside it
+## (apply_paint.py --density), used in its place when there is one.
+const OVERHAUL_PAINT := "ponyville_overhaul_20261114"
+static func _town_density_paint(folder: String, index: Dictionary) -> Dictionary:
+	if not index.get("tiles") is Dictionary: return index
+	# (set by town_density.gd as the town is filled, before the terrain loads: no script is loaded here, which may run
+	# on a loading thread)
+	var density := str(Engine.get_meta("ponyville_town_density", "high"))
+	if density == "high" or density.is_empty(): return index
+	var copy := index.duplicate(true)
+	for key: String in (copy.tiles as Dictionary).keys():
+		var rel := str(copy.tiles[key])
+		if not rel.ends_with(OVERHAUL_PAINT): continue
+		var alternative := rel + "_" + density
+		if FileAccess.file_exists(folder.path_join(alternative).path_join("meta.json")): copy.tiles[key] = alternative
+	return copy
 
 
 static func key(location: Vector2i) -> String:

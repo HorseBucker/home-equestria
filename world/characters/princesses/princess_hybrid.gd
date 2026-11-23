@@ -20,7 +20,10 @@ func _ready() -> void:
 	for mi in head.model.find_children("Unicorn Horn", "MeshInstance3D", true, false): mi.hide()
 	var dock := find_child("OpenPonyDock", true, false)
 	if dock != null: dock.hide()
-	profile.clearance = 1.95 if identity.character() == "celestia" else 1.45
+	# (times her size, as modChad's Pathfinding Fix keeps it: set unscaled, a size given before this was lost)
+	profile.clearance = (1.85 if identity.character() == "celestia" else 1.45) * body_scale   # 1.95 did not fit a house door (modChad's Pathfinding Fix)
+	var navigator := get_node_or_null("Navigator")
+	if navigator != null and navigator.has_method("sync_agent_size"): navigator.sync_agent_size()
 	_update_capsule()
 
 func _attach_devkit_hair() -> void:

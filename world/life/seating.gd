@@ -19,6 +19,7 @@ const MANUAL := {
 }
 const CELL := 0.1
 const SPACING := 0.95
+const BACK_ROOM := 0.42           # metres forward on the seat per unit of body_scale over 1 (_hop_on)
 const BED_REST := preload("res://world/relationships/shared_bed.gd")
 const BED_MATTRESS := preload("res://world/life/couch/mattress.gd")
 var seats: Array[Node3D] = []
@@ -306,6 +307,13 @@ func free_seat_near(at: Vector3, radius: float, actor: Node3D = null) -> Node3D:
 func phase(actor: Node3D) -> String:
 	return str(_users.get(actor.get_instance_id(), {}).get("phase", ""))
 
+## The seat she is on (climbing on, sitting down or seated), or null (Ponyville overhaul, 2026-11-21: her talk is told
+## what she sits or lies on: pony_awareness.gd rest_words).
+func seat_of(actor: Node3D) -> Node3D:
+	var entry: Dictionary = _users.get(actor.get_instance_id(), {})
+	if str(entry.get("phase", "")) not in ["climbing", "sitting_down", "seated"] or not is_instance_valid(entry.get("seat")): return null
+	return entry.seat
+
 ## Walk to a free seat within `radius` and sit on it. False when there is none.
 func sit(actor: Node3D, radius: float, seat: Node3D = null, rest: Dictionary = {}) -> bool:
 	if not _ready_done: return false
@@ -320,12 +328,16 @@ func sit(actor: Node3D, radius: float, seat: Node3D = null, rest: Dictionary = {
 	entry.merge(rest, true)
 	_users[actor.get_instance_id()] = entry
 	actor.set_meta("seating", true)
-	nav.go_to(entry.get("front", _front(seat)), 1)
+	if not entry.has("front"): entry.front = _front(seat, actor)
+	nav.go_to(entry.front, 1)
 	return true
 
-func _front(seat: Node3D) -> Vector3:
+## Where she stands to hop on: in front of the seat, further out for a bigger pony (Ponyville overhaul, 2026-11-21: at
+## the JRHNBR size, 1.35, Lyra never got near enough to the spot a canon-sized pony uses and gave up on the bench).
+func _front(seat: Node3D, actor: Node3D = null) -> Vector3:
 	if seat.get_meta("floor_sit", false): return seat.global_position
-	var at := seat.global_position - seat.global_basis.z * (float(seat.get_meta("depth", 0.45)) * 0.5 + 0.55)
+	var scale := maxf(1.0, float(actor.get("body_scale"))) if actor != null and actor.get("body_scale") != null else 1.0
+	var at := seat.global_position - seat.global_basis.z * (float(seat.get_meta("depth", 0.45)) * 0.5 + 0.55 * scale)
 	var hit := seat.get_world_3d().direct_space_state.intersect_ray(PhysicsRayQueryParameters3D.create(at + Vector3.UP * 0.3, at + Vector3.DOWN * 3.0, 1))
 	return hit.position if not hit.is_empty() else Vector3(at.x, seat.global_position.y - 0.45, at.z)
 
@@ -350,7 +362,8 @@ func _physics_process(_delta: float) -> void:
 		match entry.phase:
 			"approach":
 				var front: Vector3 = entry.get("front", _front(seat))
-				var near := Vector2(actor.global_position.x - front.x, actor.global_position.z - front.z).length() < 0.6 and absf(actor.global_position.y - front.y) < 0.4
+				var reach := 0.6 * maxf(1.0, float(actor.get("body_scale")) if actor.get("body_scale") != null else 1.0)
+				var near := Vector2(actor.global_position.x - front.x, actor.global_position.z - front.z).length() < reach and absf(actor.global_position.y - front.y) < 0.4
 				if near and actor.posture_status().kind == "stand":
 					if seat.get_meta("floor_sit", false):
 						nav.stay()
@@ -395,6 +408,11 @@ func _hop_on(entry: Dictionary, actor: Node3D, seat: Node3D) -> void:
 	var start := actor.global_position
 	var start_rotation := actor.global_basis.get_rotation_quaternion()
 	var rest: Transform3D = entry.get("rest", Transform3D(seat.global_basis.orthonormalized(), seat.global_position + Vector3.UP * 0.02))
+	# A bigger pony sits further forward: her back and rump reach further behind her hips (2026-11-22 play test: Lyra at
+	# JRHNBR, 1.35, sat with her back in the bench's backrest; fine at canon size). Couches give their own rest.
+	if not entry.has("rest") and not seat.get_meta("floor_sit", false):
+		var grown := maxf(0.0, (float(actor.get("body_scale")) if actor.get("body_scale") != null else 1.0) - 1.0)
+		rest.origin += -seat.global_basis.orthonormalized().z * grown * BACK_ROOM
 	for upper in seat.get_parent().find_children("SeatUpper", "StaticBody3D", false, false): actor.add_collision_exception_with(upper)
 	var tween := create_tween().bind_node(actor)
 	entry.tween = tween

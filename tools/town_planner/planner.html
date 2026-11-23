@@ -1,0 +1,825 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Ponyville Planner</title>
+<style>
+:root { --bg:#1d2026; --panel:#272b33; --line:#3a404b; --text:#e6e8ec; --dim:#9aa1ad; --accent:#f2b84b; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:13px/1.4 system-ui, Segoe UI, sans-serif; overflow:hidden; }
+#app { display:grid; grid-template-columns:270px 1fr; height:100%; }
+#side { background:var(--panel); border-right:1px solid var(--line); overflow-y:auto; padding:10px; }
+#side h1 { font-size:15px; margin:0 0 8px; }
+#side h2 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:14px 0 6px; }
+button, select, input[type=number], input[type=text] { background:#1b1e24; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:4px 7px; font:inherit; }
+button { cursor:pointer; }
+button:hover { border-color:var(--accent); }
+button.on { background:var(--accent); color:#1d2026; border-color:var(--accent); font-weight:600; }
+.tools { display:grid; grid-template-columns:1fr 1fr; gap:4px; }
+.row { display:flex; gap:6px; align-items:center; margin:4px 0; flex-wrap:wrap; }
+.row label { color:var(--dim); min-width:64px; }
+.row input[type=number] { width:74px; }
+.row input[type=range] { flex:1; }
+.layer { display:flex; align-items:center; gap:6px; margin:2px 0; }
+#wrap { position:relative; overflow:hidden; }
+canvas { display:block; width:100%; height:100%; cursor:crosshair; }
+#status { position:absolute; left:8px; bottom:8px; background:#000a; padding:4px 8px; border-radius:4px; pointer-events:none; }
+#hint { position:absolute; left:8px; top:8px; background:#000a; padding:4px 8px; border-radius:4px; pointer-events:none; max-width:70%; }
+#counts { color:var(--dim); margin-top:6px; }
+small { color:var(--dim); }
+kbd { background:#111; border:1px solid var(--line); border-radius:3px; padding:0 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+<div id="side">
+	<h1>Ponyville Planner</h1>
+	<div class="row">
+		<button id="save">Save plan</button>
+		<button id="load">Open plan</button>
+		<input id="file" type="file" accept=".json" hidden>
+	</div>
+	<div class="row">
+		<button id="fromTown">Start from current town</button>
+		<button id="clear">Empty plan</button>
+	</div>
+
+	<h2>Tool</h2>
+	<div class="tools" id="tools"></div>
+
+	<h2>Options</h2>
+	<div id="options"></div>
+
+	<h2>Selected</h2>
+	<div id="selected"><small>Nothing selected.</small></div>
+
+	<h2>Layers</h2>
+	<div class="row"><button id="blank">Blank canvas</button><button id="game">Show game</button></div>
+	<div id="layers"></div>
+
+	<h2>Official map (tracing)</h2>
+	<div class="row"><label>Opacity</label><input id="refOpacity" type="range" min="0" max="1" step="0.05"></div>
+	<div class="row"><label>Centre x</label><input id="refX" type="number" step="5"><label style="min-width:0">z</label><input id="refZ" type="number" step="5"></div>
+	<div class="row"><label>Width (m)</label><input id="refW" type="number" step="10"></div>
+	<div class="row"><label>Turn (deg)</label><input id="refR" type="number" step="1"></div>
+	<small>Or hold <kbd>Alt</kbd>: drag moves the map, wheel resizes it, <kbd>Shift</kbd>+wheel turns it.</small>
+
+	<div id="counts"></div>
+	<div id="density"></div>
+	<h2>Keys</h2>
+	<small>
+	Drag with the right or middle button (or hold <kbd>Space</kbd>) to pan; wheel zooms.<br>
+	Placing a house or landmark: press and drag toward where it should face. To turn one later, select it and drag its door dot (house) or arrow (landmark).<br>
+	<kbd>Q</kbd>/<kbd>E</kbd> turn a house, landmark or note 5 degrees (<kbd>Shift</kbd>: 45).<br>
+	A note can face a way too: press and drag when placing it, or select it and drag its arrow (or set Facing; empty = none).<br>
+	<kbd>Enter</kbd> or double-click finishes a road, river or lake; <kbd>Esc</kbd> cancels.<br>
+	<kbd>T</kbd> flips a selected house between real home and background.<br>
+	<kbd>Del</kbd> removes the selection. <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes. <kbd>Ctrl</kbd>+<kbd>D</kbd> copies a house.
+	</small>
+</div>
+<div id="wrap">
+	<canvas id="view"></canvas>
+	<div id="hint"></div>
+	<div id="status"></div>
+</div>
+</div>
+<script src="data/town.js"></script>
+<script>
+"use strict";
+// World metres: x east, z south. On screen north is up.
+const TOWN = window.TOWN || {houses:[], designs:{}, plots:[], sites:[], scenery:[], water:null, ground:null};
+const canvas = document.getElementById("view");
+const ctx = canvas.getContext("2d");
+const KEY = "ponyville-planner-plan-v1";
+const KINDS = ["houses", "landmarks", "roads", "rivers", "lakes", "bridges", "flats", "notes", "edges", "grounds", "greens", "railways", "fields", "woods"];
+// Crops and tree density (tools/town_planner/trace_nature.py).
+const CROPS = {"wheat": "rgba(236,206,84,.85)", "carrots": "rgba(240,150,50,.85)", "vegetable rows": "rgba(70,130,50,.9)",
+	"apple orchard": "rgba(190,60,60,.45)", "farmyard": "rgba(226,212,150,.9)", "flower meadow": "rgba(230,150,220,.45)"};
+const WOODS = {"scattered": .10, "sparse": .18, "medium": .26, "dense": .34, "forest": .5};
+// Which way a model's front (door, counter, stage edge) points in its own frame, as a turn from local +z.
+// Most face +z; these were read off pictures of each model (tools/town_planner/plan_geometry.py MODEL_FRONT).
+const MODEL_FRONT = {"rnl_ponyville_trainstation": Math.PI, "rnl_ponyville_burger_joint": Math.PI, "rnl_rarityboutique": Math.PI,
+	"kiosk__rnl_ponyville_kiosk_01": Math.PI, "kiosk__rnl_ponyville_kiosk_02": Math.PI, "furniture__cloudsdale_hotdogstand": Math.PI,
+	"rnl_trixie_wagon": Math.PI, "rnl_schoolhouse_theatre": Math.PI / 2, "props_mlpprops__lyrasbench": Math.PI / 2,
+	"rnl_snazzys_fluttershy_cottage": Math.atan2(-0.766, -0.643)};
+function frontOf(id) { const row = TOWN.scenery.find(s => s.id === id); return row ? (MODEL_FRONT[row.model] || 0) : 0; }
+// Road kinds: Ponyville's own streets, and the dirt roads out of town (the game's current look).
+const ROADS = {town: {name: "Town street (sage)", width: 6, fill: "rgba(150,178,160,.97)", edge: "rgba(104,132,116,.9)"},
+	dirt: {name: "Dirt road", width: 3.5, fill: "rgba(214,176,112,.95)", edge: null}};
+const TOOLS = [
+	["select", "Select / move", "Click something to select it, drag to move it. Drag a point of a road, river or lake to reshape it. T flips a selected house between real home and background."],
+	["toggle", "Real / background", "Click houses to flip them between real home (gold, enterable) and background (grey)."],
+	["house", "Place house", "Press where the house goes and drag toward where its door should face, then let go. A plain click uses the last facing (Q/E turn it)."],
+	["rail", "Draw railway", "Click along the track, Enter or double-click to finish. Run it off the edge of the map where it joins the rest of Equestria's railway."],
+	["road", "Draw road", "Pick town street or dirt road, click along the road, Enter or double-click to finish."],
+	["river", "Draw river", "Click along the river, Enter or double-click to finish."],
+	["lake", "Draw lake", "Click round the shore, Enter or double-click to close it."],
+	["bridge", "Place bridge", "Click one bank, then the other."],
+	["ground", "Town ground", "Click round an open area of sage town ground (a square, the space between houses), Enter to close it."],
+	["green", "Grass patch", "Click round a lawn or garden inside the town ground (it stays grass), Enter to close it."],
+	["field", "Field / farm", "Pick the crop, click round the field, Enter to close it."],
+	["woods", "Trees", "Pick how thick the trees grow, click round the area, Enter to close it. Thicker areas go inside thinner ones."],
+	["flat", "Level ground", "Click round an area to be levelled (a square, a yard), Enter to close it. Leave the height empty to use the ground's own average."],
+	["landmark", "Move landmark", "Pick a building in Options, press where it goes and drag toward where its front should face."],
+	["note", "Note", "Click to leave a note for Claude at a spot. Press and drag toward where the thing should face to give it a facing (an arrow); a plain click has none."],
+	["edge", "Town edge", "Click round the whole area to be rebuilt, Enter to close it. The old town inside it is cleared and, unless you untick it, the ground inside is levelled; outside nothing changes."],
+];
+const LAYERS = [["relief", "Ground relief", true], ["paths", "Current painted paths", true], ["water", "Current water", true],
+	["reference", "Official map", true], ["plots", "Surveyed plots (402)", false], ["current", "Current houses (ghost)", true],
+	["scenery", "Current buildings and scenery", true], ["rail", "Current railway", true], ["terrain", "Planned ground (elevation)", true], ["nature", "Fields and trees", true],
+	["grid", "100 m grid", true], ["plan", "Your plan", true]];
+
+let plan = blank();
+let view = {x: 150, z: -150, scale: 2.2};   // world centre and pixels per metre
+let tool = "select";
+let options = {crop: "carrots", density: "medium", design: "a", filler: true, yaw: 0, roadType: "town", roadWidth: ROADS.town.width, riverWidth: 14, bridgeWidth: 5, landmark: "", cycle: true};
+let layers = Object.fromEntries(LAYERS.map(l => [l[0], l[2]]));
+let selection = null;      // {kind, index, point?}
+let drawing = null;        // points of the road/river/lake/flat being drawn, or the first bridge end
+let mouse = {x: 0, z: 0, sx: 0, sy: 0};
+let drag = null;
+let undo = [];
+let space = false;
+const images = {};
+
+function blank() {
+	return {version: 1, reference: {x: 100, z: -200, width: 820, turn: 0, opacity: 0.45},
+		houses: [], landmarks: [], roads: [], rivers: [], lakes: [], bridges: [], flats: [], notes: [], edges: [], grounds: [], greens: [], railways: [], fields: [], woods: [], anchors: []};
+}
+
+// ---- images ----
+function image(name, file) {
+	const img = new Image();
+	img.onload = () => { images[name] = img; draw(); };
+	img.src = file;
+}
+image("relief", "data/relief.png"); image("paths", "data/paths.png"); image("water", "data/water.png"); image("reference", "data/reference.jpg");
+
+// ---- heights ----
+let heights = null;
+if (TOWN.ground && TOWN.ground.samples) {
+	const raw = atob(TOWN.ground.samples);
+	heights = new Uint16Array(raw.length / 2);
+	for (let i = 0; i < heights.length; i++) heights[i] = raw.charCodeAt(i * 2) | (raw.charCodeAt(i * 2 + 1) << 8);
+}
+function heightAt(x, z) {
+	const g = TOWN.ground;
+	if (!g || !heights) return null;
+	const c = Math.round((x - g.bounds[0]) / g.sample_step), r = Math.round((z - g.bounds[2]) / g.sample_step);
+	if (c < 0 || r < 0 || c >= g.sample_columns || r >= g.sample_rows) return null;
+	return g.low + heights[r * g.sample_columns + c] / 65535 * (g.high - g.low);
+}
+
+// ---- planned ground ----
+let terrainImage = null, terrainKey = null, terrainHeights = null;
+function plannedGround() {
+	const t = plan.terrain;
+	if (!t || !t.heights) { terrainImage = terrainHeights = null; terrainKey = null; return null; }
+	if (terrainKey === t.heights) return terrainImage;
+	const raw = atob(t.heights), n = raw.length / 2, hs = new Float32Array(n);
+	for (let i = 0; i < n; i++) hs[i] = t.low + (raw.charCodeAt(i * 2) | (raw.charCodeAt(i * 2 + 1) << 8)) / 65535 * (t.high - t.low);
+	const c = document.createElement("canvas"); c.width = t.columns; c.height = t.rows;
+	const g = c.getContext("2d"), img = g.createImageData(t.columns, t.rows);
+	for (let r = 0; r < t.rows; r++) for (let q = 0; q < t.columns; q++) {
+		const i = r * t.columns + q, h = hs[i];
+		const e = hs[Math.min(n - 1, i + 1)], s2 = hs[Math.min(n - 1, i + t.columns)];
+		const light = Math.max(0.45, Math.min(1.35, 0.95 + (h - e) * 0.35 + (h - s2) * 0.35));
+		const up = Math.max(0, Math.min(1, (h - t.base) / 12));
+		let rr = 118 + 70 * up, gg = 160 + 40 * up, bb = 96 + 40 * up;
+		if (h < t.water_level) { const deep = Math.max(0.55, 1 - (t.water_level - h) / 40); rr = 104 * deep; gg = 140 * deep; bb = 90 * deep; }   // low ground (water is drawn by the plan itself)
+		const line = Math.floor(h - t.base) !== Math.floor(hs[Math.max(0, i - t.columns)] - t.base) ? 0.8 : 1;
+		img.data[i * 4] = rr * light * line; img.data[i * 4 + 1] = gg * light * line; img.data[i * 4 + 2] = bb * light * line; img.data[i * 4 + 3] = 255;
+	}
+	g.putImageData(img, 0, 0);
+	terrainImage = c; terrainHeights = hs; terrainKey = t.heights;
+	return c;
+}
+function plannedHeight(x, z) {
+	const t = plan.terrain;
+	if (!t || !plannedGround() || !terrainHeights) return null;
+	const q = Math.round((x - t.origin[0]) / t.step), r = Math.round((z - t.origin[1]) / t.step);
+	if (q < 0 || r < 0 || q >= t.columns || r >= t.rows) return null;
+	return terrainHeights[r * t.columns + q];
+}
+
+// ---- view ----
+function resize() {
+	const box = canvas.getBoundingClientRect();
+	canvas.width = Math.round(box.width * devicePixelRatio);
+	canvas.height = Math.round(box.height * devicePixelRatio);
+	draw();
+}
+const sx = x => (x - view.x) * view.scale * devicePixelRatio + canvas.width / 2;
+const sy = z => (z - view.z) * view.scale * devicePixelRatio + canvas.height / 2;
+const px = m => m * view.scale * devicePixelRatio;
+function toWorld(event) {
+	const box = canvas.getBoundingClientRect();
+	return {x: (event.clientX - box.left - box.width / 2) / view.scale + view.x, z: (event.clientY - box.top - box.height / 2) / view.scale + view.z};
+}
+
+// ---- shapes ----
+function footprint(design, scale) {
+	const d = TOWN.designs[design];
+	const s = scale || (d ? d.scale : 10);
+	const shape = d && d.footprint.length ? d.footprint : [[-0.33, -0.37], [0.33, -0.37], [0.33, 0.36], [-0.33, 0.36]];
+	return shape.map(p => [p[0] * s, p[1] * s]);
+}
+function placed(points, x, z, yaw) {
+	// The game's yaw turns about the up axis; local +z (the door side) is the front.
+	const c = Math.cos(yaw), s = Math.sin(yaw);
+	return points.map(p => [x + p[0] * c + p[1] * s, z - p[0] * s + p[1] * c]);
+}
+function houseShape(h) { return placed(footprint(h.design, h.scale), h.x, h.z, h.yaw); }
+function doorPoint(h) {
+	const d = TOWN.designs[h.design]; const s = h.scale || (d ? d.scale : 10);
+	const door = d ? d.door : [0, 0.4];
+	return placed([[door[0] * s, door[1] * s + 1.5]], h.x, h.z, h.yaw)[0];
+}
+// Where to grab an item to turn it, and which way its front faces: a house's door, a point ahead of a
+// landmark's front (both face their local +z: world direction (sin yaw, cos yaw)).
+const noteArrow = () => Math.max(2.5, 28 * devicePixelRatio / view.scale);
+function facingHandle(kind, item) {
+	if (kind === "houses") return doorPoint(item);
+	if (kind === "notes") return item.yaw === undefined ? null : [item.x + Math.sin(item.yaw) * noteArrow(), item.z + Math.cos(item.yaw) * noteArrow()];
+	const shape = landmarkShape(item);
+	const reach = Math.max(...shape.map(p => Math.hypot(p[0] - item.x, p[1] - item.z))) + 2;
+	const front = item.yaw + frontOf(item.id);
+	return [item.x + Math.sin(front) * reach, item.z + Math.cos(front) * reach];
+}
+const facing = (dx, dz) => Math.atan2(dx, dz);
+
+function path(points, close) {
+	ctx.beginPath();
+	points.forEach((p, i) => i ? ctx.lineTo(sx(p[0]), sy(p[1])) : ctx.moveTo(sx(p[0]), sy(p[1])));
+	if (close) ctx.closePath();
+}
+function inside(points, x, z) {
+	let hit = false;
+	for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+		const a = points[i], b = points[j];
+		if ((a[1] > z) !== (b[1] > z) && x < (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1]) + a[0]) hit = !hit;
+	}
+	return hit;
+}
+function nearLine(points, x, z, reach) {
+	for (let i = 1; i < points.length; i++) {
+		const a = points[i - 1], b = points[i];
+		const dx = b[0] - a[0], dz = b[1] - a[1];
+		const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / (dx * dx + dz * dz || 1)));
+		if (Math.hypot(x - a[0] - dx * t, z - a[1] - dz * t) <= reach) return true;
+	}
+	return false;
+}
+function sceneryShape(s) {
+	if (s.footprint && s.footprint.length > 2) return s.footprint;
+	return placed([[-1, -1], [1, -1], [1, 1], [-1, 1]], s.x, s.z, 0);
+}
+function landmarkRow(id) { return TOWN.scenery.find(s => s.id === id); }
+function landmarkShape(l) {
+	const source = landmarkRow(l.id);
+	if (!source || !source.footprint || source.footprint.length < 3) return placed([[-6, -6], [6, -6], [6, 6], [-6, 6]], l.x, l.z, l.yaw);
+	// The building's own outline, moved from where it stands now to where the plan puts it.
+	const local = source.footprint.map(p => {
+		const dx = p[0] - source.x, dz = p[1] - source.z, c = Math.cos(-source.yaw), s = Math.sin(-source.yaw);
+		return [dx * c + dz * s, -dx * s + dz * c];
+	});
+	return placed(local, l.x, l.z, l.yaw);
+}
+
+// ---- drawing ----
+function draw() {
+	const w = canvas.width, h = canvas.height;
+	ctx.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.fillStyle = "#23262d"; ctx.fillRect(0, 0, w, h);
+	ctx.imageSmoothingEnabled = view.scale < 3;
+	const g = TOWN.ground;
+	if (g && layers.relief && images.relief) ctx.drawImage(images.relief, sx(g.bounds[0]), sy(g.bounds[2]), px(g.bounds[1] - g.bounds[0] + g.step), px(g.bounds[3] - g.bounds[2] + g.step));
+	const planned = layers.terrain ? plannedGround() : null;
+	if (planned) ctx.drawImage(planned, sx(plan.terrain.origin[0] - plan.terrain.step / 2), sy(plan.terrain.origin[1] - plan.terrain.step / 2), px(plan.terrain.columns * plan.terrain.step), px(plan.terrain.rows * plan.terrain.step));
+	if (g && layers.paths && images.paths) ctx.drawImage(images.paths, sx(g.bounds[0]), sy(g.bounds[2]), px(g.bounds[1] - g.bounds[0] + g.step), px(g.bounds[3] - g.bounds[2] + g.step));
+	if (layers.rail && TOWN.railway) {
+		ctx.strokeStyle = "rgba(90,60,40,.8)"; ctx.lineWidth = Math.max(2, px(3.5)); ctx.setLineDash([6, 4]);
+		for (const seg of TOWN.railway) { path(seg.points); ctx.stroke(); }
+		ctx.setLineDash([]);
+		for (const seg of TOWN.railway) if (seg.label && view.scale > 0.6) label(seg.label, seg.points[seg.points.length >> 1][0], seg.points[seg.points.length >> 1][1], "#d9b38c");
+	}
+	const water = TOWN.water;
+	if (water && layers.water) {
+		if (images.water) ctx.drawImage(images.water, sx(water.canals.origin[0]), sy(water.canals.origin[1]), px(water.canals.width * water.canals.cell), px(water.canals.depth * water.canals.cell));
+		ctx.strokeStyle = "rgba(60,140,220,.55)"; ctx.lineCap = "round"; ctx.lineJoin = "round";
+		for (const river of water.rivers) { ctx.lineWidth = Math.max(1, px(river.width)); path(river.points); ctx.stroke(); }
+		ctx.fillStyle = "rgba(60,140,220,.45)";
+		for (const lake of water.lakes) { ctx.beginPath(); ctx.arc(sx(lake.center[0]), sy(lake.center[2]), px(lake.radius), 0, 7); ctx.fill(); }
+	}
+	if (layers.reference && images.reference) {
+		const r = plan.reference, img = images.reference;
+		ctx.save();
+		ctx.globalAlpha = r.opacity;
+		ctx.translate(sx(r.x), sy(r.z)); ctx.rotate(r.turn * Math.PI / 180);
+		const width = px(r.width), height = width * img.height / img.width;
+		ctx.drawImage(img, -width / 2, -height / 2, width, height);
+		ctx.restore();
+	}
+	if (layers.grid) {
+		ctx.strokeStyle = "rgba(255,255,255,.12)"; ctx.lineWidth = 1; ctx.fillStyle = "rgba(255,255,255,.4)";
+		ctx.font = (10 * devicePixelRatio) + "px system-ui";
+		const a = toWorldPixel(0, 0), b = toWorldPixel(w, h);
+		for (let x = Math.ceil(a.x / 100) * 100; x <= b.x; x += 100) { ctx.beginPath(); ctx.moveTo(sx(x), 0); ctx.lineTo(sx(x), h); ctx.stroke(); ctx.fillText(x, sx(x) + 3, 12 * devicePixelRatio); }
+		for (let z = Math.ceil(a.z / 100) * 100; z <= b.z; z += 100) { ctx.beginPath(); ctx.moveTo(0, sy(z)); ctx.lineTo(w, sy(z)); ctx.stroke(); ctx.fillText(z, 3, sy(z) - 3); }
+	}
+	if (layers.plots) {
+		ctx.fillStyle = "rgba(255,255,255,.55)";
+		for (const p of TOWN.plots) { ctx.beginPath(); ctx.arc(sx(p.x), sy(p.z), 2 * devicePixelRatio, 0, 7); ctx.fill(); }
+	}
+	if (layers.scenery) {
+		for (const s of TOWN.scenery) {
+			const building = s.kind === "building" || s.kind === "walk";
+			ctx.fillStyle = building ? "rgba(190,120,220,.28)" : "rgba(200,200,200,.14)";
+			ctx.strokeStyle = building ? "rgba(210,150,240,.9)" : "rgba(200,200,200,.3)";
+			ctx.lineWidth = 1;
+			path(sceneryShape(s), true); ctx.fill(); ctx.stroke();
+			if (building && view.scale > 1.2) label(s.label || s.id, s.x, s.z, "rgba(230,200,250,.95)");
+		}
+	}
+	if (layers.current) {
+		ctx.strokeStyle = "rgba(255,255,255,.6)"; ctx.fillStyle = "rgba(255,255,255,.1)"; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+		for (const hse of TOWN.houses) { path(houseShape(hse), true); ctx.fill(); ctx.stroke(); }
+		ctx.setLineDash([]);
+	}
+	if (layers.plan) drawPlan();
+	if (drawing && drawing.length) {
+		const points = drawing.concat([[mouse.x, mouse.z]]);
+		ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5 * devicePixelRatio; ctx.setLineDash([6, 4]);
+		path(points, ["lake", "flat", "edge", "ground", "green", "field", "woods"].includes(tool)); ctx.stroke(); ctx.setLineDash([]);
+	}
+	if (tool === "house" && !(drag && drag.turn)) {
+		const ghost = {design: options.design, x: mouse.x, z: mouse.z, yaw: options.yaw};
+		ctx.strokeStyle = "#fff"; ctx.fillStyle = options.filler ? "rgba(150,160,175,.5)" : "rgba(242,184,75,.5)"; ctx.lineWidth = 1.5 * devicePixelRatio;
+		path(houseShape(ghost), true); ctx.fill(); ctx.stroke(); door(ghost);
+	}
+	document.getElementById("counts").textContent = `${plan.houses.filter(x => !x.filler).length} real homes (${plan.houses.filter(x => !x.filler && (x.residents || []).length).length} lived in, ${plan.houses.filter(x => !x.filler && !(x.residents || []).length && x.design.length === 1).length} vacant), ${plan.houses.filter(x => x.filler).length} background houses, ` +
+		`${plan.roads.filter(r => (r.type || "town") === "town").length} town streets, ${plan.roads.filter(r => r.type === "dirt").length} dirt roads, ${plan.rivers.length} rivers, ${plan.lakes.length} lakes, ${plan.bridges.length} bridges`;
+	// Town density plans (make_density_plans.py): how many vacant real homes this setting's plan has against its target
+	const density = document.getElementById("density");
+	if (density) {
+		if (plan.density) {
+			const vacant = plan.houses.filter(x => !x.filler && !(x.residents || []).length && x.design.length === 1).length;
+			const target = plan.density.vacant_target;
+			density.innerHTML = `<b>${plan.density.setting} density</b>: ${vacant} vacant real homes, target ${target} ` +
+				(vacant === target ? "&#10003;" : vacant < target ? `(add ${target - vacant})` : `(${vacant - target} over)`);
+			density.style.color = vacant === target ? "#3a7d2c" : "#b5651d";
+		} else density.textContent = "";
+	}
+}
+function toWorldPixel(x, y) { return {x: (x - canvas.width / 2) / (view.scale * devicePixelRatio) + view.x, z: (y - canvas.height / 2) / (view.scale * devicePixelRatio) + view.z}; }
+function label(text, x, z, colour) {
+	ctx.font = (11 * devicePixelRatio) + "px system-ui"; ctx.fillStyle = colour; ctx.textAlign = "center";
+	ctx.fillText(text, sx(x), sy(z)); ctx.textAlign = "left";
+}
+function door(h) {
+	const p = doorPoint(h);
+	ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(sx(p[0]), sy(p[1]), Math.max(2, px(0.6)), 0, 7); ctx.fill();
+}
+function chosen(kind, index) { return selection && selection.kind === kind && selection.index === index; }
+function drawPlan() {
+	ctx.lineCap = "round"; ctx.lineJoin = "round";
+	plan.grounds.forEach((g, i) => {
+		ctx.fillStyle = "rgba(150,178,160,.9)"; ctx.strokeStyle = chosen("grounds", i) ? "#fff" : "rgba(104,132,116,.9)"; ctx.lineWidth = devicePixelRatio;
+		path(g.points, true); ctx.fill(); ctx.stroke(); if (chosen("grounds", i)) handles(g.points);
+	});
+	if (layers.nature) {
+		for (const level of Object.keys(WOODS)) plan.woods.forEach((w, i) => {
+			if (w.density !== level) return;
+			ctx.fillStyle = `rgba(20,90,30,${WOODS[level]})`; path(w.points, true); ctx.fill();
+			ctx.strokeStyle = chosen("woods", i) ? "#fff" : "rgba(20,90,30,.6)"; ctx.lineWidth = devicePixelRatio; ctx.stroke();
+			if (chosen("woods", i)) handles(w.points);
+		});
+		plan.fields.forEach((f, i) => {
+			ctx.fillStyle = CROPS[f.crop] || "rgba(200,200,120,.7)"; path(f.points, true); ctx.fill();
+			ctx.strokeStyle = chosen("fields", i) ? "#fff" : "rgba(90,70,30,.8)"; ctx.lineWidth = devicePixelRatio; ctx.stroke();
+			if (chosen("fields", i)) handles(f.points);
+			if (view.scale > 1.2) { const c = f.points.reduce((a, q) => [a[0] + q[0] / f.points.length, a[1] + q[1] / f.points.length], [0, 0]); label(f.crop, c[0], c[1], "#fff"); }
+		});
+	}
+	plan.greens.forEach((g, i) => {
+		ctx.fillStyle = "rgba(126,190,108,.95)"; ctx.strokeStyle = chosen("greens", i) ? "#fff" : "rgba(70,130,60,.9)"; ctx.lineWidth = devicePixelRatio;
+		path(g.points, true); ctx.fill(); ctx.stroke(); if (chosen("greens", i)) handles(g.points);
+	});
+	plan.edges.forEach((edge, i) => {
+		ctx.strokeStyle = chosen("edges", i) ? "#fff" : "rgba(255,90,90,.95)"; ctx.lineWidth = 2.5 * devicePixelRatio; ctx.setLineDash([10, 6]);
+		path(edge.points, true); ctx.stroke(); ctx.setLineDash([]); if (chosen("edges", i)) handles(edge.points);
+		label("rebuilt inside" + (edge.flatten === false ? "" : ", levelled" + (edge.height === null || edge.height === undefined ? "" : " to " + edge.height + " m")), edge.points[0][0], edge.points[0][1], "#ffb0b0");
+	});
+	plan.flats.forEach((f, i) => {
+		ctx.fillStyle = "rgba(240,230,170,.25)"; ctx.strokeStyle = chosen("flats", i) ? "#fff" : "rgba(240,230,170,.9)"; ctx.lineWidth = devicePixelRatio; ctx.setLineDash([3, 3]);
+		path(f.points, true); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+		label("level" + (f.height === null || f.height === undefined ? "" : " " + f.height + " m"), f.points[0][0], f.points[0][1], "#f0e6aa");
+	});
+	plan.lakes.forEach((l, i) => {
+		ctx.fillStyle = "rgba(40,120,235,.75)"; ctx.strokeStyle = chosen("lakes", i) ? "#fff" : "#1d5fc0"; ctx.lineWidth = 1.5 * devicePixelRatio;
+		path(l.points, true); ctx.fill(); ctx.stroke(); if (chosen("lakes", i)) handles(l.points);
+		if (l.name && view.scale > 0.5 && !plan.notes.some(n => n.text === l.name)) { const c = l.points.reduce((a, q) => [a[0] + q[0] / l.points.length, a[1] + q[1] / l.points.length], [0, 0]); label(l.name, c[0], c[1], "#d8ecff"); }
+	});
+	plan.rivers.forEach((r, i) => {
+		ctx.strokeStyle = chosen("rivers", i) ? "#9cd0ff" : "rgba(40,120,235,.85)"; ctx.lineWidth = Math.max(2, px(r.width));
+		path(r.points); ctx.stroke(); if (chosen("rivers", i)) handles(r.points);
+	});
+	for (const kind of ["dirt", "town"]) plan.roads.forEach((r, i) => {
+		const look = ROADS[r.type] || ROADS.town;
+		if ((r.type || "town") !== kind) return;
+		if (look.edge) { ctx.strokeStyle = look.edge; ctx.lineWidth = Math.max(3, px(r.width + 0.8)); path(r.points); ctx.stroke(); }
+		ctx.strokeStyle = chosen("roads", i) ? "#fff8e0" : look.fill; ctx.lineWidth = Math.max(2, px(r.width));
+		path(r.points); ctx.stroke(); if (chosen("roads", i)) handles(r.points);
+		if (r.name && (view.scale > 2.2 || chosen("roads", i))) { const m = r.points[r.points.length >> 1]; label(r.name, m[0], m[1], kind === "dirt" ? "#5a4320" : "#2f4a3c"); }
+	});
+	plan.railways.forEach((r, i) => {
+		if (r.name === "bunting") {
+			// a line named "bunting" is a string of pennants, not track (the build hangs bunting along it): a thin
+			// cord with little flags in turn, so it does not read as a railway across the square
+			ctx.strokeStyle = chosen("railways", i) ? "#fff" : "#7a5a8c"; ctx.lineWidth = Math.max(1, px(0.25)); ctx.lineCap = "round";
+			path(r.points); ctx.stroke();
+			const flags = ["#e8554e", "#f2b632", "#58b368", "#4a90d9", "#b06fd0"];
+			let n = 0;
+			for (let k = 1; k < r.points.length; k++) {
+				const a = r.points[k - 1], b = r.points[k], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+				for (let d = 0.8; d < len; d += 1.6, n++) {
+					const x = a[0] + (b[0] - a[0]) * d / len, z = a[1] + (b[1] - a[1]) * d / len;
+					ctx.fillStyle = flags[n % flags.length]; ctx.beginPath(); ctx.arc(sx(x), sy(z), Math.max(1.5, px(0.45)), 0, 6.283); ctx.fill();
+				}
+			}
+			if (chosen("railways", i)) handles(r.points);
+			return;
+		}
+		ctx.strokeStyle = chosen("railways", i) ? "#fff" : (r.outside ? "#a0602f" : "#6b3f22"); ctx.lineWidth = Math.max(3, px(3.2)); ctx.lineCap = "butt";
+		path(r.points); ctx.stroke();
+		ctx.strokeStyle = "#e9dcc0"; ctx.lineWidth = Math.max(1, px(0.5)); ctx.setLineDash([Math.max(2, px(0.6)), Math.max(2, px(0.9))]);
+		path(r.points); ctx.stroke(); ctx.setLineDash([]); ctx.lineCap = "round";
+		if (chosen("railways", i)) handles(r.points);
+		if (r.name && view.scale > 0.4) label(r.name, r.points[r.points.length >> 1][0], r.points[r.points.length >> 1][1], "#f0c89a");
+	});
+	plan.bridges.forEach((b, i) => {
+		ctx.strokeStyle = chosen("bridges", i) ? "#fff" : "#8a5a2b"; ctx.lineWidth = Math.max(3, px(b.width));
+		ctx.lineCap = "butt"; path([b.a, b.b]); ctx.stroke(); ctx.lineCap = "round"; if (chosen("bridges", i)) handles([b.a, b.b]);
+	});
+	plan.landmarks.forEach((l, i) => {
+		ctx.fillStyle = "rgba(190,90,230,.6)"; ctx.strokeStyle = chosen("landmarks", i) ? "#fff" : "#7b2fa8"; ctx.lineWidth = 1.5 * devicePixelRatio;
+		path(landmarkShape(l), true); ctx.fill(); ctx.stroke(); arrow([l.x, l.z], facingHandle("landmarks", l), chosen("landmarks", i));
+		const row = landmarkRow(l.id); label(row ? (row.label || row.id) : l.id, l.x, l.z, "#fff");
+	});
+	plan.houses.forEach((h, i) => {
+		ctx.fillStyle = h.filler ? "rgba(150,160,175,.9)" : "rgba(242,184,75,.95)";
+		ctx.strokeStyle = chosen("houses", i) ? "#fff" : "#20232a"; ctx.lineWidth = (chosen("houses", i) ? 2.5 : 1) * devicePixelRatio;
+		path(houseShape(h), true); ctx.fill(); ctx.stroke(); door(h);
+		if (view.scale > 4) label(h.design.toUpperCase() + (h.name ? " " + h.name : ""), h.x, h.z + 1, "#20232a");
+	});
+	(plan.anchors || []).forEach((a, i) => {
+		// A spot for something the game sets down by its own code (the painting easel): a diamond, its arrow the way it faces.
+		const r = 6 * devicePixelRatio, X = sx(a.x), Y = sy(a.z);
+		ctx.fillStyle = chosen("anchors", i) ? "#fff" : "#ffd24a"; ctx.strokeStyle = "#7a5a00"; ctx.lineWidth = devicePixelRatio;
+		ctx.beginPath(); ctx.moveTo(X, Y - r); ctx.lineTo(X + r, Y); ctx.lineTo(X, Y + r); ctx.lineTo(X - r, Y); ctx.closePath(); ctx.fill(); ctx.stroke();
+		arrow([a.x, a.z], [a.x + Math.sin(a.yaw || 0) * 2.5, a.z + Math.cos(a.yaw || 0) * 2.5], chosen("anchors", i));
+		if (view.scale > 1.2) label(a.label || a.id, a.x, a.z - 8 / view.scale, "#ffe9a0");
+	});
+	plan.notes.forEach((n, i) => {
+		if (n.yaw !== undefined) arrow([n.x, n.z], facingHandle("notes", n), chosen("notes", i));
+		ctx.fillStyle = chosen("notes", i) ? "#fff" : "#ff7ab0"; ctx.beginPath(); ctx.arc(sx(n.x), sy(n.z), 5 * devicePixelRatio, 0, 7); ctx.fill();
+		label(n.text, n.x, n.z - 6 / view.scale, "#ffd0e2");
+	});
+}
+function arrow(from, to, strong) {
+	ctx.strokeStyle = ctx.fillStyle = strong ? "#fff" : "rgba(255,255,255,.75)"; ctx.lineWidth = 1.5 * devicePixelRatio;
+	ctx.beginPath(); ctx.moveTo(sx(from[0]), sy(from[1])); ctx.lineTo(sx(to[0]), sy(to[1])); ctx.stroke();
+	ctx.beginPath(); ctx.arc(sx(to[0]), sy(to[1]), (strong ? 5 : 3.5) * devicePixelRatio, 0, 7); ctx.fill();
+}
+function handles(points) {
+	ctx.fillStyle = "#fff";
+	for (const p of points) { ctx.beginPath(); ctx.arc(sx(p[0]), sy(p[1]), 4 * devicePixelRatio, 0, 7); ctx.fill(); }
+}
+
+// ---- picking ----
+function pick(x, z) {
+	const reach = 6 / view.scale;
+	if (selection && ["roads", "rivers", "lakes", "flats", "bridges", "edges", "grounds", "greens", "railways", "fields", "woods"].includes(selection.kind)) {
+		const item = plan[selection.kind][selection.index];
+		const points = selection.kind === "bridges" ? [item.a, item.b] : item.points;
+		for (let i = 0; i < points.length; i++) if (Math.hypot(points[i][0] - x, points[i][1] - z) <= reach * 1.5) return {kind: selection.kind, index: selection.index, point: i};
+	}
+	for (let i = plan.notes.length - 1; i >= 0; i--) if (Math.hypot(plan.notes[i].x - x, plan.notes[i].z - z) <= reach * 1.5) return {kind: "notes", index: i};
+	for (let i = (plan.anchors || []).length - 1; i >= 0; i--) if (Math.hypot(plan.anchors[i].x - x, plan.anchors[i].z - z) <= reach * 1.5 + 0.8) return {kind: "anchors", index: i};
+	for (let i = plan.houses.length - 1; i >= 0; i--) if (inside(houseShape(plan.houses[i]), x, z)) return {kind: "houses", index: i};
+	for (let i = plan.landmarks.length - 1; i >= 0; i--) if (inside(landmarkShape(plan.landmarks[i]), x, z)) return {kind: "landmarks", index: i};
+	for (let i = plan.bridges.length - 1; i >= 0; i--) if (nearLine([plan.bridges[i].a, plan.bridges[i].b], x, z, plan.bridges[i].width / 2 + reach)) return {kind: "bridges", index: i};
+	for (let i = plan.railways.length - 1; i >= 0; i--) if (nearLine(plan.railways[i].points, x, z, 2 + reach)) return {kind: "railways", index: i};
+	for (let i = plan.roads.length - 1; i >= 0; i--) if (nearLine(plan.roads[i].points, x, z, plan.roads[i].width / 2 + reach)) return {kind: "roads", index: i};
+	for (let i = plan.rivers.length - 1; i >= 0; i--) if (nearLine(plan.rivers[i].points, x, z, plan.rivers[i].width / 2 + reach)) return {kind: "rivers", index: i};
+	for (let i = plan.lakes.length - 1; i >= 0; i--) if (inside(plan.lakes[i].points, x, z)) return {kind: "lakes", index: i};
+	for (let i = plan.edges.length - 1; i >= 0; i--) if (nearLine(plan.edges[i].points.concat([plan.edges[i].points[0]]), x, z, reach)) return {kind: "edges", index: i};
+	for (let i = plan.flats.length - 1; i >= 0; i--) if (inside(plan.flats[i].points, x, z)) return {kind: "flats", index: i};
+	for (let i = plan.greens.length - 1; i >= 0; i--) if (inside(plan.greens[i].points, x, z)) return {kind: "greens", index: i};
+	for (let i = plan.grounds.length - 1; i >= 0; i--) if (inside(plan.grounds[i].points, x, z)) return {kind: "grounds", index: i};
+	if (layers.nature) {
+		for (let i = plan.fields.length - 1; i >= 0; i--) if (inside(plan.fields[i].points, x, z)) return {kind: "fields", index: i};
+		const order = Object.keys(WOODS).reverse();
+		for (const level of order) for (let i = plan.woods.length - 1; i >= 0; i--) if (plan.woods[i].density === level && inside(plan.woods[i].points, x, z)) return {kind: "woods", index: i};
+	}
+	return null;
+}
+
+// ---- editing ----
+function remember() { undo.push(JSON.stringify(plan)); if (undo.length > 80) undo.shift(); }
+function changed() { try { localStorage.setItem(KEY, JSON.stringify(plan)); } catch (e) {} showSelected(); draw(); }
+// The plan's house size (plan.design: background houses and real homes as a share of the game's own size).
+function sized(h) {
+	const d = TOWN.designs[h.design], k = plan.design ? (h.filler ? plan.design.house : plan.design.home) : 1;
+	if (d && h.design.length === 1 && k && k !== 1) h.scale = Math.round(d.scale * k * 1e4) / 1e4; else delete h.scale;
+	return h;
+}
+function moveItem(sel, dx, dz) {
+	const item = plan[sel.kind][sel.index];
+	if (sel.point !== undefined) {
+		const points = sel.kind === "bridges" ? [item.a, item.b] : item.points;
+		points[sel.point][0] += dx; points[sel.point][1] += dz; return;
+	}
+	if (item.points) item.points.forEach(p => { p[0] += dx; p[1] += dz; });
+	else if (item.a) { item.a[0] += dx; item.a[1] += dz; item.b[0] += dx; item.b[1] += dz; }
+	else { item.x += dx; item.z += dz; }
+}
+function finishDrawing() {
+	if (!drawing) return;
+	const need = ["lake", "flat", "edge", "ground", "green", "field", "woods"].includes(tool) ? 3 : 2;
+	if (drawing.length >= need) {
+		remember();
+		if (tool === "rail") plan.railways.push({points: drawing});
+		if (tool === "road") plan.roads.push({type: options.roadType, width: options.roadWidth, points: drawing});
+		if (tool === "edge") { plan.edges = [{flatten: true, height: null, points: drawing}]; selection = {kind: "edges", index: 0}; }
+		if (tool === "ground") plan.grounds.push({points: drawing});
+		if (tool === "green") plan.greens.push({points: drawing});
+		if (tool === "field") plan.fields.push({crop: options.crop, points: drawing});
+		if (tool === "woods") plan.woods.push({density: options.density, points: drawing});
+		if (tool === "river") plan.rivers.push({width: options.riverWidth, points: drawing});
+		if (tool === "lake") plan.lakes.push({points: drawing});
+		if (tool === "flat") plan.flats.push({height: null, points: drawing});
+	}
+	drawing = null; changed();
+}
+function nextDesign() {
+	const names = Object.keys(TOWN.designs).filter(n => n.length === 1);
+	if (!options.cycle || !names.length) return;
+	options.design = names[(names.indexOf(options.design) + 1) % names.length];
+	showOptions();
+}
+
+canvas.addEventListener("contextmenu", e => e.preventDefault());
+canvas.addEventListener("mousedown", e => {
+	const at = toWorld(e);
+	if (e.button !== 0 || space) { drag = {pan: true, sx: e.clientX, sy: e.clientY}; return; }
+	if (e.altKey) { drag = {reference: true, x: at.x, z: at.z}; return; }
+	if (tool === "select") {
+		// Grabbing the selected house's door, or the selected landmark's arrow, turns it.
+		if (selection && (selection.kind === "houses" || selection.kind === "landmarks" || selection.kind === "notes")) {
+			const item = plan[selection.kind][selection.index];
+			const grip = item ? facingHandle(selection.kind, item) : null;
+			if (grip && Math.hypot(grip[0] - at.x, grip[1] - at.z) <= 9 / view.scale + 0.8) { remember(); drag = {turn: true}; return; }
+		}
+		selection = pick(at.x, at.z);
+		if (selection) { remember(); drag = {move: true, x: at.x, z: at.z}; }
+		showSelected(); draw(); return;
+	}
+	if (tool === "toggle") {
+		const hit = pick(at.x, at.z);
+		if (hit && hit.kind === "houses") { remember(); const item = plan.houses[hit.index]; item.filler = !item.filler; sized(item); selection = hit; changed(); }
+		return;
+	}
+	if (tool === "house") {
+		remember();
+		plan.houses.push(sized({design: options.design, filler: options.filler, x: round(at.x), z: round(at.z), yaw: options.yaw, name: ""}));
+		selection = {kind: "houses", index: plan.houses.length - 1}; drag = {turn: true, placing: true}; changed(); return;
+	}
+	if (["road", "rail", "river", "lake", "flat", "edge", "ground", "green", "field", "woods"].includes(tool)) { (drawing = drawing || []).push([round(at.x), round(at.z)]); draw(); return; }
+	if (tool === "bridge") {
+		if (!drawing) { drawing = [[round(at.x), round(at.z)]]; draw(); return; }
+		remember(); plan.bridges.push({width: options.bridgeWidth, a: drawing[0], b: [round(at.x), round(at.z)]}); drawing = null; changed(); return;
+	}
+	if (tool === "landmark" && options.landmark) {
+		remember();
+		const existing = plan.landmarks.findIndex(l => l.id === options.landmark);
+		const source = landmarkRow(options.landmark);
+		const row = {id: options.landmark, x: round(at.x), z: round(at.z), yaw: existing >= 0 ? plan.landmarks[existing].yaw : (source ? source.yaw : 0)};
+		if (existing >= 0) plan.landmarks[existing] = row; else plan.landmarks.push(row);
+		selection = {kind: "landmarks", index: existing >= 0 ? existing : plan.landmarks.length - 1}; drag = {turn: true, placing: true}; changed(); return;
+	}
+	if (tool === "note") {
+		// the note goes in now; dragging gives it a facing, and its text is asked for on letting go
+		remember(); plan.notes.push({x: round(at.x), z: round(at.z), text: ""});
+		selection = {kind: "notes", index: plan.notes.length - 1}; drag = {turn: true, placing: true, note: true}; draw();
+	}
+});
+window.addEventListener("mousemove", e => {
+	const at = toWorld(e);
+	if (drag && drag.pan) { view.x -= (e.clientX - drag.sx) / view.scale; view.z -= (e.clientY - drag.sy) / view.scale; drag.sx = e.clientX; drag.sy = e.clientY; }
+	else if (drag && drag.reference) { plan.reference.x += at.x - drag.x; plan.reference.z += at.z - drag.z; drag.x = at.x; drag.z = at.z; showReference(); }
+	else if (drag && drag.turn && selection) {
+		// Turn to face the pointer, once it is a little way from the middle (a plain click keeps the facing).
+		const item = plan[selection.kind][selection.index];
+		if (item && Math.hypot(at.x - item.x, at.z - item.z) > 1.5) {
+			item.yaw = facing(at.x - item.x, at.z - item.z) - (selection.kind === "landmarks" ? frontOf(item.id) : 0);
+			if (selection.kind === "houses") options.yaw = item.yaw;
+		}
+	}
+	else if (drag && drag.move && selection) { moveItem(selection, at.x - drag.x, at.z - drag.z); drag.x = at.x; drag.z = at.z; }
+	mouse = {x: at.x, z: at.z};
+	const height = heightAt(at.x, at.z), planned = plannedHeight(at.x, at.z);
+	document.getElementById("status").textContent = `x ${at.x.toFixed(1)}   z ${at.z.toFixed(1)}` +
+		(planned === null ? "" : `   planned ground ${planned.toFixed(1)} m (${(planned - plan.terrain.base >= 0 ? "+" : "") + (planned - plan.terrain.base).toFixed(1)} on the village)`) +
+		(height === null ? "" : `   game today ${height.toFixed(1)} m`);
+	draw();
+});
+window.addEventListener("mouseup", () => {
+	if (drag && drag.move && selection) { const item = plan[selection.kind][selection.index]; if (item && item.x !== undefined) { item.x = round(item.x); item.z = round(item.z); } changed(); }
+	if (drag && drag.reference) changed();
+	if (drag && drag.turn && drag.note) {
+		const n = plan.notes[plan.notes.length - 1];
+		const text = n ? prompt("Note for this spot:" + (n.yaw !== undefined ? ` (facing ${Math.round(((n.yaw * 180 / Math.PI) + 360) % 360)} deg)` : "")) : null;
+		if (text) n.text = text; else { plan.notes.pop(); undo.pop(); selection = null; }
+	}
+	if (drag && drag.turn) { if (drag.placing && tool === "house") nextDesign(); changed(); }
+	drag = null;
+});
+canvas.addEventListener("dblclick", () => { if (drawing && drawing.length > 1 && tool !== "bridge") { drawing.pop(); finishDrawing(); } });
+canvas.addEventListener("wheel", e => {
+	e.preventDefault();
+	const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+	if (e.altKey) {
+		if (e.shiftKey) plan.reference.turn = Math.round((plan.reference.turn + (e.deltaY < 0 ? 1 : -1)) * 10) / 10;
+		else plan.reference.width = Math.round(plan.reference.width * (e.deltaY < 0 ? 1.02 : 1 / 1.02) * 10) / 10;
+		showReference(); changed(); return;
+	}
+	const before = toWorld(e);
+	view.scale = Math.max(0.15, Math.min(40, view.scale * factor));
+	const after = toWorld(e);
+	view.x += before.x - after.x; view.z += before.z - after.z;
+	draw();
+}, {passive: false});
+window.addEventListener("keydown", e => {
+	if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT") return;
+	if (e.code === "Space") { space = true; e.preventDefault(); }
+	const turn = (e.shiftKey ? 45 : 5) * Math.PI / 180;
+	if (e.key === "q" || e.key === "Q" || e.key === "e" || e.key === "E") {
+		const sign = e.key.toLowerCase() === "q" ? 1 : -1;
+		if (tool === "house") options.yaw = wrap(options.yaw + sign * turn);
+		else if (selection && (selection.kind === "houses" || selection.kind === "landmarks" || selection.kind === "notes")) { remember(); const item = plan[selection.kind][selection.index]; item.yaw = wrap((item.yaw || 0) + sign * turn); changed(); }
+		draw();
+	}
+	if ((e.key === "t" || e.key === "T") && selection && selection.kind === "houses") { remember(); const item = plan.houses[selection.index]; item.filler = !item.filler; sized(item); changed(); }
+	if (e.key === "Enter") finishDrawing();
+	if (e.key === "Escape") { drawing = null; selection = null; showSelected(); draw(); }
+	if ((e.key === "Delete" || e.key === "Backspace") && selection) {
+		remember();
+		const item = plan[selection.kind][selection.index];
+		if (selection.point !== undefined && item.points && item.points.length > (["lakes", "flats", "edges", "grounds", "greens", "fields", "woods"].includes(selection.kind) ? 3 : 2)) item.points.splice(selection.point, 1);
+		else plan[selection.kind].splice(selection.index, 1);
+		selection = null; changed();
+	}
+	if (e.ctrlKey && e.key.toLowerCase() === "z" && undo.length) { plan = JSON.parse(undo.pop()); selection = null; showReference(); changed(); e.preventDefault(); }
+	if (e.ctrlKey && e.key.toLowerCase() === "d" && selection && selection.kind === "houses") {
+		remember(); const copy = Object.assign({}, plan.houses[selection.index]); copy.x += 8; copy.z += 8; plan.houses.push(copy);
+		selection = {kind: "houses", index: plan.houses.length - 1}; changed(); e.preventDefault();
+	}
+});
+window.addEventListener("keyup", e => { if (e.code === "Space") space = false; });
+const round = v => Math.round(v * 100) / 100;
+const wrap = a => Math.atan2(Math.sin(a), Math.cos(a));
+
+// ---- side panel ----
+function showTools() {
+	const box = document.getElementById("tools"); box.innerHTML = "";
+	for (const [id, name, hint] of TOOLS) {
+		const b = document.createElement("button"); b.textContent = name; b.className = tool === id ? "on" : "";
+		b.onclick = () => { tool = id; drawing = null; showTools(); showOptions(); draw(); };
+		box.appendChild(b);
+		if (tool === id) document.getElementById("hint").textContent = hint;
+	}
+}
+function field(label, html) { return `<div class="row"><label>${label}</label>${html}</div>`; }
+function showOptions() {
+	const box = document.getElementById("options");
+	const designs = Object.keys(TOWN.designs).filter(n => n.length === 1);
+	let html = "";
+	if (tool === "house") {
+		html += field("Design", `<select id="oDesign">${designs.map(d => `<option ${d === options.design ? "selected" : ""}>${d}</option>`).join("")}</select>` +
+			`<label style="min-width:0"><input id="oCycle" type="checkbox" ${options.cycle ? "checked" : ""}> vary</label>`);
+		html += field("Kind", `<select id="oFiller"><option value="1" ${options.filler ? "selected" : ""}>Background (cannot enter)</option><option value="0" ${options.filler ? "" : "selected"}>Real home (enterable)</option></select>`);
+	}
+	if (tool === "field") html += field("Crop", `<select id="oCrop">${Object.keys(CROPS).map(c => `<option ${c === options.crop ? "selected" : ""}>${c}</option>`).join("")}</select>`);
+	if (tool === "woods") html += field("Trees", `<select id="oDensity">${Object.keys(WOODS).map(c => `<option ${c === options.density ? "selected" : ""}>${c}</option>`).join("")}</select>`);
+	if (tool === "road") {
+		html += field("Kind", `<select id="oRoadType">${Object.entries(ROADS).map(([id, r]) => `<option value="${id}" ${id === options.roadType ? "selected" : ""}>${r.name}</option>`).join("")}</select>`);
+		html += field("Width (m)", `<input id="oRoad" type="number" min="1" step="0.5" value="${options.roadWidth}">`);
+	}
+	if (tool === "river") html += field("Width (m)", `<input id="oRiver" type="number" min="2" step="1" value="${options.riverWidth}">`);
+	if (tool === "bridge") html += field("Width (m)", `<input id="oBridge" type="number" min="2" step="0.5" value="${options.bridgeWidth}">`);
+	if (tool === "landmark") {
+		const rows = TOWN.scenery.filter(s => s.kind === "building").sort((a, b) => (a.label || a.id).localeCompare(b.label || b.id));
+		html += field("Building", `<select id="oLandmark" style="max-width:170px"><option value="">(pick one)</option>${rows.map(s => `<option value="${s.id}" ${s.id === options.landmark ? "selected" : ""}>${s.label || s.id}</option>`).join("")}</select>`);
+	}
+	box.innerHTML = html || "<small>No options for this tool.</small>";
+	const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.onchange = () => { fn(el); draw(); }; };
+	bind("oDesign", el => options.design = el.value); bind("oCycle", el => options.cycle = el.checked);
+	bind("oFiller", el => options.filler = el.value === "1");
+	bind("oRoad", el => options.roadWidth = +el.value);
+	bind("oCrop", el => options.crop = el.value); bind("oDensity", el => options.density = el.value);
+	bind("oRoadType", el => { options.roadType = el.value; options.roadWidth = ROADS[el.value].width; showOptions(); }); bind("oRiver", el => options.riverWidth = +el.value);
+	bind("oBridge", el => options.bridgeWidth = +el.value); bind("oLandmark", el => options.landmark = el.value);
+}
+function showSelected() {
+	const box = document.getElementById("selected");
+	if (!selection || !plan[selection.kind][selection.index]) { box.innerHTML = "<small>Nothing selected.</small>"; return; }
+	const item = plan[selection.kind][selection.index];
+	const designs = Object.keys(TOWN.designs).filter(n => n.length === 1);
+	let html = `<div><b>${selection.kind.replace(/s$/, "")}</b></div>`;
+	if (selection.kind === "houses") {
+		html += field("Design", `<select id="sDesign">${(designs.includes(item.design) ? designs : [item.design].concat(designs)).map(d => `<option ${d === item.design ? "selected" : ""}>${d}</option>`).join("")}</select>`);
+		html += field("Kind", `<select id="sFiller"><option value="1" ${item.filler ? "selected" : ""}>Background</option><option value="0" ${item.filler ? "" : "selected"}>Real home</option></select>`);
+		html += field("Who / note", `<input id="sName" type="text" value="${(item.name || "").replace(/"/g, "&quot;")}" style="width:150px">`);
+	}
+	if (selection.kind === "notes") html += field("Facing (deg)", `<input id="sNoteYaw" type="number" step="5" placeholder="none" value="${item.yaw === undefined ? "" : Math.round(item.yaw * 180 / Math.PI)}">`) + "<small>0 faces +Z (down the map), 90 faces +X (right). Empty: no facing.</small>";
+	else if (item.yaw !== undefined) html += field("Facing (deg)", `<input id="sYaw" type="number" step="5" value="${Math.round(item.yaw * 180 / Math.PI)}">`);
+	if (selection.kind === "fields") html += field("Crop", `<select id="sCrop">${Object.keys(CROPS).map(c => `<option ${c === item.crop ? "selected" : ""}>${c}</option>`).join("")}</select>`);
+	if (selection.kind === "woods") html += field("Trees", `<select id="sDensity">${Object.keys(WOODS).map(c => `<option ${c === item.density ? "selected" : ""}>${c}</option>`).join("")}</select>`);
+	if (selection.kind === "houses" && !item.filler && !(item.residents || []).length && item.design.length === 1) html += "<small>Vacant: a real home nopony lives in, for the player to move into.</small>";
+	if (selection.kind === "roads") html += field("Kind", `<select id="sRoadType">${Object.entries(ROADS).map(([id, r]) => `<option value="${id}" ${id === (item.type || "town") ? "selected" : ""}>${r.name}</option>`).join("")}</select>`);
+	if (item.width !== undefined) html += field("Width (m)", `<input id="sWidth" type="number" step="0.5" value="${item.width}">`);
+	if (selection.kind === "flats") html += field("Height (m)", `<input id="sHeight" type="number" step="0.5" value="${item.height === null || item.height === undefined ? "" : item.height}" placeholder="auto">`);
+	if (selection.kind === "edges") {
+		html += field("Level inside", `<input id="sFlatten" type="checkbox" ${item.flatten === false ? "" : "checked"}>`);
+		html += field("Height (m)", `<input id="sEdgeHeight" type="number" step="0.5" value="${item.height === null || item.height === undefined ? "" : item.height}" placeholder="auto">`);
+		html += "<small>Levelled: the ground inside is made flat (rivers, lakes and your Level ground areas are cut in after), blending into the hills outside over the last 20 m. Auto height is the average of the ground along the edge.</small>";
+	}
+	if (selection.kind === "notes") html += field("Text", `<input id="sText" type="text" value="${(item.text || "").replace(/"/g, "&quot;")}" style="width:150px">`);
+	if (selection.kind === "greens") {
+		html += field("Rise (m)", `<input id="sRise" type="number" min="0" max="4" step="0.1" value="${item.rise || 0}" style="width:70px">`);
+		html += "<small>A lawn with a rise swells to that height inside its own outline, easing to nothing at its edge, kept clear of houses, streets and water (elevation.py; 0 is flat). Run elevation.py on the plan to see the ground.</small>";
+	}
+	box.innerHTML = html;
+	const bind = (id, fn) => { const el = document.getElementById(id); if (el) el.onchange = () => { remember(); fn(el); try { localStorage.setItem(KEY, JSON.stringify(plan)); } catch (e) {} draw(); }; };
+	bind("sDesign", el => { item.design = el.value; sized(item); }); bind("sFiller", el => { item.filler = el.value === "1"; sized(item); }); bind("sName", el => item.name = el.value);
+	bind("sYaw", el => item.yaw = wrap(+el.value * Math.PI / 180));
+	bind("sNoteYaw", el => { if (el.value === "") delete item.yaw; else item.yaw = wrap(+el.value * Math.PI / 180); }); bind("sWidth", el => item.width = +el.value);
+	bind("sHeight", el => item.height = el.value === "" ? null : +el.value); bind("sText", el => item.text = el.value);
+	bind("sRoadType", el => item.type = el.value); bind("sRise", el => item.rise = Math.max(0, +el.value || 0));
+	bind("sCrop", el => item.crop = el.value); bind("sDensity", el => item.density = el.value);
+	bind("sFlatten", el => item.flatten = el.checked); bind("sEdgeHeight", el => item.height = el.value === "" ? null : +el.value);
+}
+function showLayers() {
+	const box = document.getElementById("layers"); box.innerHTML = "";
+	for (const [id, name] of LAYERS) {
+		const row = document.createElement("label"); row.className = "layer";
+		row.innerHTML = `<input type="checkbox" ${layers[id] ? "checked" : ""}> ${name}`;
+		row.firstChild.onchange = e => { layers[id] = e.target.checked; draw(); };
+		box.appendChild(row);
+	}
+}
+function showReference() {
+	const r = plan.reference;
+	document.getElementById("refOpacity").value = r.opacity; document.getElementById("refX").value = Math.round(r.x);
+	document.getElementById("refZ").value = Math.round(r.z); document.getElementById("refW").value = Math.round(r.width); document.getElementById("refR").value = r.turn;
+}
+for (const [id, key] of [["refOpacity", "opacity"], ["refX", "x"], ["refZ", "z"], ["refW", "width"], ["refR", "turn"]])
+	document.getElementById(id).oninput = e => { plan.reference[key] = +e.target.value; changed(); };
+
+const GAME_LAYERS = ["relief", "paths", "water", "plots", "current", "scenery", "rail"];
+document.getElementById("blank").onclick = () => { for (const id of GAME_LAYERS) layers[id] = false; showLayers(); draw(); };
+document.getElementById("game").onclick = () => { for (const id of GAME_LAYERS) layers[id] = id !== "plots"; showLayers(); draw(); };
+
+document.getElementById("save").onclick = () => {
+	const link = document.createElement("a");
+	link.href = URL.createObjectURL(new Blob([JSON.stringify(plan, null, "\t")], {type: "application/json"}));
+	link.download = "ponyville_plan.json"; link.click();
+};
+document.getElementById("load").onclick = () => document.getElementById("file").click();
+document.getElementById("file").onchange = async e => {
+	const file = e.target.files[0]; if (!file) return;
+	try { remember(); plan = Object.assign(blank(), JSON.parse(await file.text())); selection = null; showReference(); changed(); }
+	catch (error) { alert("That file is not a plan: " + error.message); }
+	e.target.value = "";
+};
+document.getElementById("clear").onclick = () => { if (confirm("Empty the plan? (Ctrl+Z brings it back.)")) { remember(); const keep = plan.reference; plan = blank(); plan.reference = keep; selection = null; changed(); } };
+document.getElementById("fromTown").onclick = () => {
+	if (!confirm("Replace the plan's houses and landmarks with the town as it stands now?")) return;
+	remember();
+	plan.houses = TOWN.houses.map(h => ({design: h.design, filler: false, x: h.x, z: h.z, yaw: h.yaw, name: h.id, scale: h.scale}));
+	plan.landmarks = TOWN.scenery.filter(s => s.kind === "building").map(s => ({id: s.id, x: s.x, z: s.z, yaw: s.yaw}));
+	selection = null; changed();
+};
+
+try { const saved = localStorage.getItem(KEY); if (saved) plan = Object.assign(blank(), JSON.parse(saved)); } catch (e) {}
+// The first version laid the official map at 540 m, where its houses come out at two thirds of the
+// game's; a plan still at that untouched default gets the corrected size and place.
+if (plan.reference && plan.reference.width === 540 && plan.reference.x === 160 && plan.reference.z === -130)
+	plan.reference = Object.assign(plan.reference, {x: 100, z: -200, width: 820});
+for (const kind of KINDS) if (!Array.isArray(plan[kind])) plan[kind] = [];
+window.addEventListener("resize", resize);
+showTools(); showOptions(); showLayers(); showReference(); showSelected(); resize();
+</script>
+</body>
+</html>

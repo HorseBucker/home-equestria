@@ -4,6 +4,37 @@ extends RefCounted
 ## Ids are stable strings the LLM can repeat; `resolve()` turns one into a point.
 const HOUSE_KIND := "house"
 const TOWN_BUILDINGS := {"town_hall": "Ponyville Town Hall", "sugarcube_corner": "Sugarcube Corner"}
+## A bridge as a place to go is the bank beside its end, not the middle of its deck (Ponyville overhaul, 2026-11-22:
+## "VERY commonly do I see a pony who looks like she's on her way somewhere, just to stop once she just about reaches
+## the half way point of the bridge and then do nothing for a long time": outings, views, sunny and riverside spots
+## sent ponies to a bridge's middle to stand there for half an hour). Beside its first end, 2 m on past it and 2.5 m
+## to the side, on the ground.
+static func beside_bridge(bridge: Node3D) -> Vector3:
+	var axis := bridge.global_basis.x; axis.y = 0.0; axis = axis.normalized()
+	var side := bridge.global_basis.z; side.y = 0.0; side = side.normalized()
+	var half := 0.0
+	for mesh: Node in bridge.find_children("*", "MeshInstance3D", true, false):
+		var box: AABB = (mesh as MeshInstance3D).global_transform * (mesh as MeshInstance3D).get_aabb()
+		for i in 8:
+			var corner := box.get_endpoint(i) - bridge.global_position
+			half = maxf(half, absf(corner.dot(axis)))
+	if half <= 0.0: return bridge.global_position
+	var at := bridge.global_position + axis * (half + 2.0) + side * 2.5
+	if is_instance_valid(WorldTerrain.instance):
+		var h: float = WorldTerrain.instance.height_at(at)
+		if is_finite(h): at.y = h
+	return at
+
+## The remade town's names for its bridges where the old town's no longer fit (the "Market road bridge" is nowhere
+## near the market now: asked to walk to the market, Golden Harvest led Anon onto it).
+const BRIDGE_NAMES := {"bridge_01": "South twin bridge", "bridge_02": "North twin bridge", "bridge_04": "Town Hall bridge"}
+
+## Ponyville's named places a pony is always told of, however many houses stand nearer (prompt_lines keeps a place in
+## the list for each, within 500 m): Ponyville overhaul, 2026-11-22: the remade town's houses filled the nearest 20,
+## and Twilight and Trixie said there was no Hayburger.
+const NAMED_PLACES := ["burger_joint_01", "spa_01", "rarityboutique_01", "goldenoaklibrary_01", "schoolhouse_01", "trainstation_01",
+	"general_hospital_01", "fountain_01", "cutiemarkcrusaders_clubhouse_01", "appleacres_barned_01", "snazzys_fluttershy_cottage_01",
+	"airballoon_01"]
 ## The river bridges. Their scenery label is the shared word "bridge", which the build step
 ## leaves out of ai_observable, so they are listed here by node name (tools/rnl_scenery/plan.py).
 const BRIDGES := {"bridge_01": "South bridge", "bridge_02": "Market road bridge", "bridge_03": "East bridge", "bridge_04": "Cottage bridge"}
@@ -12,7 +43,10 @@ const MARKET_STALL := "Town/Market/kiosk_01_02"
 ## the homestead, not to the region's map spawn (Sweet Apple Acres' is ~1 km east of the barn the
 ## Apples live by, so AJ, Apple Bloom and Twilight walked the opposite way; player report
 ## 2026-10-28). "alt" adds the words ponies use for it ("the farm", "the orchard").
-const REGION_HOMESTEADS := {"sweet_apple_acres": {"landmark": "landmark:appleacres_barned_01", "alt": "farm orchard apple farm"}}
+## (Ponyville overhaul, 2026-11-23 play test: asked to lead him to the barn from the schoolhouse, Apple Bloom ran east
+## past Carrot Top's farm toward where the old map had the farm. Its barn is a walk-in home here, "house:...", not a
+## landmark, so the region fell back to its world spawn 950 m east: the places are tried in turn, a home at its door.)
+const REGION_HOMESTEADS := {"sweet_apple_acres": {"landmark": "landmark:appleacres_barned_01", "places": ["landmark:appleacres_barned_01", "house:sweet_apple_acres_barn"], "alt": "farm orchard apple farm"}}
 static var _cache: Array = []
 static var _stamp := -INF
 
@@ -55,7 +89,25 @@ static func entries(tree: SceneTree) -> Array:
 		# A walk-in building (the Day Spa) names where to meet with a NavigationAnchor child.
 		var anchor := node.get_node_or_null("NavigationAnchor") as Node3D
 		var at: Vector3 = anchor.global_position if anchor != null and anchor.is_inside_tree() else (node as Node3D).global_position
-		out.append({"id": "landmark:" + id, "label": label, "kind": "landmark", "position": at, "node": node})
+		if id.begins_with("bridge_"):
+			at = beside_bridge(node as Node3D)
+			label = str(BRIDGE_NAMES.get(id, label))
+		var entry := {"id": "landmark:" + id, "label": label, "kind": "landmark", "position": at, "node": node,
+			"town_destination": id in NAMED_PLACES}
+		# Ponyville overhaul (2026-11-23 play test): meeting at the Hayburger is on the street beside its front door,
+		# where its customers leave (hayburger_runtime.gd DeparturePoint), not a spot probed out from the middle of
+		# the building toward whoever asks (that put it against the side walls: "Search budget reached" 2.6 m short)
+		if id == "burger_joint_01":
+			var customers: Node = tree.get_first_node_in_group("hayburger_customers")
+			var markers: Variant = customers.get("_markers") if customers != null else null
+			var departure: Node3D = (markers as Dictionary).get("DeparturePoint") as Node3D if markers is Dictionary else null
+			if is_instance_valid(departure) and departure.is_inside_tree() and departure.global_position.distance_to(at) < 20.0:
+				entry.position = departure.global_position; entry.open_ground = true
+		# Ponyville overhaul (2026-11-23 play test: asked to lead him into Fluttershy's cottage, Applejack took him to its
+		# door and no further): a landmark with a walk-in home is its front door; going in is that home's place.
+		for home: Node in tree.get_nodes_in_group("house_interiors"):
+			if home is Node3D and home.has_method("place_id") and node.is_ancestor_of(home): entry.inside_id = str(home.place_id()); break
+		out.append(entry)
 	# Generic repeated labels (benches, lamps, fair tents) are not destinations.
 	out = out.filter(func(e): return e.kind != "landmark" or int(seen.get(e.label, 0)) <= 2)
 	for town: Node in tree.get_nodes_in_group("town_roots"):
@@ -74,10 +126,10 @@ static func entries(tree: SceneTree) -> Array:
 			if market != null and not market.is_queued_for_deletion():
 				# Meet in the customer aisle, not inside a counter or tent.
 				out.append({"id":"landmark:ponyville_market", "label":"Ponyville Market", "kind":"landmark",
-					"position":market.to_global(Vector3(0, 0, -4)), "node":market, "open_ground":true})
+					"position":market.to_global(Vector3(0, 0, -4)), "node":market, "open_ground":true, "town_destination":true})
 			for key in BRIDGES:
 				var bridge := scenery.get_node_or_null("Bridges/" + key) as Node3D
-				if bridge != null: out.append({"id": "landmark:" + key, "label": BRIDGES[key], "kind": "landmark", "position": bridge.global_position, "node": bridge})
+				if bridge != null: out.append({"id": "landmark:" + key, "label": str(BRIDGE_NAMES.get(key, BRIDGES[key])), "kind": "landmark", "position": beside_bridge(bridge), "node": bridge})
 	# The hot-air balloon (world/vehicles/balloon/balloon.gd) while it rests on the ground: meet in
 	# front of its ramp. Aloft it is no destination (dev 2026-10-15: Dash proposed the balloon and
 	# had no place to walk to).
@@ -86,6 +138,16 @@ static func entries(tree: SceneTree) -> Array:
 			out.append({"id": "landmark:balloon", "label": "Hot-air balloon", "kind": "landmark",
 				"position": (balloon as Node3D).to_global(Vector3(0, 0, -3.6)), "node": balloon, "open_ground": true})
 			break
+	# Ponyville overhaul (2026-11-23): the barn is a walk-in home here ("house:sweet_apple_acres_barn"), and its old
+	# landmark id, which the day tables and routines still name (outings, hay bale stacking), found nothing: met at
+	# its door, as before
+	var has_barn := out.any(func(e: Dictionary) -> bool: return e.id == "landmark:appleacres_barned_01")
+	if not has_barn:
+		for e: Dictionary in out:
+			if e.id == "house:sweet_apple_acres_barn" and is_instance_valid(e.get("node")) and (e.node as Node).has_method("outside"):
+				out.append({"id": "landmark:appleacres_barned_01", "label": "Sweet Apple Acres barn", "kind": "landmark",
+					"position": (e.node as Node).call("outside"), "node": e.node, "open_ground": true, "inside_id": e.id})
+				break
 	for r: Dictionary in WorldLayout.regions():
 		if int(r.get("phase", 0)) >= 7: continue
 		var spawn := WorldLayout.spawn(str(r.id))
@@ -94,8 +156,14 @@ static func entries(tree: SceneTree) -> Array:
 		var homestead: Dictionary = REGION_HOMESTEADS.get(str(r.id), {})
 		if not homestead.is_empty():
 			entry.alt = str(homestead.alt)
-			for e: Dictionary in out:
-				if e.id == homestead.landmark: entry.position = e.position; break
+			var found := false
+			for place: String in homestead.get("places", [homestead.landmark]):
+				for e: Dictionary in out:
+					if e.id != place: continue
+					var node: Variant = e.get("node")
+					entry.position = (node as Node).call("outside") if e.kind == HOUSE_KIND and is_instance_valid(node) and (node as Node).has_method("outside") else e.position
+					found = true; break
+				if found: break
 		out.append(entry)
 	_cache = out.filter(func(e): return _live_entry(e, tree))
 	return _cache
@@ -177,13 +245,23 @@ static func resolve(tree: SceneTree, id: String) -> Vector3:
 	return at
 
 ## Closest places first, plus every region; each line is "id = label (kind, ~N m)".
+## The way an offset points on the map, in words: "north" (-z), "south-east" ...
+static func compass(offset: Vector3) -> String:
+	var names := ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"]
+	return names[posmod(roundi(atan2(offset.x, -offset.z) / (PI / 4.0)), 8)]
+
+
 static func prompt_lines(tree: SceneTree, from: Vector3, local_limit := 30) -> Array:
 	var local: Array = []
 	var regions: Array = []
 	var home_lines: Array = []
 	for e: Dictionary in entries(tree):
 		var distance := Vector2(e.position.x - from.x, e.position.z - from.z).length()
-		var line := "%s = %s (%s, ~%d m)" % [e.id, e.label, e.kind, roundi(distance)]
+		# a named town place far off says which way it lies (2026-11-22: asked for the Hayburger, Trixie and Fluttershy
+		# both said it was "just past the fountain", which it is not: the list gave no direction)
+		var where := ", %s of you" % compass(e.position - from) if bool(e.get("town_destination", false)) and distance > 40.0 else ""
+		var line := "%s = %s%s (%s, ~%d m)" % [e.id, e.label, where, e.kind, roundi(distance)]
+		if e.has("inside_id"): line += "; this is its front door, to go inside use %s" % e.inside_id
 		if e.kind.begins_with("region"): regions.append([distance, line])
 		else: local.append([distance, line, bool(e.get("town_destination", false)) and distance <= 500.0])
 		if bool(e.get("player_home", false)): home_lines.append(line)

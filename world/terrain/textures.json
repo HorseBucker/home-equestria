@@ -8,8 +8,8 @@
 			"aliases": [
 				"grassx.png"
 			],
-			"uv_scale": 0.08333333333333333,
-			"tile_m": 12,
+			"uv_scale": 0.16666666666666666,
+			"tile_m": 6,
 			"detiling_rotation": 0.0,
 			"detiling_shift": 0.0,
 			"height_alpha": true
@@ -35,8 +35,8 @@
 				"grassy.png",
 				"dyellowgrass.png"
 			],
-			"uv_scale": 0.08333333333333333,
-			"tile_m": 12,
+			"uv_scale": 0.16666666666666666,
+			"tile_m": 6,
 			"detiling_rotation": 0.0,
 			"detiling_shift": 0.0,
 			"height_alpha": true
@@ -225,8 +225,8 @@
 				"GroundDark.png",
 				"Ground.png"
 			],
-			"uv_scale": 0.08333333333333333,
-			"tile_m": 12,
+			"uv_scale": 0.16666666666666666,
+			"tile_m": 6,
 			"detiling_rotation": 0.65,
 			"detiling_shift": 0.35,
 			"height_alpha": true
@@ -251,8 +251,8 @@
 				"tex_grass03_aREV.png",
 				"tex_grass03_aREVLight.png"
 			],
-			"uv_scale": 0.08333333333333333,
-			"tile_m": 12,
+			"uv_scale": 0.16666666666666666,
+			"tile_m": 6,
 			"detiling_rotation": 0.0,
 			"detiling_shift": 0.0,
 			"height_alpha": true
@@ -309,8 +309,21 @@
 				0.9
 			],
 			"height_alpha": true
+		},
+		{
+			"id": 22,
+			"name": "town_sage",
+			"file": "res://world/terrain/textures_gen/pv_town_sage.png",
+			"aliases": [],
+			"uv_scale": 0.16666666666666666,
+			"tile_m": 6,
+			"detiling_rotation": 0.65,
+			"detiling_shift": 0.35,
+			"navigation_trail": true,
+			"height_alpha": true
 		}
 	],
 	"_comment_ponyville_2026_10_13": "Ids 0-5 use hand-painted Ponyville textures (tools/ground_textures/paint.py in the private root) matching the Golden Oak reference; height_alpha keeps the PNG alpha as Terrain3D blend height so lawn edges break up over paths.",
-	"_comment_wild_2026_10_17": "redacted"
+	"_comment_wild_2026_10_17": "redacted",
+	"_comment_town_sage_2026_11_14": "Id 22 town_sage: Ponyville's packed sage-green town ground as the show draws it (tools/town_planner/build/make_sage_texture.py); a path for navigation, no grass blades."
 }

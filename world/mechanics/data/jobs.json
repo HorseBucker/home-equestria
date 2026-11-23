@@ -12,7 +12,7 @@
   "wage": {"per_unit": {"file": 10, "rub": 10, "wings": 4, "feather": 1}}, "payers": ["customer", "aloe", "town"], "hours": [9, 19],
   "copper": {"takes": [], "makes": [], "facts": ["worked", "paid"], "verbs": ["offer_job"], "plans": [], "consumers": ["ask", "gift"]}},
  {"id": "cider_stand", "name": "cider stand", "driver": "native", "employers": ["applejack", "big_mcintosh"],
-  "where": {"world": [62.6, 0, -460.3], "ground": true},
+  "where": {"world": [-17.7, 0, -0.9], "ground": true},
   "place": "behind Applejack's cider stall by the Sweet Apple Acres sign", "station": "cider_stall", "unit": "mug", "price": 6, "wage": {"per_unit": 2}, "payers": ["applejack", "big_mcintosh", "town"],
   "customer_payers": ["customer", "town"], "hours": [10, 18], "open": {"event": "cider_season"}, "offer_any_day": true, "daily_cap": 24,
   "customers": {"max": 3, "cooldown_s": 120, "radius": 150, "patience_s": 300},

@@ -36,6 +36,22 @@ const SPOTS:=[Vector3(-.65,.27,-.35),Vector3(.65,.27,-.35),Vector3(-.65,.27,.55)
 var _evicting:Dictionary={} # actor -> true while she hops out
 var _boarding:Dictionary={} # id -> {actor,nav,owner,follow,wander,executors,stage,clock,best,stuck}
 var _lift_wait:=0.0
+## A pony flying the balloon herself (pony_pilot.gd, play test 2026-11-16: Cherry Berry's flights):
+## she stands at the helm, is never hopped out as a stowaway, and `autopilot` (a wanted world
+## velocity, INF = off) replaces the rope controls while she flies. Anon aboard rides along.
+var pilot:Node3D
+var autopilot:=Vector3.INF
+## Ponies Anon held near the basket (msec), and ponies the AI sent to the balloon ([go_to: balloon]
+## or [lead], msec). Play test 2026-11-17: "She was down to do it, but couldn't. She walked over to
+## the balloon but didn't get inside it": a pony who walked to the balloon with Anon in mind now
+## counts as his invited rider (_follows_player) for MEET_MEMORY s, so she boards once he is aboard.
+const CARRY_GRACE:=4.0
+const CARRIED_WAIT:=60.0
+const CARRIED_NEAR:=8.0
+const MEET_MEMORY:=180.0
+const MEET_PLACES:=["landmark:balloon","landmark:airballoon_01"]
+var _carried_at:Dictionary={}
+var _meet:Dictionary={}
 
 static func attach(town:Node)->Node3D:
  var original:Node3D=town.find_child("airballoon_01",true,false) as Node3D
@@ -155,7 +171,11 @@ func _physics_process(delta:float)->void:
  _gate_angle=move_toward(_gate_angle,PI*.5 if gate_open else 0.0,delta*2)
  $Gate.rotation.y=_gate_angle
  var aboard:bool=holds_player(_player)
- if lift>.02 and gate_open:
+ var piloted:=autopilot.is_finite()
+ if piloted:
+  # Her burner and vent follow the climb and sink she wants; Anon's pulls on the ropes do nothing.
+  lift=clampf(autopilot.y/1.6,0,1);vent=clampf(-autopilot.y/1.1,0,1)*.6;steering=Vector2.ZERO
+ if lift>.02 and gate_open and not piloted:
   # A follower still climbing aboard holds the take-off (gate open, so no lift) a little while.
   if _lift_wait==0.0:_invite_followers()
   if not _boarding.is_empty() and _lift_wait<BOARD_WAIT:_lift_wait+=delta
@@ -165,9 +185,10 @@ func _physics_process(delta:float)->void:
  elif lift<=.02:_lift_wait=0.0
  _step_boarding(delta)
  var wanted:=Vector3(steering.x*5.5,(lift-vent)*2.2,steering.y*5.5)
+ if piloted:wanted=global_basis.inverse()*autopilot
  if gate_open or absf(_gate_angle)>.01:wanted=Vector3.ZERO
  # Never leave a pilot behind; an empty craft gently settles straight down.
- if not aboard and is_instance_valid(inventory):
+ if not aboard and is_instance_valid(inventory) and not piloted:
   wanted=Vector3.ZERO;_empty_time+=delta
   if _empty_time>2.0 and not landed and is_finite(_ground_height):wanted.y=-.6
  else:_empty_time=0
@@ -190,7 +211,7 @@ func _physics_process(delta:float)->void:
  if not support.is_empty() and not was_landed and landing_speed > .2:SFX.play_event(self,"prop_balloon_land",{"intensity":clampf(landing_speed/1.8,.25,1.0)})
  # Ground/cloud contact stops downward drift without driving the basket into its floor.
  if not support.is_empty() and velocity.y<0:velocity.y=0
- var burning := lift>.03 and not gate_open and absf(_gate_angle)<=.01 and aboard
+ var burning := lift>.03 and not gate_open and absf(_gate_angle)<=.01 and (aboard or piloted)
  _foley_time-=delta
  if burning:
   if _foley_time<=0:
@@ -225,7 +246,7 @@ var _parked_scans:=0
 var _rest_key:Array=[]
 func _parked_idle()->bool:
  # Field by field: no Array built per tick (same comparison as _rest_key==[...]).
- return landed and velocity==Vector3.ZERO and lift==0.0 and vent==0.0 and steering==Vector2.ZERO and _burner_audio==0 \
+ return landed and not autopilot.is_finite() and not is_instance_valid(pilot) and velocity==Vector3.ZERO and lift==0.0 and vent==0.0 and steering==Vector2.ZERO and _burner_audio==0 \
   and _lift_wait==0.0 and not is_instance_valid(_player) and passengers.is_empty() and _boarding.is_empty() and _evicting.is_empty() \
   and _gate_angle==(PI*.5 if gate_open else 0.0) and _rest_key.size()==6 and _rest_key[0]==global_transform and _rest_key[1]==lift \
   and _rest_key[2]==vent and _rest_key[3]==steering and _rest_key[4]==gate_open and _rest_key[5]==_gate_angle
@@ -277,21 +298,31 @@ func _board_occupants()->void:
  for id:String in population.live:
   var actor:Node3D=population.live[id].get("actor") as Node3D
   if not is_instance_valid(actor) or actor.global_position.distance_squared_to(centre)>reach*reach:continue
-  if actor.get("_held")==true or _boarding.has(id) or _evicting.has(actor):continue
+  if actor.get("_held")==true:_carried_at[actor]=Time.get_ticks_msec()
+  if actor.get("_held")==true or _boarding.has(id) or _evicting.has(actor) or actor==pilot:continue
   var existing:=false
   for row:Dictionary in passengers:existing=existing or row.actor==actor
   if existing:continue
   # A pegasus flying through is not in the basket (and must not be hopped to the ground mid-air).
   if actor.get("flight")!=null and actor.flight.active():continue
   var at:=actor.global_position
+  # Just let go of by Anon over the basket: she may still be dropping onto the deck (above it, "on
+  # the rim" for a moment); never hopped out for that (play test 2026-11-17).
+  var carried:bool=Time.get_ticks_msec()-int(_carried_at.get(actor,-1000000))<CARRY_GRACE*1000.0
   if contains(at):
    var invited:bool=saved_passengers.has(id) or (is_instance_valid(nav_of(actor)) and _follows_player(actor,nav_of(actor)))
    if anon_aboard and invited and board(actor,id):continue
+   # Carried in (modChad's Balloon Boarding mod 1.0.0, folded in 2026-11-17; play test: "I even
+   # picked her up and placed her in the balloon, but she just hopped right out"): Anon set her
+   # down in the basket himself, so she did not climb in on her own; she rides along. Unlike the
+   # mod, Anon need not be aboard yet: she waits for him a while (_update_passengers).
+   if carried and board(actor,id):
+    passengers[-1].carried=true;_carried_at.erase(actor);continue
    # Never hopped out into the air or onto a cloud she would fall through: she rides along
    # (or waits) until the basket is down where she can stand.
    if _can_step_off(actor):_evict(actor)
    elif anon_aboard:board(actor,id)
-  elif _on_rim(at) and _can_step_off(actor):_evict(actor)
+  elif _on_rim(at) and not carried and _can_step_off(actor):_evict(actor)
  _invite_followers()
 
 ## Farthest local point of the rim box (1.78, 1.9, 1.64) plus slack; contains() is inside it.
@@ -332,6 +363,7 @@ func _evict(actor:Node3D)->void:
 func _invite_followers()->void:
  var population:Node=game.get("population") as Node if is_instance_valid(game) else null
  if population==null:return
+ _note_meetings()
  if holds_player(_player) and gate_open and (landed or _resting_near_support()):
   for id:String in population.live:
    if _boarding.has(id) or passengers.size()+_boarding.size()>=SPOTS.size():continue
@@ -340,6 +372,21 @@ func _invite_followers()->void:
    if actor.global_position.distance_to(global_position)>BOARD_RANGE:continue
    var nav:Node=actor.get_node_or_null("Navigator")
    if nav!=null and _follows_player(actor,nav):_start_boarding(id,actor,nav)
+
+## Remembers ponies whose AI move is taking them to the balloon (MEET_PLACES), and forgets stale
+## carry and meeting marks.
+func _note_meetings()->void:
+ var now:=Time.get_ticks_msec()
+ for actor:Variant in _carried_at.keys():
+  if not is_instance_valid(actor) or now-int(_carried_at[actor])>CARRY_GRACE*1000.0:_carried_at.erase(actor)
+ for actor:Variant in _meet.keys():
+  if not is_instance_valid(actor) or now-int(_meet[actor])>MEET_MEMORY*1000.0:_meet.erase(actor)
+ var actions:Node=game.director.get("actions") as Node if is_instance_valid(game) and game.get("director")!=null else null
+ if actions==null:return
+ for executor:Node in actions.executors.values():
+  if not is_instance_valid(executor) or not is_instance_valid(executor.actor):continue
+  var move:Dictionary=executor.movement
+  if str(move.get("type","")) in ["go_to","lead"] and str(move.get("location_id","")) in MEET_PLACES:_meet[executor.actor]=now
 
 func _player_node(node:Variant)->bool:
  if not is_instance_valid(node) or not node is Node:return false
@@ -351,6 +398,7 @@ func _player_node(node:Variant)->bool:
 ## Following Anon: her navigator's follow, a date (relationship lease "bond:"), or her AI's follow.
 func _follows_player(actor:Node3D,nav:Node)->bool:
  if _player_node(nav.get("_follow_target")) or str(nav.command_owner).begins_with("bond:"):return true
+ if Time.get_ticks_msec()-int(_meet.get(actor,-100000000))<MEET_MEMORY*1000.0:return true
  var actions:Node=game.director.get("actions") as Node if is_instance_valid(game) and game.get("director")!=null else null
  if actions==null:return false
  for executor:Node in actions.executors.values():
@@ -366,6 +414,7 @@ func _free_spot()->Vector3:
  for local:Vector3 in SPOTS:
   var at:=to_global(local);var feet:=player_feet(_player) if is_instance_valid(_player) else Vector3.INF;var taken:=Vector2(at.x-feet.x,at.z-feet.z).length()<.55
   for row:Dictionary in passengers:taken=taken or (is_instance_valid(row.actor) and (row.actor as Node3D).global_position.distance_to(at)<.55)
+  taken=taken or _pilot_near(at)
   if not taken:return at
  return to_global(SPOTS[0])
 
@@ -378,9 +427,16 @@ func _spot_for(actor:Node3D)->Vector3:
   for row:Dictionary in passengers:
    if is_instance_valid(row.actor) and row.actor!=actor:
     var other:=(row.actor as Node3D).global_position;taken=taken or Vector2(at.x-other.x,at.z-other.z).length()<.55
+  taken=taken or (actor!=pilot and _pilot_near(at))
   var d:=actor.global_position.distance_to(at)
   if not taken and d<best_d:best=at;best_d=d
  return best
+
+## The pony at the helm stands about here; her body is long, so a spot this close is hers.
+func _pilot_near(at:Vector3)->bool:
+ if not is_instance_valid(pilot):return false
+ var p:=to_local(at)
+ return absf(p.x)<.5 and p.z>-.9 and p.z<1.0
 
 func _start_boarding(id:String,actor:Node3D,nav:Node)->void:
  var row:Dictionary={"actor":actor,"nav":nav,"owner":nav.command_owner,"follow":nav.get("_follow_target"),"wander":nav.wander_enabled,"executors":[],"stage":"walk","clock":0.0,"best":INF,"stuck":0.0}
@@ -406,7 +462,9 @@ func _step_boarding(delta:float)->void:
   if gap<float(row.best)-.05:row.best=gap;row.stuck=0.0
   else:row.stuck=float(row.stuck)+delta
   # The walk grid may not reach every ramp (a cloud landing): close enough, she hops the rest.
-  if gap<.7 or (float(row.stuck)>2.5 and actor.global_position.distance_to(global_position)<6.0):_climb(id,row)
+  # Stopped short (modChad's Balloon Boarding mod 1.0.0, folded in 2026-11-17): a big pony's path
+  # may end farther out; stuck 2 s within 10 m (was 2.5 s within 6 m), she is helped up the ramp.
+  if gap<.7 or (float(row.stuck)>2.0 and actor.global_position.distance_to(global_position)<10.0):_climb(id,row)
   elif float(row.clock)>30.0 or float(row.stuck)>6.0:_end_boarding(id,false)
 
 ## Up the ramp and in: a short eased hop to a free standing spot on the deck.
@@ -457,7 +515,7 @@ func board(actor:Node3D,id:String)->bool:
  nav.stay();nav.command_owner=OWNER;nav.set_physics_process(false)
  actor.reset_motion(Transform3D(actor.global_transform.basis,spot+Vector3.UP*.02));actor.set_moving_support(self)
  actor.set_meta("balloon_passenger",self)
- row.sit_at=Time.get_ticks_msec()*.001+2.5;row.sat=false
+ row.sit_at=Time.get_ticks_msec()*.001+2.5;row.sat=false;row.since=Time.get_ticks_msec()*.001
  saved_passengers.erase(id)
  passengers.append(row);return true
 
@@ -474,7 +532,11 @@ func _update_passengers()->void:
   var now:=Time.get_ticks_msec()*.001
   if not landed or anon_aboard:row.alone_at=INF
   elif not is_finite(float(row.get("alone_at",INF))):row.alone_at=now
-  if landed and not anon_aboard and (gate_open or now-float(row.alone_at)>2.0):
+  if anon_aboard:row.together=true
+  # Carried in before Anon got in himself: she waits for him while he stays close (CARRIED_WAIT).
+  var waiting:bool=bool(row.get("carried",false)) and not bool(row.get("together",false)) and now-float(row.get("since",now))<CARRIED_WAIT \
+   and is_instance_valid(inventory) and is_instance_valid(inventory.player_body) and (inventory.player_body as Node3D).global_position.distance_to(global_position)<CARRIED_NEAR
+  if landed and not anon_aboard and not waiting and (gate_open or now-float(row.alone_at)>2.0):
    # Non-cloudwalking passengers remain safely aboard when Anon opens the sky gate.
    if _can_step_off(actor):_disembark(row)
    continue
@@ -536,7 +598,37 @@ func checkpoint()->Dictionary:
  for row:Dictionary in passengers:
   if is_instance_valid(row.actor):
    var p:Vector3=to_local(row.actor.global_position);riders[row.id]=[p.x,p.y,p.z]
+ # A pony's flight is not saved (play test 2026-11-16): mid-flight the save has the balloon back on
+ # its pad, Anon in its basket and her at the ramp foot. The save keeps where they were (in the air),
+ # so the load puts them there afterwards (_resume_flight_save; not in game_saves.gd, which other
+ # mods replace too).
+ if _pilot_flying():
+  var pad:=home.origin
+  var out:={"position":[pad.x,pad.y,pad.z],"yaw":home.basis.get_euler().y,"passengers":riders}
+  var flight:Node=get_node_or_null("PonyPilot")
+  if flight!=null and str(flight.get("id"))!="":out["pilot"]=str(flight.get("id"))
+  var body:=_rider_body()
+  if body!=null:
+   var p:=to_local(body.global_position)
+   if absf(p.x)<=1.7 and absf(p.z)<=1.6 and p.y>=-.6 and p.y<=2.5:out["rider"]=[p.x,p.y,p.z]
+  return out
  return {"position":[global_position.x,global_position.y,global_position.z],"yaw":rotation.y,"passengers":riders}
+
+func _pilot_flying()->bool:
+ var flight:Node=get_node_or_null("PonyPilot")
+ return flight!=null and bool(flight.call("active"))
+
+## Where a save keeps `at` (Anon's feet) while a pony flies: aboard, the same spot in the basket on
+## its pad; anywhere else, unchanged.
+func saved_rider_point(at:Vector3)->Vector3:
+ if not _pilot_flying() or not at.is_finite():return at
+ var p:=to_local(at)
+ if absf(p.x)>1.7 or absf(p.z)>1.6 or p.y<-.6 or p.y>2.5:return at
+ return home*p
+
+## Where a save keeps the pony flying it: on the ground at the pad's ramp foot.
+func pilot_saved_point()->Vector3:
+ return home*Vector3(0,0,-2.75)
 
 func restore(data:Dictionary)->bool:
  var p:Variant=data.get("position")
@@ -549,6 +641,9 @@ func restore(data:Dictionary)->bool:
  if not at.is_finite() or not is_finite(yaw) or at.length()>50000:return false
  global_position=at;rotation.y=yaw;velocity=Vector3.ZERO;_set_gate(false,true)
  _keep_above_ground()
+ # A flight under way in this session ends with the load: its pony is set down at the ramp foot.
+ var flight:Node=get_node_or_null("PonyPilot")
+ if flight!=null:flight.call("abort")
  var riders:Variant=data.get("passengers",{})
  if riders is Dictionary:
   for id:Variant in riders:
@@ -556,7 +651,36 @@ func restore(data:Dictionary)->bool:
    if not id is String or not v is Array or v.size()!=3 or saved_passengers.size()>=4:continue
    if not v.all(func(n:Variant)->bool:return (n is float or n is int) and is_finite(float(n))):continue
    if contains(to_global(Vector3(v[0],v[1],v[2]))):saved_passengers[id]=v
+ var rider:Variant=data.get("rider");var flier:=str(data.get("pilot",""))
+ var aboard:Array=rider if rider is Array and (rider as Array).size()==3 and (rider as Array).all(func(n:Variant)->bool:return (n is float or n is int) and is_finite(float(n))) else []
+ if not aboard.is_empty() or flier!="":_resume_flight_save.call_deferred(aboard,flier)
  return true
+
+func _rider_body()->Node3D:
+ if not is_instance_valid(game) or not is_instance_valid(game.get("player")):return null
+ var player:Node3D=game.get("player")
+ return player.get_node_or_null("Body") as Node3D if bool(game.get("xr_active")) else player
+
+## A save made while a pony flew the balloon: once the load has put everyone where the save had them
+## (Anon still held while the loading screen is up), Anon goes into the basket on its pad where he
+## stood in it, and the pony who flew it to the foot of its ramp.
+func _resume_flight_save(aboard:Array,flier:String)->void:
+ var until:=Time.get_ticks_msec()+180000
+ while is_inside_tree() and Time.get_ticks_msec()<until and (not aboard.is_empty() or flier!=""):
+  await get_tree().physics_frame
+  var body:=_rider_body()
+  if not aboard.is_empty() and body!=null and body.is_physics_processing():
+   body.global_position=to_global(Vector3(aboard[0],aboard[1],aboard[2]))
+   if "velocity" in body:body.set("velocity",Vector3.ZERO)
+   aboard=[]
+  if flier!="":
+   var population:Variant=game.get("population") if is_instance_valid(game) else null
+   var live:Variant=(population as Object).get("live") if population is Object and is_instance_valid(population) else null
+   var row:Variant=(live as Dictionary).get(flier) if live is Dictionary else null
+   var actor:Variant=(row as Dictionary).get("actor") if row is Dictionary else null
+   if actor is Node3D and is_instance_valid(actor):
+    if (actor as Node3D).global_position.distance_to(pilot_saved_point())>2.0:(actor as Node3D).global_position=pilot_saved_point()
+    flier=""
 
 func _exit_tree()->void:
  SFX.release_source(self)

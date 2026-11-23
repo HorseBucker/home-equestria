@@ -158,10 +158,12 @@ float gaea_natural(int id) {
     return (id==0 || id==2 || id==3 || id==17 || id==18) ? 1.0 : gaea_rock(id);
 }
 
-// Ground seasons (W2-SEAS-B 2026-11-08). Trodden ids: dirt trail, town dirt, gravel. Forest floor:
+// Ground seasons (W2-SEAS-B 2026-11-08). Trodden ids: dirt trail, town dirt, gravel, and the town's sage
+// streets and squares (22; play test 2026-11-16: "The town streets should be visible in Winter, similar to how
+// dirt roads are"). Forest floor:
 // damp forest floor (dense canopy), gloomy grass (open forest). CPU mirror: snow_trail.gd shelter_at.
 float season_road_id(int id) {
-	return (id == 1 || id == 4 || id == 5) ? 1.0 : 0.0;
+	return (id == 1 || id == 4 || id == 5 || id == 22) ? 1.0 : 0.0;
 }
 float season_forest_id(int id) {
 	return id == 11 ? .8 : (id == 10 ? .45 : 0.0);

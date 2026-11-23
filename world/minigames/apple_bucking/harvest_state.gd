@@ -15,13 +15,17 @@ var _committing: bool = false
 var daily_baskets: int = DAILY_BASKETS
 var reward: int = REWARD
 
-## Trees fruit from spring to autumn and stand bare in winter (dev 2026-10-28: a new game starts
+## Trees fruit from spring to autumn while they are in leaf, and stand bare in winter (dev 2026-10-28: a new game starts
 ## in spring, and autumn-only apples left the job empty for 40 in-game days). "cycle" is the day
 ## number, so every basket has its own receipt; "season" paces Applejack's invitation. The season
 ## is world/seasons/season_state.gd's formula, F1 offset included (M-SEA-04).
 static func calendar(day: float, season_days: int) -> Dictionary:
 	var season: int = SEASON_STATE.count_for(int(floor(maxf(day, 0.0))), season_days, SEASON_STATE.current_offset())
-	var ripe: bool = posmod(season, 4) != 3
+	# Nor while the crowns are bare (play test 2026-11-16): Winter Wrap Up and the first days of
+	# spring, and the Running of the Leaves. The trees' own leaf state, so fruit, the ripe count on
+	# the map and bucking all follow the leaves. Not saved: the snapshot is unchanged, and an unpaid
+	# partial harvest stays harvestable (available() and growth() keep it).
+	var ripe: bool = posmod(season, 4) != 3 and SEASON_STATE.current_crowns_out()
 	return {"cycle": int(floor(maxf(day, 0.0))), "season": season, "ripe": ripe, "growth": 1.0 if ripe else 0.0}
 
 ## A picked tree grows a new crop in REGROW_DAYS. Older saves stored next autumn instead and no

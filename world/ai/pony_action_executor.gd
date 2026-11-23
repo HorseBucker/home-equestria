@@ -42,6 +42,7 @@ var _target_speed := 0.0
 var _target_velocity := Vector3.ZERO
 var _holding_formation := false
 var _formation_side := ""
+var _doorway_follow := preload("res://world/characters/navigation/doorway_follow.gd").new()
 var _follow_lost_seconds := 0.0
 var _follow_best_gap := INF
 var _follow_route := -1
@@ -108,6 +109,10 @@ func capabilities() -> Array:
 		var id := str(actor.identity.id)
 		if not wardrobe.wanted(id, wardrobe._season()).is_empty(): result.append("take_off")
 		if not (wardrobe.taken_off().get(id, []) as Array).is_empty(): result.append("put_on")
+	# (Board Games' own lines (board_games_compat 1.2.0-he.1), kept here: this file is the Ponyville overhaul's too,
+	# and its copy mounts after theirs. Tables are found by group: nothing happens without the mod.)
+	var table := _board_table()
+	if table != null and table.available_to(actor): result.append("board_game")
 	if not result.is_empty(): result.append("cancel")
 	if actor.has_meta("relationship_runtime"): result.append_array(["relationship_offer","relationship_answer","agreed","request_space","buck_player","cuddle"])
 	if actor.has_meta("relationship_runtime"):
@@ -181,6 +186,10 @@ func submit(actions: Array, targets: Dictionary, turn: int, ai_origin := false) 
 				# [cancel] in a tag reply names no action: it stops whatever she is doing.
 				if movement.get("id") == action.action_id or (action.action_id == "current" and not movement.is_empty()): _end_move("cancelled", "Cancelled by request"); found = true
 				_report(action, "completed" if found else "failed", "Cancellation applied" if found else "That action is not active")
+			"board_game":
+				var table := _board_table()
+				if table == null: _report(action, "failed", "No game table nearby")
+				else: table.model_action(self, action)
 			"meet", "meet_cancel":
 				# Commits at once and moves nopony: her day plan walks her there on the day.
 				var appointments := _appointments()
@@ -484,6 +493,7 @@ func _physics_step(delta: float) -> void:
 				_end_move("cancelled", "Companion left walking range", true); return
 		if not target_floor.is_finite():
 			if movement.type == "follow":
+				_doorway_follow.reset()
 				navigator.stay(); _last_goal = Vector3.INF
 				_report(movement, "blocked", "Waiting for target ground support; following retained")
 				return
@@ -526,16 +536,24 @@ func _physics_step(delta: float) -> void:
 			# their motion so she is already where they are heading (dev, 2026-09-15).
 			if movement.type == "follow" and speed > .4:
 				goal += _follow_heading * minf(speed * .35, 1.4)
-		goal.y = target_floor.y
-		var projected: Vector3 = navigator.command_support(goal)
-		if not projected.is_finite() and movement.type == "follow":
-			# A side slot against a wall falls back behind the leader. The planner still
-			# resolves the actual corridor; no direct velocity through the obstacle.
-			goal = formation_point(formation_frame, "behind_far", separation, actor.global_position)
+		if movement.type == "follow" and _doorway_follow.update(get_tree(), target_floor, actor.global_position):
+			goal = _doorway_follow.goal(navigator, target_floor, actor.global_position, separation)
+		else:
 			goal.y = target_floor.y
-			projected = navigator.command_support(goal)
-		if projected.is_finite(): goal = projected
-		if navigator.has_method("command_follow_goal"):goal=navigator.command_follow_goal(goal,target.global_position)
+			var projected: Vector3 = navigator.command_support(goal)
+			if not projected.is_finite() and movement.type == "follow":
+				# A side slot against a wall falls back behind the leader. The planner still
+				# resolves the actual corridor; no direct velocity through the obstacle.
+				goal = formation_point(formation_frame, "behind_far", separation, actor.global_position)
+				goal.y = target_floor.y
+				projected = navigator.command_support(goal)
+			if projected.is_finite(): goal = projected
+			if navigator.has_method("command_follow_goal"):goal=navigator.command_follow_goal(goal,target.global_position)
+		if movement.type == "follow" and not goal.is_finite():
+			navigator.stay()
+			_last_goal = Vector3.INF
+			_report(movement, "blocked", "Waiting for a supported follow position")
+			return
 		var gap := _flat(actor.global_position, goal)
 		var walk_top: float = actor.profile.walk_speed.y if "profile" in actor else .5
 		var ceiling: float = actor.profile.max_travel_speed if "profile" in actor else 4.5
@@ -700,6 +718,7 @@ func _arrived() -> void:
 
 func _route_failed(reason: String) -> void:
 	if movement.get("type") == "follow":
+		_doorway_follow.route_failed()
 		_last_goal = Vector3.INF; _retry_wait = 1.0
 		_report(movement, "blocked", reason + "; will retry following")
 		return
@@ -776,6 +795,7 @@ func _home_house() -> Node3D:
 
 func _end_move(status: String, reason: String, routine := false) -> void:
 	if movement.is_empty(): return
+	_doorway_follow.reset()
 	var owns_navigator: bool = is_instance_valid(navigator) and str(navigator.command_owner) == str(movement.id)
 	if owns_navigator and status=="cancelled" and movement.type in ["sit","lie_down"] and actor.has_method("request_posture"): actor.request_posture("stand")
 	if owns_navigator and status == "cancelled" and actor.get("flight") != null and actor.flight.active(): actor.flight.land()
@@ -854,3 +874,19 @@ func _exit_tree() -> void:
 	if is_instance_valid(actor): actor.remove_meta("active_follow")
 	if is_instance_valid(actor) and actor.has_method("set_action_gaze"): actor.set_action_gaze(null)
 	if owns_navigator: _release(true)
+
+## The game table for her (world/minigames/board_games/board_table.gd), or null: the board that asked
+## her or where she plays, else the nearest table she could walk over to (its can_play(): within its
+## invite range or in its house), a free one before a busy one.
+func _board_table() -> Node3D:
+	if not is_inside_tree() or not is_instance_valid(actor): return null
+	var best: Node3D = null
+	var best_rank := INF
+	for table: Node in get_tree().get_nodes_in_group("board_tables"):
+		# The board that asked her, or where she sits, before any other.
+		if (table.has_method("involves") and bool(table.call("involves", actor))) or (table.get("invite") as Dictionary).get("actor") == actor or (table.get("opponent") as Dictionary).get("actor") == actor: return table as Node3D
+		if not table is Node3D or (table.has_method("can_play") and not bool(table.call("can_play", actor))): continue
+		var busy: bool = not (table.get("opponent") as Dictionary).is_empty() or not (table.get("invite") as Dictionary).is_empty() or not (table.get("match_invite") as Dictionary).is_empty()
+		var rank: float = (table as Node3D).global_position.distance_squared_to(actor.global_position) + (1.0e12 if busy else 0.0)
+		if rank < best_rank: best = table as Node3D; best_rank = rank
+	return best

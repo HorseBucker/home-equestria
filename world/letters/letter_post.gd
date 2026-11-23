@@ -195,7 +195,7 @@ func pony_writes(pony: String, about: String, mood: String) -> String:
 	var now := _now()
 	var due := due_after(now)
 	var id := STORE.create(_context(), {"kind": "note", "from": pony, "to": "player", "stationery": "plain", "status": "scheduled",
-		"text": FALLBACK.note(display_name(pony), mood, pony + str(now)), "written_at": now, "due_at": due, "gist": about.left(160), "ai": "fallback"})
+		"text": FALLBACK.note(display_name(pony), mood, pony + str(now), about), "written_at": now, "due_at": due, "gist": about.left(160), "ai": "fallback"})
 	if id.is_empty(): return ""
 	var context := _context()
 	if context != null and context.has_method("record"):

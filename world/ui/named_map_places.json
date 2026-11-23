@@ -250,15 +250,15 @@
 			"id": "landmark:sugarcube_corner",
 			"kind": "landmark",
 			"name": "Sugarcube Corner",
-			"x": 118.310455322266,
-			"z": -143.954040527344
+			"x": 15.79,
+			"z": -142.74
 		},
 		{
 			"id": "landmark:town_hall",
 			"kind": "landmark",
 			"name": "Town Hall",
-			"x": 95.8381729125977,
-			"z": -211.233703613281
+			"x": 135.5,
+			"z": -175.89
 		}
 	],
 	"version": 1

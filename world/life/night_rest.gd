@@ -242,6 +242,9 @@ func _busy(actor: Node3D) -> bool:
 	if actor.get("water_escape") != null and actor.water_escape.active: return true
 	if actor.get("_held") or (actor.get("hoof_hold") != null and actor.hoof_hold.active()): return true
 	if actor.get("flight") != null and actor.flight.active(): return true
+	# In the balloon's basket (a passenger, or flying it: pony_pilot.gd) bed waits until she is out;
+	# a walk or a jump to bed from up there would leave the basket (play test 2026-11-16).
+	if actor.has_meta("balloon_passenger"): return true
 	var nav := _nav(actor)
 	if nav == null: return true
 	var owner: String = nav.command_owner

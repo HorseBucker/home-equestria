@@ -17,12 +17,12 @@ const COVER := preload("res://world/ui/loading_cover.gd")
 ## (views from the air)} or {door: approximate door position, framed from that building's real
 ## front door once it is streamed in: back/side metres from the handle, lift of the look point}
 const VIEWS := {
-	"above_ponyville": {"stand": Vector2(40.0, -95.0), "height": 38.0, "look": Vector3(110.0, 0.0, -200.0)},
-	"golden_oak": {"door": Vector3(-24.5, -11.3, -259.2), "back": 21.0, "side": 6.0, "lift": 7.0},
-	"fluttershy_cottage": {"door": Vector3(156.12, -19.01, -12.05), "back": 13.0, "side": -4.0, "lift": 2.5},
+	"above_ponyville": {"stand": Vector2(30.5, -80.9), "height": 38.0, "look": Vector3(100.5, 0.0, -205.89)},
+	"golden_oak": {"door": Vector3(-8.08, -10.757, -257.208), "back": 21.0, "side": 6.0, "lift": 7.0},
+	"fluttershy_cottage": {"door": Vector3(409.967, -10.127, -4.033), "back": 13.0, "side": -4.0, "lift": 2.5},
 	"zecora_hut": {"door": Vector3(-34.5, -37.4, 993.9), "back": 9.0, "side": 3.0, "lift": 1.8},
-	"town_square": {"stand": Vector2(236.0, -247.0), "height": 1.2, "look": Vector3(246.0, 1.5, -264.0)},
-	"sweet_apple_acres": {"stand": Vector2(30.0, -420.0), "look": Vector3(13.0, 4.0, -440.0)},
+	"town_square": {"stand": Vector2(101.3, -197.4), "height": 1.2, "look": Vector3(114.0, 1.5, -189.4)},
+	"sweet_apple_acres": {"stand": Vector2(-1.7, 48.4), "look": Vector3(-27.74, 4.0, 51.781)},
 }
 var game: Node
 var view_name := ""

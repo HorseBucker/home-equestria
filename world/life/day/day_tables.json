@@ -417,6 +417,21 @@
       "phrase": "go fishing at the {target}",
       "reasons": "fish"
     },
+    "drink_fountain": {
+      "weight": 1.2,
+      "handler": "drink_at_fountain",
+      "hours": [
+        9,
+        18.5
+      ],
+      "target": "fountain",
+      "minutes": [
+        3,
+        6
+      ],
+      "phrase": "have a drink at the {target}",
+      "reasons": "drink"
+    },
     "cook": {
       "weight": 1.2,
       "handler": "cook_at_home",
@@ -564,13 +579,13 @@
         "landmark:bridge_02",
         "landmark:bridge_03",
         "landmark:schoolhouse_theatre_01",
-        "landmark:windmill_01",
         "landmark:trainstation_01",
         "landmark:airballoon_01",
         "landmark:spa_01",
         "landmark:goldenoaklibrary_01",
         "landmark:town_hall",
-        "landmark:appleacres_barned_01"
+        "landmark:appleacres_barned_01",
+        "landmark:ponyville_market"
       ]
     },
     "food": {
@@ -644,7 +659,6 @@
     },
     "view": {
       "places": [
-        "landmark:windmill_01",
         "landmark:windmill_02",
         "landmark:bridge_02",
         "landmark:airballoon_01",
@@ -708,6 +722,11 @@
     "dock": {
       "places": [
         "station:fishing_dock"
+      ]
+    },
+    "fountain": {
+      "places": [
+        "landmark:fountain_01"
       ]
     },
     "kitchen": {
@@ -898,6 +917,12 @@
       "to catch something for dinner",
       "because the river is calm today",
       "to practise her casting"
+    ],
+    "drink": [
+      "because she is thirsty",
+      "on her way through the square",
+      "because the water looks so cool",
+      "after a long walk"
     ],
     "cook": [
       {

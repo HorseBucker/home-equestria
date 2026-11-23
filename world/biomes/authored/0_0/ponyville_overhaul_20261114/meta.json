@@ -1,0 +1,9 @@
+{
+  "bounds": [
+    0,
+    0,
+    256,
+    256
+  ],
+  "note": "Ponyville overhaul vegetation (tools/town_planner/build/plan_props.py)"
+}

@@ -248,6 +248,19 @@ var _journey_via: Array = []
 var _location_cache: Dictionary = {}
 
 
+## Ponyville overhaul (from modChad's Pathfinding Fix 1.1.0): the avoidance agent's size follows the pony's. It was
+## set once, above, from her profile as it stood then, and the pony size setting and a filly's scale come after it:
+## at 1.35 ponies kept a 0.45 m circle round a 0.61 m body and brushed through each other in a crowd; fillies kept
+## one wider than themselves and swerved round others too widely. Called by set_body_scale (pony_locomotion.gd,
+## spike.gd) and princess_hybrid.gd once it sets her clearance.
+func sync_agent_size() -> void:
+	if agent == null or pony == null or pony.get("profile") == null: return
+	var radius: float = float(pony.profile.radius)
+	var height: float = float(pony.profile.clearance)
+	if not is_equal_approx(agent.radius, radius): agent.radius = radius
+	if not is_equal_approx(agent.height, height): agent.height = height
+
+
 func _ready() -> void:
 	pony = get_parent() as CharacterBody3D
 	assert(pony != null and pony.has_method("set_desired_velocity"))
@@ -674,7 +687,11 @@ func _navigator_tick(delta: float) -> void:
 	if native_follow:
 		# Long trips still plan their next leg here; arrival, steering and stall recovery are the
 		# native follower's (events come back through _on_native_event).
-		if _journey_goal.is_finite() and _request < 0 and not _needs_path and _flat_distance(pony.global_position, target) < 25.0:
+		# (Ponyville overhaul, 2026-11-23: not after the trip failed. _fail left the journey goal set, and this set the
+		# attempts back to 0 and planned the next leg again at once: a destination no route reached was searched for
+		# several times a second, without end, the walk grid sampling ever wider (Applejack standing a minute past the
+		# bridge while the frame rate fell). The action that sent her (pony_action_executor.gd) retries, nearer.)
+		if _journey_goal.is_finite() and _request < 0 and not _needs_path and _flat_distance(pony.global_position, target) < 25.0 and state not in [State.UNREACHABLE, State.BLOCKED]:
 			if not _journey_via.is_empty() or _flat_distance(pony.global_position, _journey_goal) > JOURNEY_LEG * 1.2 or _flat_distance(target, _journey_goal) > 1.0:
 				_journey_attempt = 0
 				_next_leg()
@@ -944,8 +961,13 @@ const DAWDLE_SECONDS := Vector2(8.0, 22.0)
 ## Chance per pace pick (every 3-7 s) of starting a dawdle, from a lazy hour to a busy one.
 const DAWDLE_CHANCE := Vector2(0.09, 0.03)
 var _dawdle_seconds := 0.0
+## A full sprint on a trot route (play test 2026-11-17: the Crusaders "should full sprint to their clubhouse
+## and to wherever they're crusading to"): the pace is drawn from the gallop band, so the locomotion picks the
+## gallop from the speed as it does when a pony catches up. The step that sets it clears it again.
+var sprint := false
 func _pick_pace(restart: bool = true) -> void:
 	_pace_band = pony.profile.walk_speed if _route_gait == Gait.WALK else pony.profile.trot_speed
+	if sprint and _route_gait == Gait.TROT and pony.profile.get("gallop_speed") is Vector2: _pace_band = pony.profile.gallop_speed
 	if _route_gait == Gait.WALK and (_wandering or autonomous_command()):
 		# Everyday strolling outdoors is the trot clip, not the 0.3 m/s four-beat walk (dev
 		# 2026-10-14). The walk stays for indoors and for slowing to a stop; speed alone picks

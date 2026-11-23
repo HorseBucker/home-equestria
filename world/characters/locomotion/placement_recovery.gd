@@ -56,6 +56,11 @@ static func clear_release(actor: CharacterBody3D, head: Vector3, fallback := Vec
 	var exclude: Array[RID] = [actor.get_rid()]
 	var scale: float = float(actor.get("body_scale")) if actor.get("body_scale") != null else 1.0
 	var at := actor.global_position
+	# Set down in the hot-air balloon's basket over its wall (play test 2026-11-17: "I even picked her
+	# up and placed her in the balloon, but she just hopped right out"): the wall hides her from his
+	# head, but she is on its deck, not inside geometry; the balloon takes her as a passenger.
+	for balloon: Node in actor.get_tree().get_nodes_in_group("hot_air_balloons"):
+		if balloon.has_method("contains") and bool(balloon.call("contains", at, 0.1)): return false
 	for height: float in [.45, .8]:
 		if space.intersect_ray(PhysicsRayQueryParameters3D.create(head, at + Vector3.UP * height * scale, 1, exclude)).is_empty(): return false
 	var profile: Resource = actor.get("profile")

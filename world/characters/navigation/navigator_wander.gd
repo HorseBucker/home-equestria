@@ -5,6 +5,7 @@ extends RefCounted
 
 const DAILY := preload("res://world/ai/pony_daily_activity.gd")
 const REST_PLACEMENT := preload("res://world/navigation/rest_placement.gd")
+const STREET := preload("res://world/characters/navigation/street_rest.gd")
 
 
 static func _flat(a: Vector3, b: Vector3) -> float:
@@ -51,6 +52,10 @@ static func wander_ready(nav: Node, result: Dictionary, request_id: int, complet
 	if REST_PLACEMENT.passage(nav.get_tree(), destination, pony.profile.radius):
 		nav._idle_time = 1.0
 		return
+	# (her wander ends on the grass beside a street, not in it: street_rest.gd)
+	if STREET.free_time(nav) and STREET.on_street(nav.get_tree(), destination):
+		var grass := STREET.grass_near(nav, destination)
+		if grass.is_finite(): destination = grass
 	nav._wander_intent = str(result.get("intent", "Exploring somewhere new"))
 	var recent: Array[Vector3] = nav._recent_wanders
 	recent.push_front(destination)
@@ -88,6 +93,16 @@ static func begin_rest(nav: Node, duration: float) -> void:
 		nav._reset_lookahead()
 		nav._halt()
 		return
+	# About to rest in the street in her free time: a few steps onto the grass first (street_rest.gd). Arriving there
+	# brings her back here, off the street.
+	if duration < 0.0 and STREET.free_time(nav) and not nav._approaching_player and STREET.on_street(tree, pony.global_position):
+		var grass := STREET.grass_near(nav, pony.global_position)
+		if grass.is_finite():
+			nav.go_to(grass, nav.Gait.WALK)
+			nav._wandering = true
+			nav._wander_intent = "Stepping off the street onto the grass"
+			nav._wander_time = 20.0
+			return
 	nav._rest_sit_pending = randf() < DAILY.rest_probability(nav.sit_chance, nav.daytime_activity())
 	nav._rest_posture = DAILY.rest_kind(randf())
 	if nav._rest_sit_pending and duration < 0.0:

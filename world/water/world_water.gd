@@ -12,6 +12,8 @@ const LAKES := "res://world/water/lakes.json"
 ## Water in Ponyville's canal trenches, a height grid derived from the terrain
 ## (tools/terrain_fix/build_canal_water.py).
 const CANALS := "res://world/water/ponyville_canals.json"
+## Which way the canals run and how fast (tools/town_planner/build/bake_flow.py). Optional.
+const FLOW := "res://world/water/ponyville_flow.json"
 const WATER_MASK := 1 << 15
 const RIVER_SUPPORT := preload("res://world/water/river_support.gd")
 const SEA_SIZE := 26000.0
@@ -32,6 +34,9 @@ const ICE_STILL := 1
 const ICE_RIVER := 2
 var still_water: Array[MeshInstance3D] = []
 var water_materials: Array[ShaderMaterial] = []
+## The canals' rivers as surface polylines, each running downstream (ponyville_flow.json "streams");
+## the soundscape's brook voices glide along them.
+var flow_streams: Array[PackedVector3Array] = []
 
 
 static func ensure(parent: Node) -> WorldWater:
@@ -274,5 +279,34 @@ func _build_canals(doc: Dictionary) -> void:
 	arrays[Mesh.ARRAY_INDEX] = tris
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	_add_water(mesh, "PonyvilleCanals", false, Transform3D.IDENTITY, ICE_STILL)
+	var canals := _add_water(mesh, "PonyvilleCanals", false, Transform3D.IDENTITY, ICE_STILL)
 	print("[water] Ponyville canals: ", tris.size() / 3, " triangles")
+	_apply_flow(canals.material_override as ShaderMaterial, cell * float(w))
+
+
+## The canals' current (world/water/ponyville_flow.json, tools/town_planner/build/bake_flow.py): the
+## shader's flow map, and the rivers' downstream polylines for the soundscape (`flow_streams`).
+## Without the file the canals stay as still as before. `width_m`: the metres UV.x spans.
+func _apply_flow(material: ShaderMaterial, width_m: float) -> void:
+	var doc: Variant = _load_json(FLOW)
+	if material == null or not doc is Dictionary: return
+	var w := int(doc.get("width", 0))
+	var d := int(doc.get("depth", 0))
+	var cell := float(doc.get("cell", 2.0))
+	var bytes := Marshalls.base64_to_raw(String(doc.get("rgba", "")))
+	if w <= 0 or d <= 0 or bytes.size() != w * d * 4:
+		push_warning("[water] flow map size mismatch; the canals stay still")
+		return
+	var image := Image.create_from_data(w, d, false, Image.FORMAT_RGBA8, bytes)
+	var origin: Array = doc.get("origin", [0.0, 0.0])
+	var tile: Vector2 = material.get_shader_parameter("tile")
+	material.set_shader_parameter("flow_map", ImageTexture.create_from_image(image))
+	material.set_shader_parameter("flow_rect", Vector4(float(origin[0]), float(origin[1]), cell * float(w), cell * float(d)))
+	material.set_shader_parameter("flow_uv_per_m", tile.x / maxf(width_m, 1.0))
+	material.set_shader_parameter("flow_enabled", 1.0)
+	for line: Variant in doc.get("streams", []):
+		var points := PackedVector3Array()
+		for p: Variant in line:
+			points.append(Vector3(float(p[0]), float(p[1]), float(p[2])))
+		if points.size() >= 2: flow_streams.append(points)
+	print("[water] Ponyville flow: %dx%d map, %d streams" % [w, d, flow_streams.size()])

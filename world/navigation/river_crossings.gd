@@ -5,6 +5,7 @@ extends RefCounted
 ## from a pony to her goal crosses water, route() gives the approach points of the cheapest
 ## bridge, 5 m off each end on dry bank, in walking order.
 ##
+## Bridges since the Ponyville overhaul (tools/town_planner/build/plan_scenery.py): the plan's bridges.
 ## Water: the town canal grid (world/water/ponyville_canals.json, 1 m cells, NaN = dry), the
 ## same data the water surface is built from. Bridges: the fitted deck ends of the four placed
 ## bridges in world/props/ponyville/rnl_scenery.json (tools/rnl_scenery/plan.py; the two stone
@@ -16,10 +17,19 @@ extends RefCounted
 ## south and north channels, which the Market road and East bridges reach from the other sides.
 const CANALS := "res://world/water/ponyville_canals.json"
 const BRIDGE_ENDS := {
-	"bridge_01": [Vector2(58.43, -56.46), Vector2(71.57, -29.54)],   # South bridge
-	"bridge_02": [Vector2(194.96, -76.94), Vector2(197.04, -47.06)], # Market road bridge
-	"bridge_03": [Vector2(245.47, -18.62), Vector2(274.53, -11.38)], # East bridge
-	"bridge_04": [Vector2(211.03, -37.23), Vector2(196.97, -10.77)], # Cottage bridge
+	"bridge_01": [Vector2(250.48, -309.90), Vector2(241.04, -311.00)],
+	"bridge_02": [Vector2(250.92, -291.08), Vector2(241.36, -292.19)],
+	"bridge_03": [Vector2(191.10, -224.34), Vector2(198.58, -212.08)],
+	"bridge_04": [Vector2(161.48, -177.97), Vector2(177.23, -175.13)],
+	"bridge_05": [Vector2(-50.62, -175.14), Vector2(-60.07, -172.55)],
+	"bridge_06": [Vector2(-50.09, -142.05), Vector2(-59.94, -140.89)],
+	"bridge_07": [Vector2(134.98, -141.18), Vector2(141.80, -128.39)],
+	"bridge_08": [Vector2(-4.30, -102.12), Vector2(-9.82, -94.02)],
+	"bridge_09": [Vector2(51.01, -91.14), Vector2(50.36, -81.77)],
+	"bridge_10": [Vector2(402.10, -27.57), Vector2(405.37, -19.39)],
+	"bridge_11": [Vector2(95.84, -14.39), Vector2(86.99, -14.34)],
+	"bridge_12": [Vector2(180.07, -52.56), Vector2(172.18, -47.80)],
+	"bridge_13": [Vector2(260.32, -37.29), Vector2(263.56, -45.68)],
 }
 ## Approach pairs walked end to end by a pony, used instead of the computed ones. The South
 ## bridge's old skewed placement put its computed south point beside the ramp rail
@@ -78,28 +88,67 @@ static func crosses(from: Vector2, to: Vector2) -> bool:
 		if wet(from.lerp(to, float(k) / count)): return true
 	return false
 
-## Bridge approach points to walk through, in order, from `from` to `to` (world positions);
-## [] when the straight way stays dry or no single bridge joins the two banks.
+## Bridge approach points to walk through, in order, from `from` to `to` (world positions); [] when the straight
+## way stays dry or no chain of bridges joins the two banks.
+## Since the Ponyville overhaul the town has thirteen bridges over a web of streams, and many trips need two of
+## them (from the southern meadows into town: a footbridge, then a town bridge). The old choice took one bridge
+## only, and only when both of its legs were dry; a trip that needed two got no points at all, and the pony was
+## left to a search that ran out of budget (Pinkie stood stranded at X 134, Z -55, play test 2026-11-15). Now: the
+## shortest chain over the bridges' approach points, each leg of it a straight dry line or a bridge's own deck.
 static func route(from: Vector3, to: Vector3) -> Array:
 	_load()
 	var a := Vector2(from.x, from.z)
 	var b := Vector2(to.x, to.z)
 	if _heights.is_empty() or not crosses(a, b): return []
-	var best: Array = []
+	_link()
+	var count := _nodes.size()
+	# Dijkstra over the approach points; -1 is the start, `count` the goal
+	var cost: Array[float] = []; var parent: Array[int] = []; var done: Array[bool] = []
+	cost.resize(count); parent.resize(count); done.resize(count)
+	for i in count:
+		done[i] = false; parent[i] = -1
+		cost[i] = INF if crosses(a, _nodes[i]) else a.distance_to(_nodes[i])
+	var best_end := -1
 	var best_cost := INF
-	for id: String in _approaches:
-		var ends: Array = _approaches[id]
-		for flip in 2:
-			var near: Vector2 = ends[flip]
-			var far: Vector2 = ends[1 - flip]
-			if crosses(a, near) or crosses(far, b): continue
-			var cost := a.distance_to(near) + near.distance_to(far) + far.distance_to(b)
-			if cost < best_cost: best_cost = cost; best = [near, far]
+	for step in count:
+		var at := -1
+		for i in count:
+			if not done[i] and (at < 0 or cost[i] < cost[at]): at = i
+		if at < 0 or not is_finite(cost[at]) or cost[at] >= best_cost: break
+		done[at] = true
+		if not crosses(_nodes[at], b):
+			var total := cost[at] + _nodes[at].distance_to(b)
+			if total < best_cost: best_cost = total; best_end = at
+		for link: Array in _links[at]:
+			var other: int = link[0]
+			var through: float = cost[at] + float(link[1])
+			if through < cost[other]: cost[other] = through; parent[other] = at
+	if best_end < 0: return []
+	var chain: Array[Vector2] = []
+	var walk := best_end
+	while walk >= 0:
+		chain.push_front(_nodes[walk]); walk = parent[walk]
 	var points: Array = []
-	for p: Vector2 in best:
+	for p: Vector2 in chain:
 		var y: float = WorldTerrain.instance.height_at(Vector3(p.x, 0, p.y)) if is_instance_valid(WorldTerrain.instance) else NAN
 		points.append(Vector3(p.x, y if is_finite(y) else from.y, p.y))
 	return points
+
+## The approach points as a graph, made once: each bridge's two points joined by its deck, and any two points of
+## different bridges joined when the straight line between them stays dry.
+static var _nodes: Array[Vector2] = []
+static var _links: Array = []      # per node: [[other node, metres], ...]
+static func _link() -> void:
+	if not _nodes.is_empty(): return
+	for id: String in _approaches:
+		_nodes.append(_approaches[id][0]); _nodes.append(_approaches[id][1])
+	for i in _nodes.size(): _links.append([])
+	for i in _nodes.size():
+		for j in range(i + 1, _nodes.size()):
+			var same_bridge := i / 2 == j / 2
+			if not same_bridge and crosses(_nodes[i], _nodes[j]): continue
+			var metres := _nodes[i].distance_to(_nodes[j])
+			(_links[i] as Array).append([j, metres]); (_links[j] as Array).append([i, metres])
 
 ## Every bridge's approach pair, for labs and the probe.
 static func approaches() -> Dictionary:

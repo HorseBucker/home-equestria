@@ -198,8 +198,11 @@ func _info(id: String, actor: Node3D, day: int, mech: Variant = null) -> Diction
 			if float(weights[f]) > 0.0 and population.config.assignments.has(f): friends.append(f)
 	var others: Array = population.config.assignments.keys()
 	var traits := _traits(id, actor)
-	var info := {"spots": ACTION.SPOTS.available(population, id), "wings": traits.wings, "horn": traits.horn, "friends": friends, "others": others, "bed": bed, "wake": NIGHT_REST.bedtime(id, day - 1).y}
+	var info := {"spots": ACTION.SPOTS.available(population, id), "wings": traits.wings, "horn": traits.horn, "filly": bool(traits.get("filly", false)), "friends": friends, "others": others, "bed": bed, "wake": NIGHT_REST.bedtime(id, day - 1).y}
 	info.merge(mech if mech is Dictionary else _mechanics_info(day))
+	# the overhaul's street benches are seats, not kit spots: "sit on a bench" may still come up (bench_rest.gd town_bench)
+	if not (info.spots as Dictionary).has("bench") and preload("res://world/life/day/actions/bench_rest.gd").town_has_benches(get_tree()):
+		info.spots["bench"] = true
 	return info
 
 ## The mechanics answers a card rolls with: the saved card's (game_saves "day_plans" mech) when a
@@ -240,9 +243,10 @@ func _traits(id: String, actor: Node3D) -> Dictionary:
 	var identity = actor.get("identity") if actor != null else null
 	if identity != null:
 		var can_fly: bool = identity.get("can_fly") if identity.get("can_fly") != null else true
-		_traits_cache[id] = {"wings": identity.has_wings() and can_fly, "horn": identity.has_method("has_horn") and identity.has_horn()}
+		_traits_cache[id] = {"wings": identity.has_wings() and can_fly, "horn": identity.has_method("has_horn") and identity.has_horn(),
+			"filly": identity.get("filly") == true}
 	if _traits_cache.has(id): return _traits_cache[id]
-	var result := {"wings": false, "horn": false}
+	var result := {"wings": false, "horn": false, "filly": false}
 	var scene: String = population.available.get(id, "")
 	if FileAccess.file_exists(scene):
 		var text := FileAccess.get_file_as_string(scene)
@@ -254,7 +258,9 @@ func _traits(id: String, actor: Node3D) -> Dictionary:
 				var race_match := RegEx.create_from_string("(?m)^race = (\\d+)").search(tres)
 				var race := int(race_match.get_string(1)) if race_match != null else 1
 				var grounded := RegEx.create_from_string("(?m)^can_fly = false").search(tres) != null
-				result = {"wings": race in [1, 3] and not grounded, "horn": race in [2, 3]}
+				# A foal (filly or colt) goes to school (play test 2026-11-16, tables/routines.json).
+				var young := RegEx.create_from_string("(?m)^filly = true").search(tres) != null
+				result = {"wings": race in [1, 3] and not grounded, "horn": race in [2, 3], "filly": young}
 	_traits_cache[id] = result
 	return result
 
@@ -314,6 +320,10 @@ func _step(id: String, actor: Node3D, card: Dictionary, hours: float) -> void:
 		card.index += 1
 		_publish(id, actor, card)
 		return
+	if _keeps_out_of_school(id, actor, card, step):
+		card.index += 1
+		_publish(id, actor, card)
+		return
 	var start_at := Time.get_ticks_usec() if CPU_PROFILE.enabled else 0
 	var action: RefCounted = _handler(str(step.handler))
 	if action == null:
@@ -351,7 +361,8 @@ func _idle_ok(id: String, card: Dictionary) -> bool:
 ## Rolled once per step: true when she stays with her friends for now (the step waits 45 game
 ## minutes, up to its deadline).
 func _sidetracked(id: String, card: Dictionary, step: Dictionary) -> bool:
-	if card.sidetracked or bool(step.get("fixed", false)): return false   # an agreed meeting is kept
+	# An agreed meeting is kept, and so is a routine (school, the clubhouse, the fields).
+	if card.sidetracked or bool(step.get("fixed", false)) or bool(step.get("routine", false)): return false
 	card.sidetracked = true
 	var roll := float(absi(hash("%s:%d:%d:side" % [id, card.day, card.index])) % 1000) / 1000.0
 	if roll < float(PLANNER.tables().get("day", {}).get("sidetrack_chance", 0.35)):
@@ -425,6 +436,8 @@ func _essence_run(id: String, resident: Dictionary, step: Dictionary) -> Diction
 	var here := ESSENCE.position(resident)
 	var wings: bool = _traits(id, null).wings
 	var run := {"phase": "travel", "host": "", "stay": ACTION.new().duration(float(step.minutes)), "left": 0.0}
+	# A routine lasts until its hour (school lets out at 14:45), however late she set off.
+	if step.has("end"): run.stay = ACTION.new().duration(maxf(5.0, (float(step.end) - _card_hours()) * 60.0))
 	match str(step.handler):
 		"joyride":
 			run.to = here   # off flying loops somewhere nopony is looking
@@ -433,6 +446,12 @@ func _essence_run(id: String, resident: Dictionary, step: Dictionary) -> Diction
 			run.to = _pony_position(run.host)
 		_:
 			run.to = _place(id, str(step.target))
+			# A routine handler may name a better spot than the place's anchor (school.gd: the
+			# schoolyard, not the middle of the schoolhouse; play test 2026-11-16).
+			var action: RefCounted = _handler(str(step.handler)) if bool(step.get("routine", false)) else null
+			if action != null and action.has_method("essence_point"):
+				var point: Vector3 = action.call("essence_point", get_tree(), step)
+				if point.is_finite(): run.to = point
 	if not (run.to as Vector3).is_finite(): return {}
 	var far := Vector2(run.to.x - here.x, run.to.z - here.z).length() > 120.0 or absf(run.to.y - here.y) > 15.0
 	run.speed = ESSENCE.FLY_SPEED if wings and far else ESSENCE.WALK_SPEED
@@ -486,6 +505,25 @@ func _step_point(id: String, step: Dictionary) -> Vector3:
 		"visit": return _pony_position(str(step.target))
 	return _place(id, str(step.target))
 
+## The schoolhouse's grounds in class (2026-11-21 play test, Ponyville overhaul: "Adult ponies shouldn't loiter at the
+## schoolhouse during class"; Sunshower Raindrops stood about in the schoolyard). On a school day from Cheerilee's
+## start to the end of school, only she and the foals may begin a step whose destination lies within SCHOOL_GROUNDS of
+## the schoolhouse: a visit to a friend who is in class there, a seat or picnic table in the yard, a walk to the
+## schoolhouse. Such a step is let go, as one whose moment has passed; the rest of her day goes on.
+const SCHOOL_GROUNDS := 20.0
+const SCHOOL_HOURS := [7.3, 15.0]
+func _keeps_out_of_school(id: String, actor: Node3D, card: Dictionary, step: Dictionary) -> bool:
+	if str(step.handler) == "school" or id == "cheerilee": return false
+	var hours := _card_hours()
+	if hours < float(SCHOOL_HOURS[0]) or hours > float(SCHOOL_HOURS[1]) or not PLANNER.school_day(int(card.day)): return false
+	if bool(_traits(id, actor).get("filly", false)): return false
+	var school_at: Vector3 = ACTION.PLACES.resolve(get_tree(), "landmark:schoolhouse_01")
+	if not school_at.is_finite(): return false
+	var to := _step_point(id, step)
+	if not to.is_finite() or Vector2(to.x - school_at.x, to.z - school_at.z).length() > SCHOOL_GROUNDS: return false
+	print("[day] %s stays out of the schoolyard in class (%s)" % [id, str(step.handler)])
+	return true
+
 ## A table target as a point, with or without its zone loaded (remembered from when it was).
 func _place(id: String, target: String) -> Vector3:
 	if target.begins_with("spot:"):
@@ -503,7 +541,8 @@ func _place(id: String, target: String) -> Vector3:
 	var at := ACTION.PLACES.resolve(get_tree(), target)
 	if at.is_finite():
 		ESSENCE.remember(population, target, at)
-		return at
+		# her own open spot round it, the one her body would walk to (place_spread.gd: not on a stall's awning)
+		return preload("res://world/life/day/place_spread.gd").point(get_tree(), id, target, at)
 	return ESSENCE.known(population, target)
 
 ## She streamed in mid-step: her body picks the step up for the time that is left.

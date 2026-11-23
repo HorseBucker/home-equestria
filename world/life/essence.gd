@@ -60,15 +60,27 @@ static func leave_outing(population: Node, id: String, reason: String) -> void:
 
 ## Places seen while their zone was loaded, so an unloaded pony can still head for Sugarcube
 ## Corner or her house while the player is in Canterlot. Saved with the living world.
+## Ponyville overhaul (2026-11-23): places remembered in a world saved before the remade town are where the old map
+## had them (its barn a kilometre east, its houses gone): an unloaded pony, or a step whose place no longer resolves,
+## would walk there. The memory is the town's: kept with its stamp, forgotten once when the stamp differs, and learnt
+## again as each place is seen.
+const KNOWN_TOWN := "ponyville_overhaul_1"
+static func _known_for_town(c: RefCounted) -> void:
+	if str(c.state.get("known_places_town", "")) == KNOWN_TOWN: return
+	c.state["known_places"] = {}
+	c.state["known_places_town"] = KNOWN_TOWN
+
 static func remember(population: Node, key: String, at: Vector3) -> void:
 	var c: RefCounted = core(population)
 	if c == null or not at.is_finite(): return
+	_known_for_town(c)
 	if not c.state.has("known_places"): c.state["known_places"] = {}
 	c.state.known_places[key] = CORE.vector(at)
 
 static func known(population: Node, key: String) -> Vector3:
 	var c: RefCounted = core(population)
 	if c == null: return Vector3.INF
+	_known_for_town(c)
 	var value: Variant = c.state.get("known_places", {}).get(key)
 	return CORE.point(value) if CORE.finite_position(value) else Vector3.INF
 

@@ -165,6 +165,9 @@ func _build_shell() -> void:
 			_box(_architecture, "WallPost", Vector3(side * 5.9, 1.7, z), Vector3(0.19, 3.4, 0.19), "timber")
 	_box(_architecture, "EntryLintel", Vector3(0, 3.08, 5.12), Vector3(2.4, 0.64, 0.24), "plaster")
 	_box(_architecture, "Ceiling", Vector3(0, 3.5, 0), Vector3(12.48, 0.2, 10.48), "plaster")
+	# The shell's street doorway is 3.88 m tall, the room 3.6 with its ceiling: from the street the sky showed through
+	# the strip between them (2026-11-22 play test). A header closes it, hidden by the ceiling from inside.
+	_box(_architecture, "EntryHeader", Vector3(0, 3.8, 5.12), Vector3(3.8, 0.8, 0.24), "plaster")
 	# Separate body lets floor sampling skip the ceiling without losing headroom collision.
 	var ceiling_body := StaticBody3D.new()
 	ceiling_body.name = "CeilingCollision"

@@ -42,6 +42,7 @@ func build(layout: Dictionary = {}) -> void:
 	_build_reading_circle()
 	_build_bedrooms()
 	_build_breakfast()
+	_build_game_nook()
 	_build_lamps()
 	REFERENCE.telescope(self, Vector3(3.55, loft_y, -2.85))
 	# Its eyepiece view (M-ACT-04): look through it in VR, click it on desktop.
@@ -58,6 +59,9 @@ func build(layout: Dictionary = {}) -> void:
 		Vector3(2.95, 0, -0.65), Vector3(2.75, 0, 0.65), Vector3(1.2, 0, 3.8),
 		# Full-size princess clearance: skirt the cafe table and sideboard corner.
 		Vector3(1.4, 0, 1.5), Vector3(2.75, 0, -0.75),
+		# Round the game table to its fireplace-side cushion (_build_game_nook): the straight
+		# line from the aisle grazes the table.
+		Vector3(-2.5, 0, -2.0),
 	])
 	# The aisle between the foot of Twilight's bed (z -1.95) and the balcony rail (z -0.74) is
 	# only 1.2 m: its points sit on the aisle's centre line, and one past the bed's foot corner
@@ -125,7 +129,11 @@ func _build_reading_circle() -> void:
 	KIT.BOOKS.fill(rest, {"x": [-0.29, 0.29], "front": 0.1, "levels": [[0.0, 0.34]]}, rng, "golden_oak:reading_table", 1.8)
 
 func _build_bedrooms() -> void:
-	var twilight := _kit.bed(Vector3(1.55, loft_y, -3.0), 0.0, "TwilightBed", true)
+	# (Ponyville overhaul, 2026-11-22: 0.35 m nearer the wall, which leaves 0.25 m behind its head. At -3.0 its foot left
+	# a 1.2 m gap to the loft railing, and Twilight, turning there to get in, wedged between bed and railing)
+	# (2026-11-22, "flush against the wall it's against": turned to face the trunk's middle, its headboard square to the
+	# curved wall 0.15 m off it, its foot toward the loft's middle)
+	var twilight := _kit.bed(Vector3(1.60, loft_y, -3.46), -0.4335, "TwilightBed", true)
 	var guest := _kit.bed(Vector3(1.55, 0, -3.0), 0.0, "GuestBed", false)
 	for bed: Node3D in [twilight, guest]:
 		bed.set_meta("house", self)
@@ -134,7 +142,7 @@ func _build_bedrooms() -> void:
 	beds["twilight"] = twilight
 	beds["guest"] = guest
 	beds["spike"] = _spike_basket()
-	KIT.marker(self, "TwilightBedApproach", Vector3(1.55, loft_y, -1.35), "sleep")
+	KIT.marker(self, "TwilightBedApproach", Vector3(0.86, loft_y, -1.86), "sleep")   # (before her bed's foot, toward the middle)
 	KIT.marker(self, "GuestBedApproach", Vector3(1.55, 0, -1.35), "sleep")
 	add_child(_kit.prop("bedside-table", Vector3(3.0, loft_y, -2.85)))
 	add_child(_kit.prop("bedside-table", Vector3(3.0, 0, -2.85)))
@@ -150,7 +158,9 @@ func _build_bedrooms() -> void:
 ## Spike's basket bed beside Twilight's, between her bed and the stairs, as in the show.
 ## A soft cushion is the only collider: he hops in over the rim when he goes to bed.
 const SPIKE_BASKET := preload("res://world/buildings/golden_oak/spike_basket.glb")
-const SPIKE_BASKET_AT := Vector3(-0.35, 0.0, -3.3)
+## (2026-11-22: out toward the wall, from (-0.35, -3.3), clear of the way from the stairs to Twilight's bed; the
+## loft's bookcase at 195 degrees is beside it)
+const SPIKE_BASKET_AT := Vector3(0.0, 0.0, -4.15)
 func _spike_basket() -> Node3D:
 	var basket := Node3D.new()
 	basket.name = "SpikeBasket"
@@ -260,3 +270,67 @@ func on_mattress(point: Vector3, id: String = "") -> bool:
 	var top := float(bed.get_meta("mattress_top", 0.6))
 	var size: Vector3 = bed.get_meta("bed_size", Vector3(2.05, 1.1, 2.1))
 	return absf(local.y - top) <= 0.4 and absf(local.x) < size.x * 0.5 + 0.12 and absf(local.z) < size.z * 0.5 + 0.12
+
+## The game table by the fireplace (dev 2026-10-26: chess and checkers at Twilight's,
+## world/minigames/board_games/board_table.gd): a low table for two on floor cushions, Anon's on
+## the room side and the other with the fire at her back, off the ground walk lines, under a
+## lantern of its own. The players face each other along X; the table's long side runs along Z
+## (the taken pieces line up there). Each cushion keeps a pony's half-width (0.45 m, the
+## gait profile's radius) clear of the table, so a pony walking to it fits.
+## (Ponyville overhaul: Board Games' own lines (board_games_compat 1.2.0-he.1), kept here because this file is the
+## overhaul's too and its copy mounts after theirs. Their table script is loaded only when the mod is there: without
+## it, no nook.)
+const BOARD_TABLE_PATH := "res://world/minigames/board_games/board_table.gd"
+const GAME_TABLE_AT := Vector3(-1.3, 0, -2.75)
+const GAME_TABLE_TOP := 0.4
+const GAME_SEAT_REACH := 0.9
+func _build_game_nook() -> void:
+	if not ResourceLoader.exists(BOARD_TABLE_PATH): return
+	var BOARD_TABLE: Script = load(BOARD_TABLE_PATH)
+	var wood := KIT.material("b94f4b")
+	var edge := KIT.material("efac6c")
+	var at := GAME_TABLE_AT
+	KIT.box(self, "GameTableTop", Vector3(0.66, 0.04, 0.82), at + Vector3.UP * (GAME_TABLE_TOP - 0.02), wood, true)
+	KIT.box(self, "GameTableApron", Vector3(0.58, 0.05, 0.74), at + Vector3.UP * (GAME_TABLE_TOP - 0.065), edge)
+	for corner: Vector2 in [Vector2(-0.26, -0.34), Vector2(0.26, -0.34), Vector2(-0.26, 0.34), Vector2(0.26, 0.34)]:
+		KIT.disc(self, "GameTableLeg", 0.03, GAME_TABLE_TOP - 0.04, at + Vector3(corner.x, (GAME_TABLE_TOP - 0.04) * 0.5, corner.y), wood)
+	var seats: Array[Node3D] = []
+	for side: float in [1.0, -1.0]:
+		var cushion := _kit.prop("floor-cushion", at + Vector3(GAME_SEAT_REACH * side, 0, 0), -PI * 0.5 * side)
+		# Its bench-style seat would have a pony hop on from the table side, and its solid block
+		# would stop her walking onto it: a floor seat, soft underfoot.
+		var unwanted: Array = cushion.find_children("*", "Node3D", true, false).filter(func(old: Node) -> bool:
+			return old.get_script() == KIT.SEAT or (old is StaticBody3D and str(old.name).begins_with("Seat")))
+		for old: Node in unwanted:
+			old.get_parent().remove_child(old)
+			old.free()
+		var seat := Node3D.new()
+		seat.set_script(KIT.SEAT)
+		seat.name = "GameSeat"
+		seat.set("floor_sit", true)
+		seat.set("for_ponies", false)
+		seat.set("depth", 0.5)
+		# A seat faces its -Z, the cushion's front: the table.
+		seat.transform = Transform3D(Basis(Vector3.UP, PI), Vector3(0, 0.06, 0))
+		cushion.add_child(seat)
+		add_child(cushion)
+		seats.append(seat)
+	REFERENCE.lantern(self, at + Vector3.UP * 2.3, loft_y)
+	var light := OmniLight3D.new()
+	light.name = "GameTableLamp"
+	light.position = at + Vector3.UP * 2.1
+	light.light_color = Color("ffddb0")
+	light.light_energy = 0.9
+	light.omni_range = 3.6
+	light.omni_attenuation = 0.8
+	light.shadow_enabled = false
+	light.distance_fade_enabled = true
+	light.distance_fade_begin = 25.0
+	light.distance_fade_length = 10.0
+	add_child(light)
+	var table: Node3D = BOARD_TABLE.new()
+	table.name = "GameTable"
+	# Its +Z faces Anon's cushion.
+	table.transform = Transform3D(Basis(Vector3.UP, PI * 0.5), at + Vector3.UP * GAME_TABLE_TOP)
+	add_child(table)
+	table.setup(self, seats[0], seats[1])

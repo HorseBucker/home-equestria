@@ -14,6 +14,62 @@ const MEASURED_RADIUS := {"cypress": 1.0}
 const RANGE_SMALL := 45.0
 const RANGE_MEDIUM := 90.0
 const RANGE_TALL := 160.0
+const FIELD_RANGE := 170.0
+## The flower meadow's clumps batch per FIELD_CELL square, not per 48 m CELL (2026-11-17 cost pass: at 48 m the
+## meadow alone was about 500 draw calls, perf_lab.gd): bigger batches, a few metres more of each clump's range so
+## the bigger square does not pull its near edge in.
+const FIELD_CELL := 72.0
+const FIELD_RANGE_EXTRA := 12.0
+## The far look of a flower-meadow clump: [colour, radius, height of its middle].
+const FIELD_DOT := {"lupin_clump": [Color(0.63, 0.42, 0.87), 0.3, 0.36], "daisy_clump": [Color(0.98, 0.97, 0.88), 0.22, 0.2],
+	"sunflower_clump": [Color(0.98, 0.8, 0.18), 0.34, 1.35], "rose_bed": [Color(0.9, 0.24, 0.36), 0.5, 0.2],
+	"flowering_shrub": [Color(0.96, 0.55, 0.76), 0.55, 0.5]}
+var _dot_meshes: Dictionary = {}
+
+var _dot_rows: Dictionary = {}
+
+## One eight-triangle dot per clump of the meadow, shown from where the clumps themselves stop being drawn: a
+## meadow of nine thousand clumps is millions of triangles if all of it draws in full, and bare beyond 45 m if not.
+## One batch per flower for the whole meadow (2026-11-17 cost pass: one per cell was about a hundred draw calls):
+## a dot fades in per pixel with distance (the material's distance fade) instead of a per-cell visibility range,
+## so it is hidden near the camera where the clump itself is drawn.
+func _field_dots(kind: String, rows: Array) -> void:
+	if not FIELD_DOT.has(kind) or rows.is_empty(): return
+	var look: Array = FIELD_DOT[kind]
+	var near: float = (RANGE_SMALL if kind in SMALL else RANGE_MEDIUM) + FIELD_RANGE_EXTRA
+	if not _dot_meshes.has(kind):
+		var st := SurfaceTool.new(); st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var r: float = look[1]
+		var tips := [Vector3(r, 0, 0), Vector3(0, 0, r), Vector3(-r, 0, 0), Vector3(0, 0, -r)]
+		var top := Vector3(0, r * 0.7, 0); var bottom := Vector3(0, -r * 0.7, 0)
+		for i in 4:
+			var a: Vector3 = tips[i]; var b: Vector3 = tips[(i + 1) % 4]
+			for tri: Array in [[top, b, a], [bottom, a, b]]:
+				var n := (Vector3(tri[1]) - Vector3(tri[0])).cross(Vector3(tri[2]) - Vector3(tri[0])).normalized()
+				if n.dot(Vector3(tri[0]) + Vector3(tri[1]) + Vector3(tri[2])) > 0.0: tri.reverse()
+				else: n = -n
+				for v: Vector3 in tri: st.set_normal(n); st.add_vertex(v)
+		var paint := StandardMaterial3D.new()
+		paint.albedo_color = look[0]; paint.roughness = 1.0
+		paint.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_DITHER
+		paint.distance_fade_min_distance = near - 10.0
+		paint.distance_fade_max_distance = near - 2.0
+		st.set_material(paint)
+		_dot_meshes[kind] = st.commit()
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = _dot_meshes[kind]
+	mm.instance_count = rows.size()
+	for i in rows.size():
+		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, _placement(rows[i]).origin + Vector3.UP * float(look[2])))
+	var mmi := MultiMeshInstance3D.new()
+	mmi.multimesh = mm
+	mmi.visibility_range_end = FIELD_RANGE + 160.0   # measured to the middle of the whole meadow
+	mmi.visibility_range_end_margin = 10.0
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+	_winter_gone.append(mmi)
+	_meadow.append(mmi)
 ## Low or thin props whose shadow is barely visible but costs a shadow pass per cell; trees,
 ## well, carts, barrels and benches keep theirs. October 13 also removes bush,
 ## flowering-shrub, log-pile and crop-row shadows, including bush proxy meshes.
@@ -25,6 +81,8 @@ const NO_SHADOW := ["grass_tuft_a", "grass_tuft_b", "daisy_clump", "lupin_clump"
 ## Fence sections run along +X from their post; their collider is a thin box over the bay.
 const BAYS := {"heart_fence": 1.25, "white_picket": 1.6, "rail_fence": 2.4}
 const ACTIVITY_STATE := preload("res://world/props/ponyville_kit/kit_state.gd")
+## The player's switches for the flower meadow and Carrot Top's farm (Settings > Graphics; town_extras.gd).
+const EXTRAS := preload("res://world/towns/ponyville/town_extras.gd")
 const FITS := preload("res://world/props/ponyville_kit/kit_fits.gd")
 var _activity_state: Node
 var _garden_slots: Dictionary = {}
@@ -34,8 +92,16 @@ func _ready() -> void:
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PLACEMENTS))
 	if not (parsed is Dictionary): return
 	var groups := {}
-	for row: Dictionary in (parsed as Dictionary).get("entries", []):
-		var key := "%s|%d|%d" % [row.kind, floori(float(row.x) / CELL), floori(float(row.z) / CELL)]
+	# The gardens of the town at its density (town_density.gd): the town scene says which it was built at.
+	var town := get_parent()
+	var density := str(town.get_meta("town_density", "high")) if town != null else "high"
+	for row: Dictionary in preload("res://world/towns/ponyville/town_density.gd").kit_entries(parsed as Dictionary, density):
+		# The flower meadow's rows (group "flower-meadow", Ponyville overhaul) are batched apart from the gardens': they
+		# are seen as a field of colour from the road, so past a clump's own range each is drawn as a dot of its
+		# flower's colour, out to FIELD_RANGE (_field_dots).
+		var field := str(row.get("group", "")) == "flower-meadow"
+		var size := FIELD_CELL if field else CELL
+		var key := "%s|%d|%d%s" % [row.kind, floori(float(row.x) / size), floori(float(row.z) / size), "|field" if field else ("|farm" if EXTRAS.farm_row(row) else "")]
 		if not groups.has(key): groups[key] = []
 		(groups[key] as Array).append(row)
 	var parts := {}
@@ -61,11 +127,16 @@ func _ready() -> void:
 			var mmi := MultiMeshInstance3D.new()
 			mmi.multimesh = mm
 			mmi.visibility_range_end = RANGE_SMALL if kind in SMALL else (RANGE_TALL if kind in TALL else RANGE_MEDIUM)
+			if key.ends_with("|field"): mmi.visibility_range_end += FIELD_RANGE_EXTRA
 			mmi.visibility_range_end_margin = 8.0
 			if kind in NO_SHADOW: mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mmi)
+			if key.ends_with("|field") or kind in WINTER_GONE: _winter_gone.append(mmi)
+			if key.ends_with("|field"): _meadow.append(mmi)
+			if key.ends_with("|farm"): _farm.append(mmi)
 			if kind in ACTIVITY_STATE.GARDEN:
 				for i: int in rows.size(): _remember_garden(str(rows[i].id), mm, i, _placement(rows[i]).origin)
+		if key.ends_with("|field"): (_dot_rows.get_or_add(kind, []) as Array).append_array(rows)
 		for row: Dictionary in rows:
 			if bool(row.get("blocking", false)): _collider(body, row, kind)
 	# The town's own trees answer "where are the trees" (falling leaves, leaf piles, birds).
@@ -73,12 +144,75 @@ func _ready() -> void:
 	habitat.name = "TownTreeHabitat"
 	add_child(habitat)
 	habitat.setup([get_parent().get_node_or_null("TownTrees") if get_parent() != null else null, self])
+	for kind: String in _dot_rows: _field_dots(kind, _dot_rows[kind])
+	_dot_rows.clear()
+	_winter_start()
+	add_to_group(EXTRAS.GROUP)
+	town_extras_changed()
 	_activity_state = ACTIVITY_STATE.for_node(self)
 	if _activity_state != null: _activity_state.touched.connect(_touch_garden)
 	var activity_visuals := preload("res://world/props/ponyville_kit/kit_state_visuals.gd").new()
 	activity_visuals.name = "ActivityStateVisuals"
 	add_child(activity_visuals)
 	activity_visuals.setup(self, (parsed as Dictionary).get("entries", []))
+
+## Gone for the winter (play test 2026-11-16: "The flowers in the meadow and the crops in the farms should be
+## gone in Winter"): the flower meadow's clumps and far dots, and the farms' crop rows. They stood in the snow all
+## winter. A check every few seconds (nothing per frame): in winter they fade out over a few seconds and are
+## switched off; when winter ends they fade back in. A world that opens in winter opens without them.
+const WINTER_GONE := ["crop_row"]
+const WINTER_CHECK := 3.0
+const WINTER_FADE := 5.0
+var _winter_gone: Array[GeometryInstance3D] = []
+var _winter_hidden := false
+## The flower meadow's batches (clumps and dots): gone at the lowest quality preset too (2026-11-17: "disabled
+## completely if the user is on minimum settings"; Quality key flower_meadow), at once when the preset changes.
+var _meadow: Array[GeometryInstance3D] = []
+## Carrot Top's crop rows (town_extras.gd farm_row), which the player may switch off.
+var _farm: Array[GeometryInstance3D] = []
+
+## The meadow: the player's choice, or the graphics preset's (town_extras.gd).
+func _meadow_allowed() -> bool:
+	return EXTRAS.meadow_on()
+
+func _show(part: GeometryInstance3D, on: bool) -> void:
+	part.visible = on and (not _meadow.has(part) or _meadow_allowed()) and (not _farm.has(part) or EXTRAS.carrot_farm_on())
+
+func _quality_changed(_preset: int) -> void:
+	for part: GeometryInstance3D in _meadow:
+		if is_instance_valid(part): _show(part, not _winter_hidden)
+
+## Settings > Graphics changed the meadow or the farm (town_extras.gd set_choice): shown or hidden at once.
+func town_extras_changed() -> void:
+	for part: GeometryInstance3D in _meadow + _farm:
+		if is_instance_valid(part): _show(part, not (_winter_hidden and _winter_gone.has(part)))
+
+func _winter_start() -> void:
+	if _winter_gone.is_empty(): return
+	_winter_hidden = _is_winter()
+	for part: GeometryInstance3D in _winter_gone: _show(part, not _winter_hidden)
+	var quality: Node = get_node_or_null("/root/Quality")
+	if quality != null and quality.has_signal("preset_changed"): quality.connect("preset_changed", _quality_changed)
+	var timer := Timer.new(); timer.name = "WinterCheck"; timer.wait_time = WINTER_CHECK
+	add_child(timer)
+	timer.timeout.connect(_winter_check)
+	timer.start()
+
+func _is_winter() -> bool:
+	var season: Node = get_tree().get_first_node_in_group("season_state") if is_inside_tree() else null
+	return is_instance_valid(season) and season.has_method("is_winter") and bool(season.call("is_winter"))
+
+func _winter_check() -> void:
+	var winter := _is_winter()
+	if winter == _winter_hidden: return
+	_winter_hidden = winter
+	for part: GeometryInstance3D in _winter_gone:
+		if not is_instance_valid(part): continue
+		if _meadow.has(part) and not _meadow_allowed(): part.visible = false; continue
+		if not winter: part.transparency = 1.0; part.visible = true
+		var fade := create_tween()
+		fade.tween_property(part, "transparency", 1.0 if winter else 0.0, WINTER_FADE)
+		if winter: fade.tween_callback(part.set_visible.bind(false))
 
 ## Small plants that follow the seasons (kit_plant.gdshader; dev 2026-11-10: they stood summer
 ## green on autumn straw and on snow). false brings their plain materials back.

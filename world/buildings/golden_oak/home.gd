@@ -46,7 +46,15 @@ func set_sleepers(ids: Array) -> void:
 
 func door() -> Node: return leaf
 func inside() -> Vector3: return to_global(entry_point)
-func outside() -> Vector3: return to_global(approach)
+## Ponyville overhaul (2026-11-23 play test): the overhaul seats the Golden Oak and the boutique lower so their
+## foundations do not show, and their door approach went down with them, under the street (the boutique's 0.22 m:
+## no floor there, every route to its door "disconnected"). On the ground over it, as house_interior.gd outside().
+func outside() -> Vector3:
+	var at := to_global(approach)
+	if is_instance_valid(WorldTerrain.instance):
+		var ground: float = WorldTerrain.instance.height_at(at)
+		if is_finite(ground) and ground > at.y and ground - at.y < 1.5: at.y = ground
+	return at
 func contains(at: Vector3, _lighting: bool = false) -> bool:
 	var p := to_local(at)
 	if p.y < -.15 or p.y > _ceiling_y: return false

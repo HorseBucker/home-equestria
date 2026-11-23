@@ -19,6 +19,10 @@ const PROGRESS := 1.0
 const GOAL_FAR := 2.0
 const RETRY_SECONDS := 30.0
 const SEEN_DISTANCE := 45.0
+## Stuck in plain view this long, she is slid out (in view only to a point this near).
+const SEEN_STALL_SECONDS := 20.0
+const SEEN_SLIDE_MAX := 3.0
+const SLIDE_SECONDS := 0.5
 ## How far above her a bridge deck counts as the one she fell under.
 const DECK_REACH := 6.0
 const WALK_POINT_KEYS := ["ground_walk_points", "loft_walk_points", "upper_walk_points"]
@@ -146,13 +150,18 @@ func _check_stall(id: String) -> void:
 	if not far:
 		row.since = _clock
 		return
-	if _clock - float(row.since) < STALL_SECONDS or _clock < float(row.retry) or not _unseen(actor, at): return
+	var unseen := _unseen(actor, at)
+	# (Ponyville overhaul, 2026-11-22: "it doesn't seem to activate unless I look away from her": a pony wedged in
+	# plain view, Twilight by her bed in the Golden Oak's loft, waited there as long as Anon watched. In view she is
+	# helped too, after SEEN_STALL_SECONDS, with a short walk-like slide to the nearest point that has a route.)
+	if _clock - float(row.since) < (STALL_SECONDS if unseen else SEEN_STALL_SECONDS) or _clock < float(row.retry): return
 	row.retry = _clock + RETRY_SECONDS
-	var spot := _reachable_spot(actor, nav, goal)
+	var spot := _reachable_spot(actor, nav, goal, not unseen)
 	if not spot.is_finite(): return
-	_set_down(actor, nav, spot)
+	if unseen: _set_down(actor, nav, spot)
+	else: _slide_down(actor, nav, spot)
 	row.at = spot; row.since = _clock
-	print("[pony] %s made no progress for %.0f s out of sight; set down on a route point at %s" % [actor.name, STALL_SECONDS, spot.round()])
+	print("[pony] %s made no progress for %.0f s %s; set down on a route point at %s" % [actor.name, STALL_SECONDS if unseen else SEEN_STALL_SECONDS, "out of sight" if unseen else "in view (slid)", spot.round()])
 
 ## Nopony else's to place: not held, seated, flying or thrown.
 func _placeable(actor: CharacterBody3D) -> bool:
@@ -220,7 +229,7 @@ func _unseen(actor: CharacterBody3D, at: Vector3) -> bool:
 
 ## The nearest standable point, other than where she is, from which her goal (or, for a goal
 ## outside, the house's door) has a route; also out of sight. INF when there is none.
-func _reachable_spot(actor: CharacterBody3D, nav: Node, goal: Vector3) -> Vector3:
+func _reachable_spot(actor: CharacterBody3D, nav: Node, goal: Vector3, seen := false) -> Vector3:
 	var at := actor.global_position
 	var space := actor.get_world_3d().direct_space_state
 	var exclude: Array[RID] = [actor.get_rid()]
@@ -238,20 +247,32 @@ func _reachable_spot(actor: CharacterBody3D, nav: Node, goal: Vector3) -> Vector
 		for candidate: Vector3 in candidates:
 			if candidate.distance_to(at) < .3 or not _routes_on(home, actor, candidate, toward): continue
 			var spot := PLACEMENT.support(space, candidate, actor.profile, home, exclude)
-			if spot.is_finite() and _unseen(actor, spot): return spot
+			if spot.is_finite() and (seen or _unseen(actor, spot)) and (not seen or spot.distance_to(at) <= SEEN_SLIDE_MAX): return spot
 		return Vector3.INF
 	# Outdoors only her own certified route counts as reachable ground.
 	var path: PackedVector3Array = nav.get("path")
 	for i in range(clampi(int(nav.get("_waypoint")), 0, path.size()), path.size()):
 		if path[i].distance_to(at) < PROGRESS: continue
 		var spot := PLACEMENT.support(space, path[i], actor.profile, null, exclude)
-		if spot.is_finite() and _unseen(actor, spot): return spot
+		if spot.is_finite() and (seen or _unseen(actor, spot)) and (not seen or spot.distance_to(at) <= SEEN_SLIDE_MAX): return spot
 	return Vector3.INF
 
 static func _routes_on(home: Node3D, actor: CharacterBody3D, from: Vector3, to: Vector3) -> bool:
 	if from.distance_to(to) < .5: return true
 	var next: Vector3 = home.local_waypoint_for(actor, from, to) if home.has_method("local_waypoint_for") else home.local_waypoint(from, to)
 	return next.distance_to(from) > .05
+
+## In view: the same set-down, but she moves there over SLIDE_SECONDS rather than in a blink.
+func _slide_down(actor: CharacterBody3D, nav: Node, spot: Vector3) -> void:
+	var start := actor.global_position
+	actor.set("motion_paused", true)
+	var tween := create_tween().bind_node(actor)
+	tween.tween_method(func(t: float) -> void:
+		if is_instance_valid(actor): actor.global_position = start.lerp(spot, t), 0.0, 1.0, SLIDE_SECONDS)
+	tween.finished.connect(func() -> void:
+		if not is_instance_valid(actor): return
+		actor.set("motion_paused", false)
+		_set_down(actor, nav, spot))
 
 ## Same heading, new spot; the navigator plans again from there (house travel restarts its
 ## passage from the room she is now in). Owner, command and goal are untouched.

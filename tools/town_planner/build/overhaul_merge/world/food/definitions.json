@@ -1,0 +1,38 @@
+{
+	"schoolhouse-worksheets": {
+		"category": "tools",
+		"consume": false,
+		"description": "A stack of Cheerilee's worksheets. One goes on each filly's desk in the Ponyville Schoolhouse.",
+		"drink": false,
+		"mass": 0.3,
+		"model": "../../../world/towns/ponyville/schoolhouse/models/papers",
+		"name": "Worksheets",
+		"price_bits": 0,
+		"size_m": [0.21, 0.03, 0.297],
+		"stack": 1
+	},
+	"schoolhouse-globe": {
+		"category": "tools",
+		"consume": false,
+		"description": "The schoolhouse globe. It lives on the classroom shelf.",
+		"drink": false,
+		"mass": 1.2,
+		"model": "../../../world/towns/ponyville/schoolhouse/models/globe",
+		"name": "Classroom Globe",
+		"price_bits": 0,
+		"size_m": [0.62, 0.6, 0.63],
+		"stack": 1
+	},
+	"schoolhouse-telescope": {
+		"category": "tools",
+		"consume": false,
+		"description": "The schoolhouse telescope on its little tripod. It lives on the classroom shelf.",
+		"drink": false,
+		"mass": 2.0,
+		"model": "../../../world/towns/ponyville/schoolhouse/models/telescope",
+		"name": "Classroom Telescope",
+		"price_bits": 0,
+		"size_m": [0.82, 0.97, 0.62],
+		"stack": 1
+	}
+}

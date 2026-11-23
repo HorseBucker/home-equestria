@@ -199,6 +199,10 @@ static func configure(item: RigidBody3D, placed: bool) -> void:
 	if not placed and item.has_meta("furnishing_size"): item.remove_meta("furnishing_size")
 	if resizable(item): apply_size(item, size_of(item))
 	item.collision_layer = (1 | ITEM_LAYER) if placed else ITEM_LAYER
+	# set out at home it belongs to the room: kept out of the street lamps' light (Ponyville overhaul,
+	# world/towns/ponyville/interior_light_layer.gd); picked up again, lit like anything else
+	for visual: Node in item.find_children("*", "GeometryInstance3D", true, false):
+		(visual as GeometryInstance3D).layers = (1 << 16) if placed else 1
 	if placed:
 		item.freeze = true; item.linear_velocity = Vector3.ZERO; item.angular_velocity = Vector3.ZERO
 	# Lamps use the existing switch/night-light owner and the existing authored model.

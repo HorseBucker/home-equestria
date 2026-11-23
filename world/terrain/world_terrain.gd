@@ -98,6 +98,24 @@ func _ready() -> void:
 	# Replacing the town changes walkable geometry even when the heightmap stays.
 	if FileAccess.file_exists("res://world/towns/ponyville/layout.json"):
 		navigation_revision += ":town:"+FileAccess.get_md5("res://world/towns/ponyville/layout.json")
+	# Ponyville overhaul (tools/town_planner): the town scene, its background houses, the ground's paint and vegetation and the
+	# farm's fences shape the walk grid too.
+	for overhaul: String in ["res://world/towns/ponyville/town.tscn", "res://world/biomes/authored/bundle.json",
+			"res://world/props/ponyville/farm_layout.json", "res://world/props/ponyville/farm_dressing.gd", "res://world/props/ponyville/town_trees.scn"]:
+		if FileAccess.file_exists(overhaul): navigation_revision += ":overhaul:" + FileAccess.get_md5(overhaul)
+	# The town at its density (town_density.gd): its own scene and gardens.
+	var density: String = preload("res://world/towns/ponyville/town_density.gd").current()
+	if density != "high":
+		for path: String in ["res://world/towns/ponyville/town_%s.tscn" % density, "res://world/props/ponyville_kit/density/%s.json" % density,
+				"res://world/props/ponyville/town_trees_%s.scn" % density]:
+			if FileAccess.file_exists(path): navigation_revision += ":density:" + FileAccess.get_md5(path)
+		# and its own ground (terrain_sculptor.gd: the density's hills)
+		for region: String in ["-1_-1", "0_-1", "-1_0", "0_0"]:
+			var ground := "res://world/terrain/sculpt/%s/ponyville_overhaul_20261113_%s/meta.json" % [region, density]
+			if FileAccess.file_exists(ground): navigation_revision += ":ground:" + FileAccess.get_md5(ground.get_base_dir().path_join("height.f32"))
+	for design: String in ["a", "b", "c", "d", "e", "f", "g", "h"]:
+		var background := "res://world/towns/ponyville/background/house_%s_bg.scn" % design
+		if FileAccess.file_exists(background): navigation_revision += ":background:" + FileAccess.get_md5(background)
 	for dependency: String in ["rnl_hall.scn", "hall_interior.gd"]:
 		var path := "res://world/buildings/town_hall/" + dependency
 		if FileAccess.file_exists(path): navigation_revision += ":town-hall:" + FileAccess.get_md5(path)

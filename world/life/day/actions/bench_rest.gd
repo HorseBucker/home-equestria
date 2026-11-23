@@ -23,12 +23,18 @@ func start(ctx: Dictionary) -> bool:
 	var selected: Dictionary = spot(ctx)
 	var seat_point: Vector3 = selected.get("seat_point", Vector3.INF)
 	_point = selected.get("approach", Vector3.INF)
-	if not _point.is_finite() or not seat_point.is_finite(): return false
-	for candidate: Node in ctx.tree.get_nodes_in_group("pony_seats"):
-		if candidate is Node3D and str(candidate.get_meta("kit_spot_id", "")) == str(selected.get("id", "")):
-			_seat = candidate as Node3D; break
 	_seating = ctx.tree.get_first_node_in_group("pony_seating")
-	if not is_instance_valid(_seat) or not is_instance_valid(_seating): return false
+	if _point.is_finite() and seat_point.is_finite():
+		for candidate: Node in ctx.tree.get_nodes_in_group("pony_seats"):
+			if candidate is Node3D and str(candidate.get_meta("kit_spot_id", "")) == str(selected.get("id", "")):
+				_seat = candidate as Node3D; break
+	elif is_instance_valid(_seating):
+		# The Ponyville overhaul's street benches are not kit spots (2026-11-22 play test: "It'd be cute to see a pony
+		# sitting down on them occasionally"): one of the free ones near her, outdoors, no tea.
+		_seat = town_bench(ctx.tree, ctx.actor, _seating, str(ctx.id))
+		if is_instance_valid(_seat): _point = _seating.call("_front", _seat, ctx.actor)
+		ctx.step["item"] = "none"
+	if not is_instance_valid(_seat) or not is_instance_valid(_seating) or not _point.is_finite(): return false
 	_tea = str(ctx.step.get("item", "")) == "tea"
 	if _tea:
 		_rest = _seat.get_node_or_null("TeaRest") as Node3D
@@ -46,6 +52,32 @@ func start(ctx: Dictionary) -> bool:
 	_travel_limit = maxf(180.0, far / .3 + 60.0)
 	ctx.nav.go_to(_point, ctx.nav.Gait.TROT if far > 40.0 else ctx.nav.Gait.WALK)
 	return true
+
+## A free outdoor bench seat within TOWN_BENCH_REACH of her: one of the nearest few, varied by pony and day so she
+## does not always pick the same one. Null when there is none.
+const TOWN_BENCH_REACH := 160.0
+const HOUSE := preload("res://world/buildings/house_interior.gd")
+static func town_bench(tree: SceneTree, actor: Node3D, seating: Node, id: String) -> Node3D:
+	var near: Array = []
+	for seat: Node in tree.get_nodes_in_group("pony_seats"):
+		if not seat is Node3D or not is_instance_valid(seat) or not bool(seating.call("_free", seat, actor)): continue
+		if not str(seat.get_parent().name).to_lower().contains("bench"): continue
+		var d := (seat as Node3D).global_position.distance_to(actor.global_position)
+		if d > TOWN_BENCH_REACH or HOUSE.at(tree, (seat as Node3D).global_position) != null: continue
+		near.append([d, seat])
+	if near.is_empty(): return null
+	near.sort_custom(func(a, b): return a[0] < b[0])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(id + str(Time.get_ticks_msec() / 600000))
+	return near[rng.randi_range(0, mini(4, near.size() - 1))][1]
+
+
+## The town has outdoor benches (day_runner.gd: the morning roll may pick "sit on a bench" without kit benches).
+static func town_has_benches(tree: SceneTree) -> bool:
+	for seat: Node in tree.get_nodes_in_group("pony_seats"):
+		if seat is Node3D and str(seat.get_parent().name).to_lower().contains("bench") and HOUSE.at(tree, (seat as Node3D).global_position) == null: return true
+	return false
+
 
 func tick(ctx: Dictionary, delta: float) -> String:
 	if not _owns(ctx) or not is_instance_valid(_seat) or not is_instance_valid(_seating): return "failed"

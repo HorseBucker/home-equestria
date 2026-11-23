@@ -21,7 +21,8 @@ var executors: Dictionary = {}
 var awareness := AWARENESS.new()
 var _call_serial := 0
 var _calls: Dictionary = {}
-var _ai_moves: Dictionary = {} # "pony/action id" -> true for movement the model asked for
+const FOUNTAIN_VISIT := preload("res://world/life/day/actions/fountain_visit.gd")
+var _ai_moves: Dictionary = {} # "pony/action id" -> where movement the model asked for goes (its location_id, or "")
 var _told_at: Dictionary = {} # pony -> msec of her last failure notice; a retried failing trip is no request loop
 
 func register_actor(id: String, actor: Node3D) -> void:
@@ -99,7 +100,7 @@ func commit(id: String, actions: Array, targets: Dictionary, turn: int) -> Strin
 			if str(action.get("type", "")) not in TOLD_MOVES: continue
 			# Always logged: a model trip and where it was meant to go, so a failed walk can be traced.
 			print("[ai] %s moves: %s %s" % [id, action.type, str(action.get("location_id", action.get("target_id", "")))])
-			_ai_moves[id + "/" + str(action.get("id", ""))] = true
+			_ai_moves[id + "/" + str(action.get("id", ""))] = str(action.get("location_id", ""))
 			if _ai_moves.size() > 64: _ai_moves.erase(_ai_moves.keys()[0])
 		executors[id].submit(allowed, targets, turn, true)
 	return ""
@@ -198,8 +199,14 @@ func dispatch_pony(id: String, action: Dictionary, targets: Dictionary, turn: in
 func _on_actor_outcome(event: Dictionary, recipient: String) -> void:
 	var key := recipient + "/" + str(event.get("id", ""))
 	if _ai_moves.has(key) and str(event.get("status", "")) in ["completed", "failed", "cancelled"]:
+		var place := str(_ai_moves[key])
 		_ai_moves.erase(key)
 		print("[ai] %s %s %s: %s" % [recipient, event.get("type", ""), event.status, event.get("reason", "")])
+		# a walk to the fountain ends with a drink there (fountain_visit.gd; 2026-11-18 play test)
+		if str(event.status) == "completed" and str(event.get("type", "")) in ["lead", "go_to"]:
+			var executor: Node = executors.get(recipient)
+			# deferred: the executor lets go of her navigator only after reporting
+			(func() -> void: FOUNTAIN_VISIT.after_trip(executor, recipient, place)).call_deferred()
 		var lost := str(event.status) == "cancelled" and "walking range" in str(event.get("reason", ""))
 		if str(event.status) == "failed" or lost: _tell_player(recipient, event, lost)
 	if not _calls.has(key): return

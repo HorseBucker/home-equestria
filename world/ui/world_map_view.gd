@@ -4,6 +4,8 @@ signal marker_selected(marker: Dictionary)
 signal expand_requested
 signal zoom_lock_changed(locked: bool)
 const LOCAL_PLACES := preload("res://world/ui/named_map_places.gd")
+## Layout zones with no marker on the map (see _ready).
+const HIDDEN_REGIONS := ["sweet_apple_acres"]
 const PLACE_FONT := preload("res://world/ui/fonts/CelestiaMediumRedux.ttf")
 ## The menus' look (world/ui/menu_style.gd): names on rounded dusk tags in cream, Atkinson Bold.
 const STYLE := preload("res://world/ui/menu_style.gd")
@@ -62,6 +64,9 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	for region in WorldLayout.regions():
 		if region.get("phase"): continue
+		# (Ponyville overhaul, 2026-11-18: the old Sweet Apple Acres zone's middle lies far east of the remade farm,
+		# at x 950 z 50, and marked nothing there; the farm itself is marked by its home's own name tag)
+		if str(region.id) in HIDDEN_REGIONS: continue
 		markers.append({"id": str(region.id), "name": str(region.name), "kind": str(region.kind),
 			"position": Vector2(float(region.center[0]), float(region.center[2]))})
 	markers.append_array(LOCAL_PLACES.defaults())

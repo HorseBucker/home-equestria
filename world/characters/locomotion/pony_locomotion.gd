@@ -405,6 +405,9 @@ func set_body_scale(scale_factor: float) -> void:
 	var relative := scale_factor / body_scale
 	body_scale = scale_factor
 	profile.rescale(relative)
+	# Ponyville overhaul: her avoidance circle too (pony_navigator.gd sync_agent_size)
+	var navigator := get_node_or_null("Navigator")
+	if navigator != null and navigator.has_method("sync_agent_size"): navigator.sync_agent_size()
 	if _collision != null and _collision.shape is CapsuleShape3D:
 		var capsule := (_collision.shape as CapsuleShape3D).duplicate() as CapsuleShape3D
 		capsule.radius = 0.19 * body_scale

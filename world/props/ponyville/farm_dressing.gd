@@ -47,7 +47,7 @@ func _build() -> void:
 	var layout: Variant = JSON.parse_string(FileAccess.get_file_as_string(LAYOUT))
 	if not (layout is Dictionary): push_warning("[farm] bad " + LAYOUT); return
 	# Wait until the ground under the farm has collision (streamed terrain, staged bodies).
-	var probe: Vector3 = _ground(Vector3(60, 0, -430))
+	var probe: Vector3 = _ground(Vector3(-27, 0, 52))
 	if not probe.is_finite() and _tries < 20:
 		_tries += 1; get_tree().create_timer(2.0).timeout.connect(_build); return
 	_built = true
@@ -151,13 +151,17 @@ func _orchard(layout: Dictionary) -> void:
 	var planted := {}   # entry id -> [entry, [Transform3D]]
 	var trunks := StaticBody3D.new(); trunks.name = "FarmOrchardTrunks"; trunks.collision_mask = 0; add_child(trunks)
 	var xr: Array = spec.x; var zr: Array = spec.z; var step: Array = spec.spacing
+	var inside := PackedVector2Array()
+	for p: Array in spec.get("inside", []): inside.append(Vector2(float(p[0]), float(p[1])))
 	var z := float(zr[0]); var row := 0
 	while z <= float(zr[1]):
 		var x := float(xr[0]) + (float(step[0]) * 0.5 if row % 2 == 1 else 0.0)
 		var column: int = 0
 		while x <= float(xr[1]):
 			var at := Vector3(x + rng.randf_range(-1, 1) * float(spec.jitter), 0, z + rng.randf_range(-1, 1) * float(spec.jitter))
-			var g := _ground(at)
+			# Optional outline (Ponyville overhaul, tools/town_planner): trees only inside it.
+			var in_outline := inside.is_empty() or Geometry2D.is_point_in_polygon(Vector2(at.x, at.z), inside)
+			var g := _ground(at) if in_outline else Vector3.INF
 			if g.is_finite() and not _blocked(g, Vector3(1.6, 1.4, 1.6), 0.0):
 				var entry: Dictionary = trees[rng.randi() % trees.size()]
 				if _species(entry).has("mesh"):

@@ -48,7 +48,24 @@ func place_point(ctx: Dictionary, target: String) -> Vector3:
 	if target == "home":
 		var house: Node3D = ctx.population.home_house(ctx.id) if ctx.population.has_method("home_house") else null
 		return house.center() if house != null else ctx.population.home_position(ctx.id, true) if ctx.population.has_method("home_position") else Vector3.INF
+	if target == BALLOON_PLACE and str(ctx.get("step", {}).get("handler", "")) not in ["walk_balloon", "fly_balloon"]:
+		var pad := balloon_pad(ctx.tree)
+		if pad.is_finite(): return pad
 	return PLACES.resolve(ctx.tree, target)
+
+
+## The balloon's landmark moves with the balloon (balloon.gd reparents it into the ship). A day out to see it, or to
+## watch the stars from it, goes to its pad in town, not to wherever Anon left it (2026-11-22 play test: 18 ponies
+## round the balloon parked by Trixie's stage, and the north of town empty). INF while it is on its pad.
+const BALLOON_PLACE := "landmark:airballoon_01"
+static func balloon_pad(tree: SceneTree) -> Vector3:
+	for node: Node in tree.get_nodes_in_group("hot_air_balloons"):
+		if not node is Node3D or not node.is_inside_tree(): continue
+		var home: Transform3D = node.get("home")
+		var at: Vector3 = (node as Node3D).global_position
+		if Vector2(at.x - home.origin.x, at.z - home.origin.z).length() < 30.0: return Vector3.INF
+		return home.origin + home.basis.x.normalized() * 7.0     # beside the pad, clear of where it lands
+	return Vector3.INF
 
 ## A label for talk and debug: "Sugarcube Corner", "home", "Fluttershy".
 static func label(tree: SceneTree, target: String) -> String:

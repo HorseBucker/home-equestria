@@ -27,10 +27,10 @@
   "hosts": ["mayor_mare", "pinkie_pie", "rarity", "twilight_sparkle"],
   "asks": [{"from": "pinkie_pie", "want": "event:hearths_warming", "reward": "thanks", "why": "Hearth's Warming is better with friends", "hours": 24}],
   "decor": [
-   {"id": "garland_arch", "scene": "res://world/props/rnl/rnl_wirearch_v2/prefab.scn", "at": [125.58, -17.12, -91.15], "yaw": 1.3253, "scale": 1.25,
+   {"id": "garland_arch", "scene": "res://world/props/rnl/rnl_wirearch_v2/prefab.scn", "at": [51.05, -12.00, -96.63], "yaw": -0.1097, "scale": 1.25,
     "ground": [[-2.78, 0.0], [2.78, 0.0]]},
    {"id": "square_tree", "scene": "res://world/props/ponyville_kit/tiered_fir.scn", "scale": 1.5, "range": 160.0, "clear": 2.4, "height": 5.0, "trunk": 1.2,
-    "spots": [[299.0, -12.06, -117.0, 0.4], [297.0, -12.06, -125.0, 1.1], [284.0, -12.06, -124.0, 2.0], [302.0, -12.06, -112.0, 0.0]]},
+    "spots": [[114.0, -12.00, -169.0, 0.4], [138.0, -12.00, -195.0, 1.1], [136.0, -12.00, -152.0, 1.8], [118.0, -12.00, -143.0, 2.5]]},
    {"id": "door_lanterns", "kind": "door_lanterns"}],
   "copper": {"takes": [], "makes": [], "facts": ["event_started", "attended"], "verbs": ["invite", "ask"],
    "plans": [], "consumers": ["invite", "ask", "gossip"]}}

@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://world/game.gd" id="1"]
 [ext_resource type="Script" path="res://world/sky_controller.gd" id="2"]
-[ext_resource type="PackedScene" path="res://world/towns/ponyville/town.tscn" id="3"]
+[ext_resource type="Script" path="res://world/towns/ponyville/town_root.gd" id="3"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1")
@@ -27,7 +27,8 @@ directional_shadow_max_distance = 90.0
 
 [node name="Zones" type="Node3D" parent="."]
 
-[node name="PonyvilleTown" parent="Zones" instance=ExtResource("3")]
+[node name="PonyvilleTown" type="Node3D" parent="Zones" groups=["town_roots"]]
+script = ExtResource("3")
 
 [node name="PlayerSpawn" type="Marker3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 122, 8, -120)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 124, 8, -154)

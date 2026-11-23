@@ -289,11 +289,7 @@
         505.0,
         455.0
       ],
-      "center": [
-        117,
-        0,
-        -164
-      ],
+      "center": [136, 0, -176],
       "footprint": [
         -233.0,
         -514.0,
@@ -306,10 +302,7 @@
       "lighting": "default",
       "name": "Ponyville",
       "radius": 350.0,
-      "spawn": [
-        132.0,
-        -128.0
-      ]
+      "spawn": [124.0, -154.0]
     },
     {
       "_note": "placed in tools/layout_lab.gd",

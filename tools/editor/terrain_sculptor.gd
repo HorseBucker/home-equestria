@@ -210,6 +210,7 @@ func save(publish:=false)->Error:
 	return result
 
 ## `only`: restrict to these region locations (the terrain window re-applies per region).
+const OVERHAUL_GROUND:="ponyville_overhaul_20261113"
 func load_saved(working:=true,only:Array=[])->void:
 	var touched:Dictionary={}
 	var changed_bounds:=AABB()
@@ -221,6 +222,11 @@ func load_saved(working:=true,only:Array=[])->void:
 			if xy.size()!=2 or not xy[0].is_valid_int() or not xy[1].is_valid_int():continue
 			var relative:String=str(index[key])
 			if relative.is_absolute_path() or ".." in relative or relative.count("/")!=1:continue
+			# Ponyville overhaul (2026-11-19): the town's ground at the chosen town density, where its plan has hills of
+			# its own (tools/town_planner/build/apply_ground.py --density), beside the full town's
+			if relative.ends_with(OVERHAUL_GROUND):
+				var density:=str(Engine.get_meta("ponyville_town_density","high"))  # (town_density.gd fill; no load here)
+				if density!="high" and density!="" and FileAccess.file_exists(root_dir.path_join(relative+"_"+density).path_join("meta.json")):relative+="_"+density
 			var loc:=Vector2i(int(xy[0]),int(xy[1]))
 			if not only.is_empty() and loc not in only:continue
 			var rec:=_ensure(loc)

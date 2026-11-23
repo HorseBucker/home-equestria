@@ -370,6 +370,23 @@ func _leaves_down() -> void:
 func leaves_have_run() -> bool:
 	return _season == "winter" or (_season == "autumn" and _ran_count == count_for(_day, season_days(), offset))
 
+## Has every deciduous crown something on it today (play test 2026-11-16: "Apples are currently
+## floating around barren branches in early Spring")? False while the leaves are down (winter,
+## Winter Wrap Up, from the Running of the Leaves) and in spring until the last tree has begun to
+## leaf out: vegetation_spring_tree's leaf growth (x) starts at 0.2 + late * 0.08, so 0.28 for the
+## latest (late = 1); flowering trees are in bud before that. For things that hang in a crown,
+## such as the orchard's apples (harvest_state.gd).
+const SPRING_CROWNS_OUT := 0.28
+func crowns_out() -> bool:
+	if _drop >= 0.999: return false
+	return _spring <= 0.0 or _spring > SPRING_CROWNS_OUT
+
+## The live season_state's crowns_out() (true without one: fixtures keep fruit all year round).
+static func current_crowns_out() -> bool:
+	var tree := Engine.get_main_loop() as SceneTree
+	var node: Node = tree.get_first_node_in_group(GROUP) if tree != null else null
+	return bool(node.call("crowns_out")) if node != null and node.has_method("crowns_out") else true
+
 ## Most snow the season lets lie (melts down to it at CAP_MELT).
 static func cover_cap(which: String, progress_now: float) -> float:
 	if which == "winter": return 1.0

@@ -3,7 +3,8 @@
 // Based on NekotoArts' Wind Waker water. Vendored for Home: Equestria, which adds (W2-SEAS-G,
 // 2026-11-08) still-water ice and river ice rims from the season_ice global x climate A, and rain
 // ripple rings while `rain_amount` > 0. Both are written by res://world/seasons/ice_slabs.gd; with
-// their defaults (ice_kind 0, rain_amount 0) the water draws exactly as before.
+// their defaults (ice_kind 0, rain_amount 0) the water draws exactly as before. A flow map
+// (`flow_enabled`, 2026-11-15) moves the Ponyville canals downstream; off by default.
 shader_type spatial;
 
 #include "res://world/seasons/season.gdshaderinc"
@@ -50,6 +51,26 @@ uniform float ice_detail = 1.0;
 uniform float rain_amount = 0.0;
 // Ripple rings fade out by this view distance (metres): they alias to noise farther away.
 uniform float ripple_distance = 40.0;
+
+// River flow (2026-11-15, world/water/world_water.gd from world/water/ponyville_flow.json, baked by
+// tools/town_planner/build/bake_flow.py). flow_map RG = direction * 0.5 + 0.5 in world x, z, B = speed
+// 0..1, over the world rectangle flow_rect (corner x, z, size x, z). The toon pattern drifts along the
+// current by the usual two-phase flow-map technique, and soft foam flecks, stretched along the current,
+// ride on it in world metres (the pattern itself is far too large to show a 3 m brook moving). With
+// flow_enabled 0 (every other water) or speed 0 (lakes, still pools) nothing here runs.
+uniform float flow_enabled = 0.0;
+uniform sampler2D flow_map : filter_linear, repeat_disable;
+uniform vec4 flow_rect = vec4(0.0, 0.0, 1.0, 1.0);
+// metres per second at speed 1
+uniform float flow_speed = 0.65;
+// seconds one phase of the two-phase drift lasts
+uniform float flow_cycle = 4.0;
+// the pattern's UV (UV * tile) per world metre, to move it at flow_speed
+uniform float flow_uv_per_m = 0.0225;
+// how strongly the flecks show (0 none)
+uniform float flow_fleck = 0.2;
+// flecks fade out by this view distance (metres): they turn to shimmer farther off
+uniform float flow_fleck_distance = 60.0;
 
 
 // Math constants
@@ -298,6 +319,29 @@ vec4 water(vec2 uv, vec3 cdir, float iTime) {
     return ret;
 }
 
+// One layer of flecks at world point p: a soft fleck in some ~1.4 m cells, each an ellipse stretched
+// along the current `dir` about its own centre (so a bending current only bends the fleck).
+float fleck_layer(vec2 p, vec2 dir, float seed) {
+    vec2 side = vec2(-dir.y, dir.x);
+    vec2 g = p / 1.4;
+    vec2 id = floor(g);
+    float best = 0.0;
+    for (int j = -1; j <= 1; j++) {
+        for (int i = -1; i <= 1; i++) {
+            vec2 cell = id + vec2(float(i), float(j));
+            float h = noise(cell + seed);
+            if (h > 0.42) continue;
+            vec2 centre = (cell + 0.2 + 0.6 * vec2(noise(cell + seed + 5.3), noise(cell + seed + 11.7))) * 1.4;
+            vec2 d = p - centre;
+            float len = 0.45 + 0.5 * noise(cell + seed + 2.1);
+            float wide = 0.05 + 0.05 * noise(cell + seed + 8.9);
+            float e = length(vec2(dot(d, dir) / len, dot(d, side) / wide));
+            best = max(best, smoothstep(1.0, 0.45, e) * (0.55 + 0.45 * h / 0.42));
+        }
+    }
+    return best;
+}
+
 void fragment() {
     // Get the depth of the pixel in the scene
     float scene_depth = texture(DEPTH_TEXTURE, SCREEN_UV).r;
@@ -324,9 +368,48 @@ void fragment() {
     vec4 background = texture(SCREEN_TEXTURE, SCREEN_UV);
     vec4 final_color = background;
     if (iced < 0.999) {
+        // The current here (0 almost everywhere: only the Ponyville canals carry a flow map).
+        vec2 flow_dir = vec2(0.0);
+        float flow = 0.0;
+        if (flow_enabled > 0.5) {
+            vec2 fuv = (water_world.xz - flow_rect.xy) / flow_rect.zw;
+            if (all(greaterThanEqual(fuv, vec2(0.0))) && all(lessThanEqual(fuv, vec2(1.0)))) {
+                vec4 f = textureLod(flow_map, fuv, 0.0);
+                flow_dir = f.rg * 2.0 - 1.0;
+                float n = length(flow_dir);
+                flow = n > 0.05 ? f.b * (1.0 - smoothstep(0.1, 0.6, water_ice)) : 0.0;
+                flow_dir = n > 0.05 ? flow_dir / n : vec2(0.0);
+            }
+        }
         // Calculate basic water effect (skipped under whole ice: the costly part)
-        vec4 water_color = water(UV * tile, vec3(0, 1, 0), TIME * distortion_speed);
-        
+        vec4 water_color;
+        float fleck = 0.0;
+        if (flow > 0.002) {
+            // Two phases half a cycle apart, each sliding downstream and jumping back while unseen.
+            vec2 vel = flow_dir * flow * flow_speed;
+            float cycle = TIME / flow_cycle;
+            float p0 = fract(cycle);
+            float p1 = fract(cycle + 0.5);
+            float blend = abs(2.0 * p0 - 1.0);   // 0: all phase 0, 1: all phase 1 (phase 0 is jumping back)
+            vec2 shift0 = vel * p0 * flow_cycle;
+            vec2 shift1 = vel * p1 * flow_cycle;
+            vec4 w0 = water(UV * tile - shift0 * flow_uv_per_m, vec3(0, 1, 0), TIME * distortion_speed);
+            vec4 w1 = water(UV * tile - shift1 * flow_uv_per_m, vec3(0, 1, 0), TIME * distortion_speed);
+            water_color = mix(w0, w1, blend);
+            // Flecks: a fresh scatter each cycle (the seed changes while the phase is unseen).
+            float near = 1.0 - smoothstep(flow_fleck_distance * 0.5, flow_fleck_distance, linear_water_depth);
+            if (flow_fleck > 0.0 && near > 0.0) {
+                vec2 xz = mod(water_world.xz, 512.0);
+                float s0 = mod(floor(cycle) * 7.31, 97.0);
+                float s1 = mod(floor(cycle + 0.5) * 7.31 + 41.0, 97.0);
+                float f0 = fleck_layer(xz - shift0, flow_dir, s0) * sin(3.14159265 * p0);
+                float f1 = fleck_layer(xz - shift1, flow_dir, s1) * sin(3.14159265 * p1);
+                fleck = max(f0, f1) * flow_fleck * near * smoothstep(0.0, 0.35, flow);
+            }
+        } else {
+            water_color = water(UV * tile, vec3(0, 1, 0), TIME * distortion_speed);
+        }
+
         // Calculate foam
         float foam = calculate_foam(UV, depth_diff, TIME);
         
@@ -338,7 +421,8 @@ void fragment() {
         
         // Add foam
         final_color = mix(final_color, FOAM_COL, foam);
-        
+        if (fleck > 0.0) final_color.rgb = mix(final_color.rgb, FOAM_COL.rgb, fleck * smoothstep(0.0, 0.3, water_opacity));
+
         // Rain rings on open water near the eye
         if (rain_amount > 0.001) {
             float fade = 1.0 - smoothstep(ripple_distance * 0.5, ripple_distance, linear_water_depth);

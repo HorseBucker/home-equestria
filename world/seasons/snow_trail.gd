@@ -430,7 +430,7 @@ func _bind(param: String, value: Variant, terrain_only := false) -> void:
 # ------------------------------------------------------------------ CPU mirror of the shelter
 
 static func road_id(id: int) -> float:
-	return 1.0 if id == 1 or id == 4 or id == 5 else 0.0
+	return 1.0 if id == 1 or id == 4 or id == 5 or id == 22 else 0.0      # 22: the town's sage streets (play test 2026-11-16)
 
 static func forest_id(id: int) -> float:
 	return 0.8 if id == 11 else (0.45 if id == 10 else 0.0)

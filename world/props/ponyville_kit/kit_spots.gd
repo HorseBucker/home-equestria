@@ -15,12 +15,19 @@ static var _population: WeakRef
 static var _home_groups: Dictionary = {}
 static var _home_points: Dictionary = {}
 
+static var _density := ""
+
 static func _index() -> void:
-	if _loaded: return
+	# The town's gardens differ with its density (town_density.gd): a world loaded at another one reads them again.
+	var density: String = preload("res://world/towns/ponyville/town_density.gd").current()
+	if _loaded and density == _density: return
+	if _loaded:
+		_by_id.clear(); _by_kind.clear(); _by_owner.clear(); _layout_homes.clear(); _home_groups.clear(); _home_points.clear()
 	_loaded = true
+	_density = density
 	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PLACEMENTS))
 	if not parsed is Dictionary: return
-	for value: Variant in parsed.get("entries", []):
+	for value: Variant in preload("res://world/towns/ponyville/town_density.gd").kit_entries(parsed, density):
 		if not value is Dictionary: continue
 		var row: Dictionary = value
 		var id := str(row.get("id", ""))
@@ -133,6 +140,14 @@ static func resolve(population: Node, resident_id: String, target: String) -> Di
 			chosen = id; distance = gap
 	if chosen.is_empty(): return {}
 	return _record(_by_id[chosen], origin, population.get_tree() if population.is_inside_tree() else null)
+
+## Every authored instance of one kind, as records (Carrot Top's crop rows, play test 2026-11-16:
+## world/life/day/actions/tend_fields.gd). Approach points face the instance's -Z; callers pick their own.
+static func of_kind(kind: String) -> Array:
+	_index()
+	var out: Array = []
+	for id: String in _by_kind.get(kind, []): out.append(_record(_by_id[id], Vector3.INF, null))
+	return out
 
 ## Copy of an exact authored instance for the state/visual owner; no resident selection.
 static func by_id(id: String) -> Dictionary:

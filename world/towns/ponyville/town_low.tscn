@@ -1,0 +1,772 @@
+[gd_scene load_steps=24 format=4]
+
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/house_h.scn" id="1_6mkxx"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/house_a.tscn" id="2_ksg8m"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/house_e.scn" id="3_r7nyf"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/house_b.tscn" id="4_hn17d"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/house_g.scn" id="5_ge1vi"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/house_c.tscn" id="6_5w0v8"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/house_d.tscn" id="7_deixy"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/house_f.scn" id="8_wp87s"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/sugarcube.scn" id="9_eikrv"]
+[ext_resource type="PackedScene" path="res://world/buildings/town_hall/rnl_hall.scn" id="10_5ura6"]
+[ext_resource type="PackedScene" path="res://world/props/ponyville/outdoor_props.scn" id="11_outdoor"]
+[ext_resource type="PackedScene" path="res://world/props/ponyville/town_trees_low.scn" id="12_trees"]
+[ext_resource type="Script" path="res://world/props/ponyville/outdoor_props.gd" id="13_epx6v"]
+[ext_resource type="PackedScene" path="res://world/props/ponyville/rnl_scenery_defaults.tscn" id="13_rnl"]
+[ext_resource type="Script" path="res://world/props/ponyville_kit/kit_dressing.gd" id="14_kit"]
+[ext_resource type="Script" path="res://world/shop/market_stalls.gd" id="16_x1164"]
+
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/background/house_b_bg.scn" id="100_town"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/background/house_c_bg.scn" id="101_town"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/background/house_e_bg.scn" id="102_town"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/background/house_a_bg.scn" id="103_town"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/background/house_h_bg.scn" id="104_town"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/background/house_g_bg.scn" id="105_town"]
+[ext_resource type="PackedScene" path="res://world/towns/ponyville/background/house_f_bg.scn" id="106_town"]
+[node name="PonyvilleTown" type="Node3D" groups=["town_roots"]]
+metadata/placement_seed = 20260921.0
+metadata/source_plot_count = 402.0
+metadata/residential_count = 53
+metadata/landmark_count = 2
+metadata/background_count = 78
+metadata/layout_source = "tools/town_planner/ponyville_planV27_low.json"
+metadata/town_density = "low"
+
+[node name="sugarcube_corner" type="Node3D" parent="." instance=ExtResource("9_eikrv")]
+transform = Transform3D(0.000427, 0, -13.999999, 0, 13.999999, 0, 13.999999, 0, 0.000427, 15.79, -12, -142.74)
+metadata/opening_status = "front door: left hinge, inward grip drag"
+metadata/building_design = "sugarcube"
+metadata/landmark = "Sugarcube Corner"
+metadata/recommended_scale = 14.0
+metadata/source_sha256 = "94532fc5e94675200566e91f1e8f8798db8c251791de5a488181616883856ca7"
+metadata/rnl_source_steps_removed = 46
+metadata/lod_switch_metres = 250.0
+metadata/landmark_plot = "sugarcube_corner"
+metadata/reference_type = "Sugarcube Corner"
+
+[node name="town_hall" type="Node3D" parent="." instance=ExtResource("10_5ura6")]
+transform = Transform3D(-8.705062, 0, -24.499426, 0, 26, 0, 24.499426, 0, -8.705062, 135.5, -12.04, -175.89)
+metadata/building_design = "town_hall"
+metadata/landmark_plot = "town_hall"
+metadata/source_sha256 = "b4f6560bc9a0b3d3e625c8e0b6ed968a340a6d270ab732077302e98bd357ca68"
+metadata/recommended_scale = 26.0
+metadata/interior_status = "source hall and front entrance; town services pending"
+metadata/reference_type = "Town Hall"
+
+[node name="PonyvilleKit" type="Node3D" parent="."]
+script = ExtResource("14_kit")
+
+[node name="OutdoorProps" type="Node3D" parent="." instance=ExtResource("11_outdoor")]
+script = ExtResource("13_epx6v")
+
+[node name="TownTrees" type="Node3D" parent="." instance=ExtResource("12_trees")]
+
+[node name="RNLScenery" type="Node3D" parent="." instance=ExtResource("13_rnl")]
+script = ExtResource("16_x1164")
+metadata/source = "tools/rnl_scenery/plan.py + build.gd"
+
+[node name="BackgroundHouses" type="Node3D" parent="."]
+
+[node name="plot_001" parent="." instance=ExtResource("8_wp87s")]
+transform = Transform3D(0.119941, 0, 11.451072, 0, 11.4517, 0, -11.451072, 0, 0.119941, 92.9, -12, -177.02)
+metadata/building_design = "f"
+metadata/residential_plot = "plot_001"
+metadata/reserved_for = "vinyl_scratch"
+metadata/planned_residents = ["vinyl_scratch", "octavia_melody"]
+metadata/planned_name = "Vinyl Scratch & Octavia Melody"
+
+[node name="plot_002" parent="." instance=ExtResource("1_6mkxx")]
+transform = Transform3D(11.09754, 0, 2.054976, 0, 11.2862, 0, -2.054976, 0, 11.09754, 28.39, -12, -187.78)
+metadata/building_design = "h"
+metadata/residential_plot = "plot_002"
+metadata/vacant = true
+
+[node name="bg_501" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(-7.542422, 0, 4.351541, 0, 8.7077, 0, -4.351541, 0, -7.542422, 62.75, -12, -207.31)
+lean = Vector2(0.0317, -0.0232)
+
+[node name="plot_004" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(8.02757, 0, -4.4766, 0, 9.1914, 0, 4.4766, 0, 8.02757, 75.24, -12, -217.78)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_004"
+metadata/reserved_for = "shoeshine"
+metadata/planned_residents = ["shoeshine"]
+metadata/planned_name = "Linky"
+
+[node name="plot_005" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(9.581148, 0, -5.158568, 0, 10.8816, 0, 5.158568, 0, 9.581148, 45.56, -12, -238.87)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_005"
+metadata/reserved_for = "amethyst_star"
+metadata/planned_residents = ["amethyst_star"]
+metadata/planned_name = "Amethyst Star"
+
+[node name="bg_502" parent="BackgroundHouses" instance=ExtResource("106_town")]
+transform = Transform3D(-5.059849, 0, 9.596808, 0, 10.849, 0, -9.596808, 0, -5.059849, 87.14, -12, -219.41)
+lean = Vector2(-0.0245, -0.0242)
+
+[node name="plot_008" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-7.319665, 0, 8.051815, 0, 10.8816, 0, -8.051815, 0, -7.319665, 55.27, -12, -264.31)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_008"
+metadata/reserved_for = "nurse_redheart"
+metadata/planned_residents = ["nurse_redheart"]
+metadata/planned_name = "Nurse Redheart"
+
+[node name="plot_009" parent="." instance=ExtResource("8_wp87s")]
+transform = Transform3D(5.121855, 0, -10.242462, 0, 11.4517, 0, 10.242462, 0, 5.121855, 104.41, -12, -221.41)
+metadata/building_design = "f"
+metadata/residential_plot = "plot_009"
+metadata/reserved_for = "aloe"
+metadata/planned_residents = ["aloe"]
+metadata/planned_name = "Aloe"
+
+[node name="plot_010" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-0.81058, 0, 9.155588, 0, 9.1914, 0, -9.155588, 0, -0.81058, 114.66, -12, -225.87)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_010"
+metadata/reserved_for = "lotus_blossom"
+metadata/planned_residents = ["lotus_blossom"]
+metadata/planned_name = "Lotus Blossom"
+
+[node name="plot_011" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(0.255654, 0, 10.878596, 0, 10.8816, 0, -10.878596, 0, 0.255654, 41.16, -12, -198.82)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_011"
+metadata/reserved_for = "lemon_hearts"
+metadata/planned_residents = ["lemon_hearts"]
+metadata/planned_name = "Lemon Hearts"
+
+[node name="plot_012" parent="." instance=ExtResource("1_6mkxx")]
+transform = Transform3D(8.435729, 0, 7.497786, 0, 11.2862, 0, -7.497786, 0, 8.435729, 63.29, -12, -239.93)
+metadata/building_design = "h"
+metadata/residential_plot = "plot_012"
+metadata/reserved_for = "derpy_hooves"
+metadata/planned_residents = ["derpy_hooves", "dinky_doo"]
+metadata/planned_name = "Derpy Hooves & Dinky Doo"
+
+[node name="plot_013" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-8.877513, 0, -2.381513, 0, 9.1914, 0, 2.381513, 0, -8.877513, 103.25, -12, -243.25)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_013"
+metadata/reserved_for = "caramel"
+metadata/planned_residents = ["caramel"]
+metadata/planned_name = "Caramel"
+
+[node name="plot_015" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(8.534022, 0, 3.413546, 0, 9.1914, 0, -3.413546, 0, 8.534022, 66.22, -12, -288.84)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_015"
+metadata/reserved_for = "flitter"
+metadata/planned_residents = ["flitter"]
+metadata/planned_name = "Flitter"
+
+[node name="plot_016" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-0.962444, 0, -9.140872, 0, 9.1914, 0, 9.140872, 0, -0.962444, 14.56, -12, -203.46)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_016"
+metadata/reserved_for = "strawberry_sunrise"
+metadata/planned_residents = ["strawberry_sunrise"]
+metadata/planned_name = "Strawberry Sunrise"
+
+[node name="plot_017" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(1.235615, 0, -10.81122, 0, 10.8816, 0, 10.81122, 0, 1.235615, -28.93, -12, -221.4)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_017"
+metadata/reserved_for = "minuette"
+metadata/planned_residents = ["minuette"]
+metadata/planned_name = "Minuette"
+
+[node name="bg_504" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(0.230695, 0, -8.704644, 0, 8.7077, 0, 8.704644, 0, 0.230695, -25.4, -12, -164.37)
+lean = Vector2(0.0058, -0.0126)
+
+[node name="plot_019" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-0.00004, 0, 10.8816, 0, 10.8816, 0, -10.8816, 0, -0.00004, -53.88, -12, -294.75)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_019"
+metadata/vacant = true
+
+[node name="plot_020" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-0.636488, 0, 9.169336, 0, 9.1914, 0, -9.169336, 0, -0.636488, -51.55, -12, -266.12)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_020"
+metadata/reserved_for = "cherry_berry"
+metadata/planned_residents = ["cherry_berry"]
+metadata/planned_name = "Cherry Berry"
+
+[node name="plot_021" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-0.907582, 0, 9.146482, 0, 9.1914, 0, -9.146482, 0, -0.907582, -42.58, -12, -193.34)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_021"
+metadata/reserved_for = "noteworthy"
+metadata/planned_residents = ["noteworthy"]
+metadata/planned_name = "Noteworthy"
+
+[node name="plot_022" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-0.000034, 0, 9.1914, 0, 9.1914, 0, -9.1914, 0, -0.000034, -40.63, -12, -154.37)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_022"
+metadata/reserved_for = "comet_tail"
+metadata/planned_residents = ["comet_tail", "archer"]
+metadata/planned_name = "Comet Tail & Archer"
+
+[node name="plot_025" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-5.341801, 0, 9.48021, 0, 10.8816, 0, -9.48021, 0, -5.341801, 90, -12, -149.2)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_025"
+metadata/reserved_for = "mayor_mare"
+metadata/planned_residents = ["mayor_mare"]
+metadata/planned_name = "Mayor Mare"
+
+[node name="plot_028" parent="." instance=ExtResource("3_r7nyf")]
+transform = Transform3D(-11.111839, 0, -0.370079, 0, 11.118, 0, 0.370079, 0, -11.111839, 75.55, -12, -123.38)
+metadata/building_design = "e"
+metadata/residential_plot = "plot_028"
+metadata/reserved_for = "cheerilee"
+metadata/planned_residents = ["cheerilee"]
+metadata/planned_name = "Cheerilee"
+
+[node name="plot_030" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-9.188223, 0, 0.241638, 0, 9.1914, 0, -0.241638, 0, -9.188223, 22.1, -12, -123.97)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_030"
+metadata/reserved_for = "sweetie_drops"
+metadata/planned_residents = ["sweetie_drops"]
+metadata/planned_name = "Bon Bon"
+
+[node name="plot_031" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-10.860427, 0, 0.678491, 0, 10.8816, 0, -0.678491, 0, -10.860427, 11.6, -12, -123.15)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_031"
+metadata/reserved_for = "pinkie_pie"
+metadata/planned_residents = ["pinkie_pie"]
+metadata/planned_name = "Pinkie Pie"
+
+[node name="plot_032" parent="." instance=ExtResource("4_hn17d")]
+transform = Transform3D(9.241374, 0, 0.307852, 0, 9.2465, 0, -0.307852, 0, 9.241374, 75.65, -12, -138.84)
+metadata/building_design = "b"
+metadata/residential_plot = "plot_032"
+metadata/reserved_for = "scootaloo"
+metadata/planned_residents = ["scootaloo"]
+metadata/planned_name = "Scootaloo"
+
+[node name="plot_033" parent="." instance=ExtResource("8_wp87s")]
+transform = Transform3D(11.450006, 0, -0.19696, 0, 11.4517, 0, 0.19696, 0, 11.450006, 32.04, -12, -139.04)
+metadata/building_design = "f"
+metadata/residential_plot = "plot_033"
+metadata/reserved_for = "lyra_heartstrings"
+metadata/planned_residents = ["lyra_heartstrings"]
+metadata/planned_name = "Lyra Heartstrings"
+
+[node name="plot_035" parent="." instance=ExtResource("7_deixy")]
+transform = Transform3D(9.3153, 0, 0, 0, 9.3153, 0, 0, 0, 9.3153, 164.6, -12, -267.49)
+metadata/building_design = "d"
+metadata/residential_plot = "plot_035"
+metadata/vacant = true
+
+[node name="plot_036" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-10.8816, 0, -0.00008, 0, 10.8816, 0, 0.00008, 0, -10.8816, 137.75, -12, -247.12)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_036"
+metadata/reserved_for = "lily_valley"
+metadata/planned_residents = ["lily_valley"]
+metadata/planned_name = "Lily Valley"
+
+[node name="plot_037" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-10.8816, 0, -0.00008, 0, 10.8816, 0, 0.00008, 0, -10.8816, 149.34, -12, -247.11)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_037"
+metadata/reserved_for = "roseluck"
+metadata/planned_residents = ["roseluck"]
+metadata/planned_name = "Roseluck"
+
+[node name="plot_038" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-9.1914, 0, -0.000068, 0, 9.1914, 0, 0.000068, 0, -9.1914, 160.79, -12, -248.37)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_038"
+metadata/reserved_for = "daisy"
+metadata/planned_residents = ["daisy"]
+metadata/planned_name = "Daisy"
+
+[node name="plot_039" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(0.381826, 0, 10.874899, 0, 10.8816, 0, -10.874899, 0, 0.381826, 141.45, -12, -317.46)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_039"
+metadata/reserved_for = "berry_punch"
+metadata/planned_residents = ["berry_punch", "ruby_pinch"]
+metadata/planned_name = "Berry Punch & Ruby Pinch"
+
+[node name="plot_041" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(0.381826, 0, 10.874899, 0, 10.8816, 0, -10.874899, 0, 0.381826, 169.82, -12, -320.55)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_041"
+metadata/reserved_for = "starlight_glimmer"
+metadata/planned_residents = ["starlight_glimmer"]
+metadata/planned_name = "Starlight Glimmer"
+
+[node name="plot_044" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(0.732662, 0, 9.162153, 0, 9.1914, 0, -9.162153, 0, 0.732662, 200.08, -12, -333.53)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_044"
+metadata/reserved_for = "silver_spoon"
+metadata/planned_residents = ["silver_spoon"]
+metadata/planned_name = "Silver Spoon"
+
+[node name="plot_045" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(9.088465, 0, -1.371728, 0, 9.1914, 0, 1.371728, 0, 9.088465, 200.22, -12, -349.81)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_045"
+metadata/reserved_for = "drwhooves"
+metadata/planned_residents = ["drwhooves"]
+metadata/planned_name = "Dr. Hooves"
+
+[node name="plot_046" parent="." instance=ExtResource("7_deixy")]
+transform = Transform3D(8.480443, 0, -3.854465, 0, 9.3153, 0, 3.854465, 0, 8.480443, 221.65, -12, -348.68)
+metadata/building_design = "d"
+metadata/residential_plot = "plot_046"
+metadata/reserved_for = "diamond_tiara"
+metadata/planned_residents = ["diamond_tiara"]
+metadata/planned_name = "Diamond Tiara"
+
+[node name="bg_509" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(8.613404, 0, 1.278011, 0, 8.7077, 0, -1.278011, 0, 8.613404, 192.24, -11.989864, -190.23)
+lean = Vector2(-0.0178, 0.002)
+
+[node name="bg_511" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(-8.182654, 0, -2.977954, 0, 8.7077, 0, 2.977954, 0, -8.182654, 56.32, -11.855996, -19.2)
+lean = Vector2(-0.0161, 0.037)
+
+[node name="plot_051" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-8.764722, 0, 2.76794, 0, 9.1914, 0, -2.76794, 0, -8.764722, 252.45, -11.688568, -66.08)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_051"
+metadata/reserved_for = "dr_caballeron"
+metadata/planned_residents = ["dr_caballeron"]
+metadata/planned_name = "Dr. Caballeron"
+
+[node name="bg_512" parent="BackgroundHouses" instance=ExtResource("105_town")]
+transform = Transform3D(7.28948, 0, 7.289506, 0, 10.3089, 0, -7.289506, 0, 7.28948, -222.75, -11.899529, -157.07)
+lean = Vector2(0.0068, 0.0262)
+
+[node name="plot_053" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-0.00004, 0, -10.8816, 0, 10.8816, 0, 10.8816, 0, -0.00004, 268.04, -11.997362, -294.62)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_053"
+metadata/reserved_for = "golden_harvest"
+metadata/planned_residents = ["golden_harvest", "noi"]
+metadata/planned_name = "Golden Harvest & Noi"
+
+[node name="plot_055" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-0.00004, 0, -10.8816, 0, 10.8816, 0, 10.8816, 0, -0.00004, -1.4, -10.542489, 51.52)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_055"
+metadata/reserved_for = "applejack"
+metadata/planned_residents = ["applejack", "big_mcintosh", "apple_bloom"]
+metadata/planned_name = "Applejack & Big McIntosh & Apple Bloom"
+
+[node name="plot_056" parent="." instance=ExtResource("8_wp87s")]
+transform = Transform3D(-11.336612, 0, -1.619465, 0, 11.4517, 0, 1.619465, 0, -11.336612, 57.3, -12, -174.66)
+metadata/building_design = "f"
+metadata/residential_plot = "plot_056"
+metadata/vacant = true
+
+[node name="plot_057" parent="." instance=ExtResource("8_wp87s")]
+transform = Transform3D(-11.28156, 0, -1.966681, 0, 11.4517, 0, 1.966681, 0, -11.28156, 34.74, -12, -171.04)
+metadata/building_design = "f"
+metadata/residential_plot = "plot_057"
+metadata/reserved_for = "sunshower_raindrops"
+metadata/planned_residents = ["sunshower_raindrops"]
+metadata/planned_name = "Sunshower Raindrops"
+
+[node name="bg_002" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-8.657321, 0, -1.581565, 0, 8.8006, 0, 1.581565, 0, -8.657321, 20.26, -12, -170.12)
+lean = Vector2(-0.0111, 0.0138)
+
+[node name="plot_058" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-9.127816, 0, -1.079265, 0, 9.1914, 0, 1.079265, 0, -9.127816, -0.74, -12, -165.35)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_058"
+metadata/reserved_for = "pokey_pierce"
+metadata/planned_residents = ["pokey_pierce"]
+metadata/planned_name = "Pokey Pierce"
+
+[node name="bg_004" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(0.091683, 0, 8.75942, 0, 8.7599, 0, -8.75942, 0, 0.091683, 92.28, -12, -193.33)
+lean = Vector2(0.0062, -0.0321)
+
+[node name="bg_514" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(8.6544, 0, 0.961975, 0, 8.7077, 0, -0.961975, 0, 8.6544, 67.43, -12, -192.47)
+lean = Vector2(0.024, 0.0182)
+
+[node name="bg_008" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(8.747785, 0, -0.460558, 0, 8.7599, 0, 0.460558, 0, 8.747785, -25.53, -12, -180.11)
+lean = Vector2(-0.0083, -0.0101)
+
+[node name="bg_011" parent="BackgroundHouses" instance=ExtResource("102_town")]
+transform = Transform3D(-8.970224, 0, 5.520604, 0, 10.5329, 0, -5.520604, 0, -8.970224, 45.63, -12, -217.1)
+lean = Vector2(-0.0185, 0.0135)
+
+[node name="plot_061" parent="." instance=ExtResource("8_wp87s")]
+transform = Transform3D(-10.397751, 0, 4.798771, 0, 11.4517, 0, -4.798771, 0, -10.397751, 23.01, -12, -228)
+metadata/building_design = "f"
+metadata/residential_plot = "plot_061"
+metadata/vacant = true
+
+[node name="bg_016" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-4.422401, 0, 7.561628, 0, 8.7599, 0, -7.561628, 0, -4.422401, 81.25, -12, -232.92)
+lean = Vector2(-0.0089, -0.0414)
+
+[node name="bg_018" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(-7.148243, 0, 4.972591, 0, 8.7077, 0, -4.972591, 0, -7.148243, 43.39, -12, -277.37)
+lean = Vector2(-0.0172, -0.0015)
+
+[node name="bg_516" parent="BackgroundHouses" instance=ExtResource("105_town")]
+transform = Transform3D(10.305041, 0, 0.282058, 0, 10.3089, 0, -0.282058, 0, 10.305041, 113.08, -12, -209.52)
+lean = Vector2(0.015, 0.0382)
+
+[node name="bg_023" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(5.280326, 0, -7.040505, 0, 8.8006, 0, 7.040505, 0, 5.280326, 78.94, -12, -261.36)
+lean = Vector2(0.0129, -0.0294)
+
+[node name="plot_065" parent="." instance=ExtResource("1_6mkxx")]
+transform = Transform3D(9.264913, 0, -6.44513, 0, 11.2862, 0, 6.44513, 0, 9.264913, 51.6, -12, -290.92)
+metadata/building_design = "h"
+metadata/residential_plot = "plot_065"
+metadata/reserved_for = "cloudchaser"
+metadata/planned_residents = ["cloudchaser"]
+metadata/planned_name = "Cloudchaser"
+
+[node name="bg_027" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-1.718027, 0, 8.589775, 0, 8.7599, 0, -8.589775, 0, -1.718027, 110.59, -12, -258.71)
+lean = Vector2(0.0154, -0.0109)
+
+[node name="plot_501" parent="." instance=ExtResource("3_r7nyf")]
+transform = Transform3D(3.195155, 0, -10.648986, 0, 11.118, 0, 10.648986, 0, 3.195155, 115.55, -12, -298.12)
+metadata/building_design = "e"
+metadata/residential_plot = "plot_501"
+metadata/vacant = true
+
+[node name="plot_068" parent="." instance=ExtResource("1_6mkxx")]
+transform = Transform3D(10.706853, 0, 3.569539, 0, 11.2862, 0, -3.569539, 0, 10.706853, 96.08, -12, -257.32)
+metadata/building_design = "h"
+metadata/residential_plot = "plot_068"
+metadata/reserved_for = "thunderlane"
+metadata/planned_residents = ["thunderlane"]
+metadata/planned_name = "Thunderlane"
+
+[node name="bg_034" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(0.149755, 0, 8.75862, 0, 8.7599, 0, -8.75862, 0, 0.149755, 0.27, -12, -200.07)
+lean = Vector2(0.0296, 0.0168)
+
+[node name="bg_036" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(2.500493, 0, 8.437896, 0, 8.8006, 0, -8.437896, 0, 2.500493, 2.89, -12, -217.1)
+lean = Vector2(0.0128, 0.0017)
+
+[node name="bg_037" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(5.366286, 0, 6.857625, 0, 8.7077, 0, -6.857625, 0, 5.366286, 21.91, -12, -255.91)
+lean = Vector2(-0.0175, 0.0226)
+
+[node name="plot_070" parent="." instance=ExtResource("1_6mkxx")]
+transform = Transform3D(11.132729, 0, 1.854898, 0, 11.2862, 0, -1.854898, 0, 11.132729, 92.14, -12, -297.09)
+metadata/building_design = "h"
+metadata/residential_plot = "plot_070"
+metadata/vacant = true
+
+[node name="bg_044" parent="BackgroundHouses" instance=ExtResource("105_town")]
+transform = Transform3D(-7.456672, 0, -7.118389, 0, 10.3089, 0, 7.118389, 0, -7.456672, 42.02, -12, -255.3)
+lean = Vector2(0.0033, 0.0155)
+
+[node name="bg_045" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-8.363226, 0, -2.739894, 0, 8.8006, 0, 2.739894, 0, -8.363226, 79.14, -12, -278.08)
+lean = Vector2(0.0021, 0.001)
+
+[node name="plot_504" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(-0.00004, 0, -10.8816, 0, 10.8816, 0, 10.8816, 0, -0.00004, -36.42, -12, -307.5)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_504"
+metadata/vacant = true
+
+[node name="bg_519" parent="BackgroundHouses" instance=ExtResource("102_town")]
+transform = Transform3D(1.155198, 0, -10.46936, 0, 10.5329, 0, 10.46936, 0, 1.155198, -35.7, -12, -265.93)
+lean = Vector2(0.0107, -0.0282)
+
+[node name="bg_520" parent="BackgroundHouses" instance=ExtResource("104_town")]
+transform = Transform3D(1.11101, 0, -10.634322, 0, 10.6922, 0, 10.634322, 0, 1.11101, -27.68, -12, -206.61)
+lean = Vector2(-0.0288, -0.0263)
+
+[node name="bg_051" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-0.285843, 0, -8.755235, 0, 8.7599, 0, 8.755235, 0, -0.285843, -24.98, -12, -149.69)
+
+[node name="bg_521" parent="BackgroundHouses" instance=ExtResource("102_town")]
+transform = Transform3D(9.421136, 0, -4.710008, 0, 10.5329, 0, 4.710008, 0, 9.421136, -8.74, -12, -122.48)
+lean = Vector2(-0.0349, 0.0018)
+
+[node name="bg_056" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-0.958274, 0, 8.748272, 0, 8.8006, 0, -8.748272, 0, -0.958274, -43.62, -12, -212.76)
+lean = Vector2(-0.0221, 0.0229)
+
+[node name="bg_058" parent="BackgroundHouses" instance=ExtResource("105_town")]
+transform = Transform3D(-2.270866, 0, 10.055674, 0, 10.3089, 0, -10.055674, 0, -2.270866, -38.88, -12, -136.48)
+lean = Vector2(-0.0208, -0.0184)
+
+[node name="bg_059" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-6.700969, 0, 6.371403, 0, 9.2465, 0, -6.371403, 0, -6.700969, -26.78, -12, -117.23)
+lean = Vector2(0.0236, 0.0168)
+
+[node name="bg_061" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(-8.606387, 0, 1.324441, 0, 8.7077, 0, -1.324441, 0, -8.606387, 11.07, -12, -101.59)
+lean = Vector2(-0.0245, 0.0348)
+
+[node name="bg_063" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(8.565439, 0, -1.835511, 0, 8.7599, 0, 1.835511, 0, 8.565439, -3.21, -12, -289.57)
+lean = Vector2(0.0242, 0.0036)
+
+[node name="plot_075" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-9.068532, 0, 1.497854, 0, 9.1914, 0, -1.497854, 0, -9.068532, -26.6, -12, -279.97)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_075"
+metadata/vacant = true
+
+[node name="plot_076" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-9.184627, 0, 0.352796, 0, 9.1914, 0, -0.352796, 0, -9.184627, 4.04, -12, -274.93)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_076"
+metadata/vacant = true
+
+[node name="bg_065" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-7.209901, 0, -5.046573, 0, 8.8006, 0, 5.046573, 0, -7.209901, 25.92, -12, -283.31)
+lean = Vector2(0.0138, -0.0236)
+
+[node name="bg_066" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(-8.702875, 0, -0.289849, 0, 8.7077, 0, 0.289849, 0, -8.702875, 57.83, -12, -148.2)
+lean = Vector2(-0.0146, -0.0158)
+
+[node name="plot_508" parent="." instance=ExtResource("5_ge1vi")]
+transform = Transform3D(10.858832, 0, 0.703548, 0, 10.8816, 0, -0.703548, 0, 10.858832, 74, -12, -164.97)
+metadata/building_design = "g"
+metadata/residential_plot = "plot_508"
+metadata/vacant = true
+
+[node name="bg_072" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(8.754867, 0, 0.296904, 0, 8.7599, 0, -0.296904, 0, 8.754867, 50.85, -12, -162.2)
+lean = Vector2(-0.0355, 0.0047)
+
+[node name="bg_073" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-7.856424, 0, 3.874591, 0, 8.7599, 0, -3.874591, 0, -7.856424, 113.51, -12.037791, -131.49)
+lean = Vector2(-0.0192, -0.0073)
+
+[node name="bg_077" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-0.574565, 0, 8.781824, 0, 8.8006, 0, -8.781824, 0, -0.574565, 105.76, -12, -143.05)
+lean = Vector2(-0.0165, 0.0391)
+
+[node name="bg_079" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(8.70174, 0, -0.322111, 0, 8.7077, 0, 0.322111, 0, 8.70174, 33.75, -12, -114.56)
+lean = Vector2(-0.0044, 0.0235)
+
+[node name="plot_509" parent="." instance=ExtResource("6_5w0v8")]
+transform = Transform3D(9.284068, 0, -0.317639, 0, 9.2895, 0, 0.317639, 0, 9.284068, 52.2, -12, -113.19)
+metadata/building_design = "c"
+metadata/residential_plot = "plot_509"
+metadata/vacant = true
+
+[node name="plot_510" parent="." instance=ExtResource("8_wp87s")]
+transform = Transform3D(-11.443865, 0, 0.423532, 0, 11.4517, 0, -0.423532, 0, -11.443865, 33.71, -12, -99.78)
+metadata/building_design = "f"
+metadata/residential_plot = "plot_510"
+metadata/vacant = true
+
+[node name="bg_525" parent="BackgroundHouses" instance=ExtResource("106_town")]
+transform = Transform3D(-10.842988, 0, 0.361125, 0, 10.849, 0, -0.361125, 0, -10.842988, 61.22, -12, -98.82)
+lean = Vector2(-0.0051, 0.0196)
+
+[node name="plot_511" parent="." instance=ExtResource("1_6mkxx")]
+transform = Transform3D(-11.208918, 0, -1.318513, 0, 11.2862, 0, 1.318513, 0, -11.208918, 82.9, -12, -98.78)
+metadata/building_design = "h"
+metadata/residential_plot = "plot_511"
+metadata/vacant = true
+
+[node name="bg_087" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-1.446419, 0, -8.680923, 0, 8.8006, 0, 8.680923, 0, -1.446419, 99.84, -12, -115.98)
+lean = Vector2(0.0069, 0.0154)
+
+[node name="bg_088" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(8.758041, 0, -0.180441, 0, 8.7599, 0, 0.180441, 0, 8.758041, 184.14, -12, -262.77)
+lean = Vector2(0.0197, 0.0283)
+
+[node name="bg_092" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-8.751993, 0, 0.372119, 0, 8.7599, 0, -0.372119, 0, -8.751993, 191.2, -12, -248.84)
+lean = Vector2(0.0137, -0.0083)
+
+[node name="bg_526" parent="BackgroundHouses" instance=ExtResource("106_town")]
+transform = Transform3D(-0.801051, 0, -10.819386, 0, 10.849, 0, 10.819386, 0, -0.801051, 159.1, -12, -330.27)
+lean = Vector2(-0.0242, 0.0157)
+
+[node name="bg_097" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-0.000032, 0, 8.7599, 0, 8.7599, 0, -8.7599, 0, -0.000032, 171.74, -12, -284.97)
+lean = Vector2(0.0134, 0.0136)
+
+[node name="bg_098" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-0.000032, 0, 8.7599, 0, 8.7599, 0, -8.7599, 0, -0.000032, 171.54, -12, -303.33)
+lean = Vector2(-0.0178, 0.0027)
+
+[node name="bg_100" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-0.000032, 0, -8.7599, 0, 8.7599, 0, 8.7599, 0, -0.000032, 184.59, -12, -290.5)
+lean = Vector2(-0.0045, -0.0155)
+
+[node name="bg_102" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-0.475034, 0, -8.78777, 0, 8.8006, 0, 8.78777, 0, -0.475034, 184.94, -12, -320.64)
+lean = Vector2(-0.0255, -0.0013)
+
+[node name="bg_104" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(0.205003, 0, 8.798212, 0, 8.8006, 0, -8.798212, 0, 0.205003, 199.24, -12, -274.14)
+lean = Vector2(0.0066, 0.0203)
+
+[node name="bg_106" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(0.152382, 0, 8.758575, 0, 8.7599, 0, -8.758575, 0, 0.152382, 199.53, -12, -310.6)
+lean = Vector2(-0.0013, 0.015)
+
+[node name="plot_087" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(-0.213255, 0, -9.188926, 0, 9.1914, 0, 9.188926, 0, -0.213255, 213.37, -12, -280.07)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_087"
+metadata/reserved_for = "white_lightning"
+metadata/planned_residents = ["white_lightning"]
+metadata/planned_name = "White Lightning"
+
+[node name="plot_513" parent="." instance=ExtResource("2_ksg8m")]
+transform = Transform3D(9.168047, 0, 0.654792, 0, 9.1914, 0, -0.654792, 0, 9.168047, 162.96, -12.110828, -349.94)
+metadata/building_design = "a"
+metadata/residential_plot = "plot_513"
+metadata/vacant = true
+
+[node name="bg_528" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(8.7077, 0, 0, 0, 8.7077, 0, 0, 0, 8.7077, 179.45, -12, -350.79)
+lean = Vector2(-0.0076, 0.0377)
+
+[node name="bg_111" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-8.754321, 0, -0.312598, 0, 8.7599, 0, 0.312598, 0, -8.754321, 173.19, -12, -336.79)
+lean = Vector2(0.0397, -0.0164)
+
+[node name="bg_112" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-0.546295, 0, -8.742849, 0, 8.7599, 0, 8.742849, 0, -0.546295, 236.07, -12, -304.1)
+lean = Vector2(0.0148, -0.0147)
+
+[node name="bg_113" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-0.56641, 0, -8.782354, 0, 8.8006, 0, 8.782354, 0, -0.56641, 159.96, -12, -202.04)
+lean = Vector2(0.0153, -0.0168)
+
+[node name="bg_529" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-0.000032, 0, 8.7599, 0, 8.7599, 0, -8.7599, 0, -0.000032, 223.41, -12, -319.5)
+lean = Vector2(0.0199, -0.0172)
+
+[node name="bg_114" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-4.224666, 0, 7.720282, 0, 8.8006, 0, -7.720282, 0, -4.224666, 138.12, -11.999582, -118.59)
+lean = Vector2(0.0023, -0.0326)
+
+[node name="bg_115" parent="BackgroundHouses" instance=ExtResource("105_town")]
+transform = Transform3D(-9.945544, 0, 2.712855, 0, 10.3089, 0, -2.712855, 0, -9.945544, -82.71, -11.977474, -271.08)
+lean = Vector2(-0.0344, -0.0156)
+
+[node name="bg_116" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(6.916098, 0, 5.442256, 0, 8.8006, 0, -5.442256, 0, 6.916098, 413.84, -10.924268, -47.85)
+lean = Vector2(0.0133, 0.0094)
+
+[node name="bg_117" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(8.088999, 0, 3.466793, 0, 8.8006, 0, -3.466793, 0, 8.088999, 447.18, -11.092533, -66.75)
+lean = Vector2(0.0258, -0.0183)
+
+[node name="bg_119" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-8.498322, 0, 2.124707, 0, 8.7599, 0, -2.124707, 0, -8.498322, 232.26, -12.072885, -72.62)
+lean = Vector2(-0.0262, 0.0138)
+
+[node name="bg_121" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(0.866688, 0, 8.664461, 0, 8.7077, 0, -8.664461, 0, 0.866688, -87.09, -11.975833, -229.25)
+lean = Vector2(0.0374, -0.0061)
+
+[node name="bg_122" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-5.656904, 0, -6.741661, 0, 8.8006, 0, 6.741661, 0, -5.656904, 236.99, -12, -329.36)
+lean = Vector2(-0.0009, 0.0205)
+
+[node name="bg_124" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-6.194219, 0, -6.194151, 0, 8.7599, 0, 6.194151, 0, -6.194219, -199.25, -12.065858, -172.45)
+lean = Vector2(-0.0317, -0.0064)
+
+[node name="bg_125" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-8.171197, 0, -3.268349, 0, 8.8006, 0, 3.268349, 0, -8.171197, 438.25, -11.589386, -44.3)
+lean = Vector2(0.0242, 0.0102)
+
+[node name="bg_128" parent="BackgroundHouses" instance=ExtResource("102_town")]
+transform = Transform3D(9.59214, 0, 4.351188, 0, 10.5329, 0, -4.351188, 0, 9.59214, -236.62, -11.202513, -146.81)
+lean = Vector2(-0.0125, -0.0374)
+
+[node name="bg_130" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(8.8006, 0, 0, 0, 8.8006, 0, 0, 0, 8.8006, -89.91, -11.974447, -245.65)
+lean = Vector2(-0.03, 0.0224)
+
+[node name="bg_132" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(4.625124, 0, -7.43936, 0, 8.7599, 0, 7.43936, 0, 4.625124, 153.87, -11.996977, -123.51)
+lean = Vector2(0.0006, -0.0284)
+
+[node name="bg_134" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-8.8006, 0, 0.000065, 0, 8.8006, 0, -0.000065, 0, -8.8006, -72.82, -11.999813, -167.15)
+lean = Vector2(0.0131, 0.0341)
+
+[node name="bg_135" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-7.128004, 0, 5.091896, 0, 8.7599, 0, -5.091896, 0, -7.128004, 272.39, -11.995026, -328.88)
+lean = Vector2(-0.0019, 0.015)
+
+[node name="bg_140" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-5.433978, 0, -6.922604, 0, 8.8006, 0, 6.922604, 0, -5.433978, 168.81, -11.996038, -130.91)
+lean = Vector2(-0.0109, 0.0428)
+
+[node name="bg_141" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(6.222953, 0, 6.222975, 0, 8.8006, 0, -6.222975, 0, 6.222953, -174.95, -12.207594, -177.55)
+lean = Vector2(-0.0237, -0.0064)
+
+[node name="bg_142" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-5.255958, 0, -7.007907, 0, 8.7599, 0, 7.007907, 0, -5.255958, -211.39, -12.432412, -142.55)
+lean = Vector2(0.0038, -0.0367)
+
+[node name="bg_144" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-0.000032, 0, -8.7599, 0, 8.7599, 0, 8.7599, 0, -0.000032, -100.68, -11.987121, -155.28)
+lean = Vector2(-0.0026, 0.0271)
+
+[node name="bg_530" parent="BackgroundHouses" instance=ExtResource("102_town")]
+transform = Transform3D(0.918003, 0, -10.492819, 0, 10.5329, 0, 10.492819, 0, 0.918003, 129.9, -12, -223.99)
+lean = Vector2(-0.017, -0.0012)
+
+[node name="bg_145" parent="BackgroundHouses" instance=ExtResource("103_town")]
+transform = Transform3D(6.670485, 0, 5.597202, 0, 8.7077, 0, -5.597202, 0, 6.670485, 162.75, -12, -224.23)
+lean = Vector2(-0.0164, 0.0205)
+
+[node name="bg_532" parent="BackgroundHouses" instance=ExtResource("102_town")]
+transform = Transform3D(-0.918003, 0, -10.492819, 0, 10.5329, 0, 10.492819, 0, -0.918003, 98.54, -12, -280.4)
+lean = Vector2(-0.0097, -0.0236)
+
+[node name="bg_151" parent="BackgroundHouses" instance=ExtResource("102_town")]
+transform = Transform3D(10.49701, 0, -0.86877, 0, 10.5329, 0, 0.86877, 0, 10.49701, -10.4, -12, -140.85)
+lean = Vector2(0.0153, 0.0112)
+
+[node name="bg_156" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(0, 0, 8.7599, 0, 8.7599, 0, -8.7599, 0, 0, 46.47, -12, -137.65)
+lean = Vector2(-0.0012, -0.0003)
+
+[node name="bg_160" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(-2.267229, 0, -8.461414, 0, 8.7599, 0, 8.461414, 0, -2.267229, -1.99, -12, -238.3)
+lean = Vector2(0.0003, -0.0017)
+
+[node name="bg_161" parent="BackgroundHouses" instance=ExtResource("100_town")]
+transform = Transform3D(0, 0, -8.7599, 0, 8.7599, 0, 8.7599, 0, 0, 157.45, -12, -292.53)
+lean = Vector2(0.0126, 0.0222)
+
+[node name="bg_162" parent="BackgroundHouses" instance=ExtResource("101_town")]
+transform = Transform3D(-8.8006, 0, 0, 0, 8.8006, 0, 0, 0, -8.8006, 212.24, -12, -301.91)
+lean = Vector2(-0.0143, 0.0381)
+
+[node name="plot_023" parent="." instance=ExtResource("1_6mkxx")]
+transform = Transform3D(-5.046899, 0, 10.094906, 0, 11.2862, 0, -10.094906, 0, -5.046899, -34.75, -12, -125.17)
+metadata/building_design = "h"
+metadata/residential_plot = "plot_023"
+metadata/vacant = true

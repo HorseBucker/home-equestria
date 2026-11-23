@@ -19,6 +19,18 @@ const CALENDAR := preload("res://world/mechanics/calendar/town_calendar.gd")
 const SAA_SITES := preload("res://world/mechanics/stations/saa_sites.gd")
 const ITEM_CATALOG := preload("res://world/inventory/item_catalog.gd")
 const AI_CACHE_S := 2.0
+## Balloon rides ([use: balloon_ride]): the pilots and the ids that mean it (fly_balloon.gd).
+const FLY_BALLOON := "res://world/life/day/actions/fly_balloon.gd"
+const BALLOON_PILOTS := ["cherry_berry"]
+const BALLOON_RIDE_IDS := ["balloon_ride", "balloon"]
+## [use: fountain] (world/life/day/actions/fountain_visit.gd, 2026-11-18 play test: Pinkie came to the fountain
+## with Anon for a sip of water and only drank when asked again): a pony near the Town Square fountain can go and
+## drink from it herself, whatever she was doing (following Anon, standing with him).
+const FOUNTAIN_VISIT := "res://world/life/day/actions/fountain_visit.gd"
+const FOUNTAIN_IDS := ["fountain", "fountain_drink", "drink"]
+## Cherry Berry's answers about the balloon she came to fetch (balloon_fetch.gd asking).
+const BALLOON_ANSWER_IDS := ["balloon_take_home", "balloon_leave_it", "balloon_wait"]
+const BALLOON_FETCH_ID := "balloon_fetch"
 const NOTE_CHARS := 400
 const GROUP := "mechanics"
 var game: Node
@@ -122,6 +134,44 @@ func _ai_row(id: String, actor: Node3D) -> Dictionary:
 		if not station_ids.is_empty():
 			row.caps.append("use"); row.keys["stations"] = station_ids
 			row.lines.append("- Stations you could work: %s ([use: ID])." % ", ".join(PackedStringArray(station_ids.slice(0, 4))))
+	# [use: balloon_ride] (world/life/day/actions/fly_balloon.gd, play test 2026-11-17: "give Cherry
+	# the ability to give rides when asked"): the balloon's pilot takes Anon up when he asks. When she
+	# cannot (weather, dark, bedtime, the balloon away or in use) she is told why, to say no kindly.
+	if is_instance_valid(actor) and is_inside_tree() and bool((load(FOUNTAIN_VISIT) as Script).call("near", get_tree(), actor)):
+		if "use" not in row.caps: row.caps.append("use")
+		var near_ids: Array = (row.keys.get("stations", []) as Array).duplicate()
+		near_ids.append_array(FOUNTAIN_IDS)
+		row.keys["stations"] = near_ids
+		row.lines.append("- The Town Square fountain is right here: whenever you mean to have a drink from it (thirsty, or you came for a sip of water), use [use: fountain] and you go and drink. Saying you drink is not drinking.")
+	# Cherry Berry has asked Anon whether he is still using the balloon she came to take home (Ponyville overhaul,
+	# balloon_fetch.gd): her answer to his reply is an action, chosen by her from what he said.
+	var fetch: Node = get_tree().root.find_child("BalloonFetch", true, false) if is_inside_tree() else null
+	if fetch != null and id == "cherry_berry" and bool(fetch.call("asking")):
+		if "use" not in row.caps: row.caps.append("use")
+		var answers: Array = (row.keys.get("stations", []) as Array).duplicate()
+		answers.append_array(BALLOON_ANSWER_IDS)
+		row.keys["stations"] = answers
+		row.lines.append("- You came to take the hot-air balloon back to its pad and asked Anon whether he is still using it. When he answers, act on what he means: [use: balloon_take_home] to take it home now (he is done with it, or does not mind), [use: balloon_leave_it] to leave it where it is with him for now (he still needs it), or [use: balloon_wait] to come back for it in a few hours (he wants a little longer). If he never answers, you take it home.")
+	# [use: balloon_fetch] (balloon_fetch.gd fetch_now): the balloon is out on the ground, away from its pad; she can go
+	# and bring it home when Anon tells her where it is or asks her to.
+	var away: Dictionary = fetch.call("fetchable") if fetch != null and id == "cherry_berry" and not bool(fetch.call("asking")) else {}
+	if not away.is_empty():
+		if "use" not in row.caps: row.caps.append("use")
+		var fetch_ids: Array = (row.keys.get("stations", []) as Array).duplicate()
+		fetch_ids.append(BALLOON_FETCH_ID)
+		row.keys["stations"] = fetch_ids
+		row.lines.append("- Your hot-air balloon is not on its pad: it stands on the ground about %d m away from it. When you mean to go and bring it home (Anon tells you where it is, or asks you to), use [use: balloon_fetch] and you go to it and %s. Saying you will fetch it is not fetching it, and a plain go_to only takes you there." % [int(away.metres), "walk it home on its rope" if bool(away.walk) else "fly it home"])
+	if is_instance_valid(actor) and id in BALLOON_PILOTS and is_inside_tree():
+		var flying: Script = load(FLY_BALLOON)
+		var why: String = flying.call("ride_refusal", get_tree(), id)
+		if why.is_empty():
+			if "use" not in row.caps: row.caps.append("use")
+			var listed: Array = (row.keys.get("stations", []) as Array).duplicate()
+			listed.append_array(BALLOON_RIDE_IDS)
+			row.keys["stations"] = listed
+			row.lines.append("- You fly Ponyville's hot-air balloon: if Anon asks for a ride and you agree, use [use: balloon_ride]. You walk to it, he climbs into the basket after you, and you fly him over Ponyville and land again.")
+		else:
+			row.lines.append("- No balloon ride is possible right now (%s); if Anon asks for one, tell him kindly." % why)
 	# [ask] (asks/asks.gd): one open favour at a time; her open one is her line.
 	if asks != null:
 		var open_line: String = asks.prompt_note(id)
@@ -159,6 +209,23 @@ func invalidate(id := "") -> void:
 ## Runs a validated mechanic action. {"status": "completed"|"failed"|"accepted", "reason"}.
 func dispatch(id: String, actor: Node3D, action: Dictionary) -> Dictionary:
 	var type := str(action.get("type", ""))
+	if type == "use" and str(action.get("station_id", "")) in BALLOON_ANSWER_IDS:
+		var asker: Node = get_tree().root.find_child("BalloonFetch", true, false)
+		if asker == null or not bool(asker.call("asking")): return {"status": "failed", "reason": "Nothing to answer about the balloon now"}
+		var choice: String = {"balloon_take_home": "take", "balloon_leave_it": "leave", "balloon_wait": "later"}[str(action.station_id)]
+		asker.call("_answered", choice)
+		invalidate(id)
+		return {"status": "completed", "reason": {"take": "You are taking the balloon home to its pad now", "leave": "You leave the balloon with Anon for now; you will not come for it again until tomorrow",
+			"later": "You will come back for the balloon in a few hours"}[choice]}
+	if type == "use" and str(action.get("station_id", "")) == BALLOON_FETCH_ID and id == "cherry_berry":
+		var fetcher: Node = get_tree().root.find_child("BalloonFetch", true, false)
+		var went: Dictionary = fetcher.call("fetch_now", get_tree()) if fetcher != null else {"status": "failed", "reason": "Not possible right now"}
+		invalidate(id)
+		return went
+	if type == "use" and str(action.get("station_id", "")) in FOUNTAIN_IDS:
+		var drink: Dictionary = (load(FOUNTAIN_VISIT) as Script).call("drink_now", get_tree(), id)
+		invalidate(id)
+		return drink
 	var result: Dictionary = {"status": "failed", "reason": "No mechanic handles %s yet." % (type if not type.is_empty() else "that")}
 	match type:
 		"give":
@@ -166,7 +233,9 @@ func dispatch(id: String, actor: Node3D, action: Dictionary) -> Dictionary:
 		"offer_job":
 			if jobs != null: result = jobs.hire(str(action.get("job_id", "")), id)
 		"use":
-			if stations != null: result = stations.request_use(id, str(action.get("station_id", "")))
+			if str(action.get("station_id", "")) in BALLOON_RIDE_IDS and id in BALLOON_PILOTS:
+				result = (load(FLY_BALLOON) as Script).call("request_ride", get_tree(), id)
+			elif stations != null: result = stations.request_use(id, str(action.get("station_id", "")))
 		"ask":
 			if asks != null: result = _dispatch_ask(id, action)
 		"invite":

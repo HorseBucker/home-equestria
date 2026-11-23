@@ -26,8 +26,14 @@ static func wall(id: String) -> bool:
 static func sizes(id: String) -> Array:
 	return PRINT_SIZES if REGISTRY.is_photo(REGISTRY.art_id(id)) else [1.0]
 
+## A thing kept in the Town Hall's storage chest (Ponyville overhaul, world/props/town_chest/chest_store.gd): any
+## item may be "set out" there, where it never has a body in the world.
+const CHEST_HOME := "town_hall_chest"
+
 static func valid_loan(loan: Dictionary) -> bool:
 	if not loan.has("furnishing_home"): return true
+	if str(loan.furnishing_home) == CHEST_HOME:
+		return loan.has("world_transform") and not loan.get("equipped", false) and not loan.has("furnishing_size")
 	if loan.has("furnishing_size"):
 		var size: Variant = loan.furnishing_size
 		if not (size is float or size is int) or not float(size) in sizes(str(loan.get("id", ""))): return false

@@ -10,8 +10,26 @@ const TABLES_PATH := "res://world/life/day/day_tables.json"
 ## table in file-name order: "actions", "targets" and "reasons" add or replace whole rows,
 ## "overrides" merge per pony. Read once, with the main table.
 const EXTRA_DIR := "res://world/life/day/tables/"
-const MERGED_KEYS := ["actions", "targets", "reasons"]
+## "routines" (play test 2026-11-16, tables/routines.json): fixed daily steps at set hours, such as
+## school, the Crusaders' meet-up and Carrot Top's fields (see _routines).
+const MERGED_KEYS := ["actions", "targets", "reasons", "routines"]
+## The week: the legacy schedules' day names (world/ai/pony_schedule.gd DAYS), on the clock's day
+## counter (day 0 is a Sunday). Derived from the day alone, so nothing new is saved.
+const DAYS := ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+## No school in the Hearth's Warming holidays (world/mechanics/data/events.json, deep winter).
+const SCHOOL_HOLIDAYS := ["hearths_warming"]
 static var _tables := {}
+
+static func weekday_name(day: int) -> String:
+	return DAYS[posmod(day, DAYS.size())]
+
+## Monday to Friday, outside the winter holidays (`events`: today's town event ids, as info.events).
+static func school_day(day: int, events: Array = []) -> bool:
+	var weekday := posmod(day, DAYS.size())
+	if weekday == 0 or weekday == 6: return false
+	for holiday: String in SCHOOL_HOLIDAYS:
+		if holiday in events: return false
+	return true
 
 static func tables() -> Dictionary:
 	if _tables.is_empty():
@@ -52,6 +70,8 @@ static func merge_table(into: Dictionary, extra: Variant) -> void:
 ## optional)}. Returns [{action, handler, target, item, reason, posture, minutes,
 ## start, until, night}], ordered by start hour.
 static func roll(id: String, day: int, info: Dictionary) -> Array:
+	info = info.duplicate()
+	info.day = day   # for when.school_day
 	var t := tables()
 	var d: Dictionary = t.get("day", {})
 	var rng := RandomNumberGenerator.new()
@@ -78,7 +98,65 @@ static func roll(id: String, day: int, info: Dictionary) -> Array:
 		step.until = minf(at + window, bed)
 		card.append(step)
 		previous = str(step.action)
-	return card
+	return _routines(id, day, card, info)
+
+## The routine rows that fit her today (play test 2026-11-16: school on weekdays, the Crusaders'
+## clubhouse, Carrot Top's fields), put into the rolled card: rolled steps overlapping one are
+## dropped, the card stays ordered by start. A routine step starts at "start", may still begin until
+## "until" (a late pupil still goes) and its handler ends it at "end" (card hours). Rolled with their
+## own seed, so the rolled steps of a pony without routines are exactly what they were.
+## Row: {handler, target, phrase, reasons, start, until, end, when, role?, members?, places?}.
+## "places": [{"id", "label", "ideas"?}], one picked per day for everypony alike (step.goal, step.item, and one of its
+## "ideas" as step.idea). "chance": the share of days the row happens at all, the same roll for everypony on it
+## (2026-11-18 play test: the Crusaders went crusading every day).
+static func _routines(id: String, day: int, card: Array, info: Dictionary) -> Array:
+	var rows: Variant = tables().get("routines", {})
+	if not rows is Dictionary or (rows as Dictionary).is_empty(): return card
+	var fixed: Array = []
+	var keys: Array = (rows as Dictionary).keys()
+	keys.sort()
+	for key: String in keys:
+		var row: Variant = rows[key]
+		if not row is Dictionary or str(key).begins_with("_"): continue
+		var r: Dictionary = row
+		if not _fits(r.get("when", {}), id, info): continue
+		if r.has("chance"):
+			var roll := RandomNumberGenerator.new()
+			roll.seed = hash("routine_chance:%s:%d" % [key, day])   # the same for every member
+			if roll.randf() >= float(r.chance): continue
+		var start := float(r.get("start", 8.0))
+		var end := float(r.get("end", start + 1.0))
+		if end > float(info.get("bed", 24.0)): continue
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash("routine:%s:%s:%d" % [key, id, day])
+		var reasons: Array = tables().get("reasons", {}).get(str(r.get("reasons", "")), []).map(func(x): return str(x.text) if x is Dictionary else str(x))
+		var step := {"action": key, "handler": str(r.get("handler", key)), "target": str(r.get("target", "")), "item": "",
+			"reason": str(reasons[rng.randi_range(0, reasons.size() - 1)]) if not reasons.is_empty() else "",
+			"posture": "stand", "minutes": (end - start) * 60.0, "start": start, "until": float(r.get("until", start + 1.0)),
+			"end": end, "night": false, "phrase": str(r.get("phrase", key)), "routine": true, "role": str(r.get("role", ""))}
+		if r.get("members") is Array: step.members = (r.members as Array).duplicate()
+		var places: Variant = r.get("places")
+		if places is Array and not (places as Array).is_empty():
+			var pick := RandomNumberGenerator.new()
+			pick.seed = hash("routine_place:%s:%d" % [key, day])   # the same for every member
+			var place: Variant = places[pick.randi_range(0, (places as Array).size() - 1)]
+			if place is Dictionary:
+				step.goal = str((place as Dictionary).get("id", ""))
+				step.item = str((place as Dictionary).get("label", ""))
+				var ideas: Variant = (place as Dictionary).get("ideas")
+				if ideas is Array and not (ideas as Array).is_empty(): step.idea = str(ideas[pick.randi_range(0, (ideas as Array).size() - 1)])
+			step.places = (places as Array).duplicate()   # the handler's fall-backs when the pick is not loaded
+		fixed.append(step)
+	if fixed.is_empty(): return card
+	var out: Array = []
+	for step: Dictionary in card:
+		var clash := false
+		for f: Dictionary in fixed:
+			if float(step.start) < float(f.end) and float(step.until) > float(f.start): clash = true; break
+		if not clash: out.append(step)
+	out.append_array(fixed)
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.start) < float(b.start))
+	return out
 
 static func _roll_step(id: String, hour: float, bed: float, previous: String, info: Dictionary, rng: RandomNumberGenerator) -> Dictionary:
 	var t := tables()
@@ -144,6 +222,11 @@ static func _fits(when: Dictionary, id: String, info: Dictionary) -> bool:
 			if not available.get(kind.trim_prefix("spot:"), false): return false
 	if when.has("wings") and bool(when.wings) != bool(info.get("wings", false)): return false
 	if when.has("horn") and bool(when.horn) != bool(info.get("horn", false)): return false
+	# Foals (their identity's filly flag, day_runner._traits) and school days (play test 2026-11-16).
+	if when.has("filly") and bool(when.filly) != bool(info.get("filly", false)): return false
+	if when.has("school_day") and info.has("day"):
+		var events: Array = info.get("events", []) if info.get("events") is Array else []
+		if bool(when.school_day) != school_day(int(info.day), events): return false
 	if when.has("only_id") and id not in when.only_id: return false
 	if when.has("not_id") and id in when.not_id: return false
 	# The shared mechanics (docs/MECHANICS_ARCHITECTURE_2026_11_01.md 10.1): today's season, town
@@ -163,5 +246,6 @@ static func _fits(when: Dictionary, id: String, info: Dictionary) -> bool:
 static func describe(step: Dictionary, label: Callable) -> String:
 	var text := str(step.phrase).replace("{target}", str(label.call(step.target)) if not str(step.target).is_empty() else "")
 	text = text.replace("{item}", str(step.item))
+	text = text.replace("{idea}", str(step.get("idea", "")) if str(step.get("idea", "")) != "" else "whatever comes to mind")
 	if not str(step.reason).is_empty(): text += " " + str(step.reason)
 	return text

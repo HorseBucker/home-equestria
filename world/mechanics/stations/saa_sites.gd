@@ -9,7 +9,7 @@ const PLOT := preload("res://world/mechanics/stations/planting_plot.gd")
 const PRESS := preload("res://world/mechanics/stations/cider_press.gd")
 const STAND := preload("res://world/mechanics/jobs/cider_stand.gd")
 ## The press stands beside the farm's cider barrels, between the barn and the Apple family house.
-const PRESS_AT := Vector3(42.5, 0.0, -447.0)
+const PRESS_AT := Vector3(-17.516, 0.0, 23.237)
 const CHECK := 2.0
 var hub: Node
 var plot: Node3D

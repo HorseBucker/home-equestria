@@ -9,6 +9,8 @@ const FACE_TAGS := preload("res://world/ai/pony_dialogue_tags.gd")
 const VARIETY := preload("res://world/ai/dialogue_variety.gd")
 const INTENT := preload("res://world/ai/pony_intent_consistency.gd")
 const SENTENCES := preload("res://world/ai/speech_sentences.gd")
+const SCHEMA := preload("res://world/ai/pony_action_schema.gd")
+const PLACE_DIRECTORY := preload("res://world/navigation/place_directory.gd")
 const AMBIENT_BUDGET := preload("res://world/ai/ambient_budget.gd")
 const CHATTINESS := preload("res://world/ai/chattiness.gd")
 const CHATTER := preload("res://world/ai/chatter_topics.gd")
@@ -29,6 +31,13 @@ const CHAT_PARTNER_SECONDS := 120.0
 
 var host: Node
 var _ambient_roll_wait := 1.0
+## School lessons (2026-11-18 play test: "It'd be cute if Cheerilee would actually teach the class once they're all
+## there. The AI should just come up with something for her to teach."): with the class in the schoolyard
+## (school.gd "school_class") and Anon near enough to hear, one exchange every LESSON_EVERY real seconds is a lesson
+## Cheerilee leads, on a topic she picks, instead of the pupils' own chatter.
+const LESSON_EVERY := 150.0
+const LESSON_PUPILS := 3
+var _last_lesson := -INF
 var _heard_serial := 0
 ## Why the exchange stopped being valid (empty while valid), and why the last group reply was not
 ## played: printed to the log, read by tools/ai/test_group_reply_drops.gd.
@@ -451,8 +460,130 @@ func _on_group_reply(text: String, error: String, turn: int) -> void:
 		var speakers := {}
 		for beat: Dictionary in decoded.beats: speakers[beat.speaker_id] = true
 		if host.group.members.size() > 1 and speakers.size() == 1 and host._repair_response(text, "Only one pony speaks. Write the whole conversation: the pony she addresses answers on the very next line, and each participant speaks at least once.", true): return
+	_travel_together(decoded.beats, contexts, turn)
 	host.group.beats = voiced_beats(SENTENCES.expand(decoded.beats))
 	_start_script()
+
+
+## Ponies who agree to go somewhere together go together (2026-11-22 play test: Aloe said "Come, let us walk on toward
+## the fountain" and went, while Flitter stood there; Fluttershy asked Big Mac to walk to Hayburger, he agreed and
+## followed her, and she never set off). A reply's moves are matched up before its lines play:
+## - a pony who sets off for a place while inviting the others (her own words: "let's", "come", "shall we" ... or the
+##   schema's invitation patterns) is followed by each other pony there with no move of her own who did not decline;
+## - a pony followed by another while she has no move of her own walks to the place she named in her lines.
+## The added moves are silent travel beats, validated and committed like any other (pony_action_coordinator.gd).
+const INVITING := "\\b(let'?s|let us|come( on| along| with)?|shall we|with me|together|join me|walk with|want to (go|walk|come)|would you (like|want) to)\\b"
+const DECLINING := "\\b(no thanks|not now|maybe later|another time|rather not|i can'?t|i cannot|i'?ll pass|go on without|you go ahead)\\b"
+
+## Ponies who walked somewhere together talk once they are there (2026-11-22 play test: Derpy and Aloe walked to the
+## spa together, "then they got there and just stood outside and said nothing"). _arrival_chat (from _tick_ambient):
+## the leader stopped near the place, her companion beside her: a short ambient exchange about being there.
+var _arrivals: Array = []      # {leader, follower, place, since}
+const ARRIVAL_WAIT := 420.0    # seconds a trip may take before the chat is forgotten
+const ARRIVAL_NEAR := 14.0     # metres from the place's anchor (place_spread.gd spots lie up to 12 m out)
+
+func _arrival_chat() -> bool:
+	if _arrivals.is_empty(): return false
+	var now: float = host._now()
+	_arrivals = _arrivals.filter(func(a: Dictionary) -> bool: return now - float(a.since) < ARRIVAL_WAIT)
+	for trip: Dictionary in _arrivals:
+		var leader: Variant = host.characters.get(str(trip.leader), {}).get("node")
+		var follower: Variant = host.characters.get(str(trip.follower), {}).get("node")
+		if not leader is CharacterBody3D or not follower is CharacterBody3D or not is_instance_valid(leader) or not is_instance_valid(follower): continue
+		var place := PLACE_DIRECTORY.resolve(host.get_tree(), str(trip.place))
+		if not place.is_finite(): continue
+		var there := Vector2((leader as Node3D).global_position.x - place.x, (leader as Node3D).global_position.z - place.z).length() < ARRIVAL_NEAR
+		var settled := (leader as CharacterBody3D).velocity.length() < 0.3 and (follower as Node3D).global_position.distance_to((leader as Node3D).global_position) < 4.5
+		if not there or not settled: continue
+		var label := str(PLACE_DIRECTORY.find(host.get_tree(), str(trip.place)).get("label", str(trip.place).trim_prefix("landmark:").replace("_", " ")))
+		var request := "%s and %s have just walked to %s together and arrived. They talk briefly about being there: what they came for, what they see or plan to do now, picking up from their walk over." % [
+			str(trip.leader).replace("_", " ").capitalize(), str(trip.follower).replace("_", " ").capitalize(), label]
+		# there: her following ends (a pony still following may not start a chat: pony_ambient_chatter.gd eligible)
+		var executors: Variant = (host.actions as Object).get("executors") if host.actions != null else null
+		var executor: Variant = (executors as Dictionary).get(str(trip.follower)) if executors is Dictionary else null
+		if is_instance_valid(executor) and not ((executor as Object).get("movement") as Dictionary).is_empty() and (executor as Object).has_method("_end_move"):
+			(executor as Object).call("_end_move", "completed", "Arrived at %s together with %s" % [label, str(trip.leader).replace("_", " ").capitalize()])
+		_arrivals.erase(trip)
+		if request_scene([str(trip.leader), str(trip.follower)], request):
+			print("[ai] %s and %s arrived at %s together: they talk" % [trip.leader, trip.follower, label])
+			return true
+		print("[ai] %s and %s arrived at %s together (no chat now: not in earshot or the town is busy talking)" % [trip.leader, trip.follower, label])
+		return false
+	return false
+
+
+func _travel_together(beats: Array, contexts: Dictionary, turn: int) -> void:
+	var ponies: Array = []
+	for id: String in host.group.members:
+		if id != "player" and contexts.has(id): ponies.append(id)
+	if ponies.size() < 2: return
+	var inviting := RegEx.create_from_string("(?i)" + INVITING)
+	var declining := RegEx.create_from_string("(?i)" + DECLINING)
+	var moves := {}
+	var words := {}
+	for beat: Dictionary in beats:
+		var who := str(beat.speaker_id)
+		words[who] = str(words.get(who, "")) + " " + str(beat.get("speech", ""))
+		for action: Dictionary in beat.get("actions", []):
+			if str(action.get("type", "")) in ["go_to", "lead", "follow", "fly_to", "go_home"]: moves[who] = action
+	var i := 0
+	while i < beats.size():
+		var beat: Dictionary = beats[i]
+		var who := str(beat.speaker_id)
+		# a follower whose leader is not going anywhere: the leader goes where she said
+		for action: Dictionary in beat.get("actions", []):
+			var leader := str(action.get("target_id", ""))
+			if str(action.get("type", "")) != "follow" or not leader in ponies or moves.has(leader): continue
+			var place := ""
+			for said: Dictionary in beats:
+				if str(said.speaker_id) != leader: continue
+				var spoken: Dictionary = SCHEMA._spoken_place(str(said.get("speech", "")), contexts[leader])
+				if not str(spoken.place).is_empty(): place = str(spoken.place)
+				elif place.is_empty(): place = _named_place(str(said.get("speech", "")), contexts[leader])
+			if place.is_empty(): continue
+			var go := {"id": "t%d-together-%s" % [turn, leader], "type": "go_to", "location_id": place, "pace": "walk"}
+			beats.insert(i, {"speaker_id": leader, "listener_id": who, "speech": "", "actions": [go], "silent_travel": true})
+			moves[leader] = go
+			print("[ai] %s goes to %s: %s follows her there" % [leader, place, who])
+			i += 1
+		# a pony setting off with an invitation: the others with no move of their own come along
+		var own: Dictionary = moves.get(who, {})
+		if str(own.get("type", "")) == "go_to" and own in beat.get("actions", []):
+			var spoken: Dictionary = SCHEMA._spoken_place(str(beat.get("speech", "")), contexts[who])
+			if bool(spoken.get("invite", false)) or inviting.search(str(beat.get("speech", ""))) != null:
+				for other: String in ponies:
+					if other == who or moves.has(other) or declining.search(str(words.get(other, ""))) != null: continue
+					var follow := {"id": "t%d-together-%s" % [turn, other], "type": "follow", "target_id": who, "formation": "right", "distance_m": 1.5}
+					beats.insert(i + 1, {"speaker_id": other, "listener_id": who, "speech": "", "actions": [follow], "silent_travel": true})
+					moves[other] = follow
+					print("[ai] %s comes along with %s to %s" % [other, who, str(own.get("location_id", ""))])
+					i += 1
+		i += 1
+	for follower: String in moves:
+		var move: Dictionary = moves[follower]
+		var leader := str(move.get("target_id", ""))
+		if str(move.get("type", "")) != "follow" or not leader in ponies: continue
+		var trip: Dictionary = moves.get(leader, {})
+		if str(trip.get("type", "")) != "go_to" or str(trip.get("location_id", "")).is_empty(): continue
+		_arrivals = _arrivals.filter(func(a: Dictionary) -> bool: return str(a.leader) != leader and str(a.follower) != follower)
+		_arrivals.append({"leader": leader, "follower": follower, "place": str(trip.location_id), "since": host._now()})
+
+
+## A place of hers named anywhere in a line ("would you maybe want to walk to Hayburger?"): the longest label found.
+static func _named_place(line: String, context: Dictionary) -> String:
+	var lowered := " "
+	for c in line.to_lower(): lowered += c if (c >= "a" and c <= "z") or (c >= "0" and c <= "9") or c == "'" else " "
+	lowered += " "
+	var labels: Dictionary = context.get("place_labels", {})
+	var best := ""
+	var best_size := 0
+	for id: Variant in context.get("locations", []):
+		var label := str(labels.get(id, "")).to_lower().strip_edges()
+		for name: String in [label, label.trim_prefix("the ")]:
+			if name.length() < 4 or name.length() <= best_size: continue
+			if lowered.contains(" " + name + " "):
+				best = str(id); best_size = name.length()
+	return best
 
 
 func _next_group_beat() -> void:
@@ -617,11 +748,13 @@ func _tick_ambient(delta: float) -> void:
 	_ambient_roll_wait = 1.0 # No accumulated dice or request burst after a stalled frame.
 	if not bool(host.config.get_value("group_conversations/ambient",true)) or not preload("res://world/ai/ai_config.gd").background_allowed(host.config) or not is_instance_valid(host.player_head) or not host.player_head.is_inside_tree(): return
 	if not host.ambient_budget.available(): return
+	if _arrival_chat(): return
 	if not host._ambient_continuation.is_empty():
 		var company: Array = host._ambient_continuation.duplicate(); host._ambient_continuation.clear()
 		if host._now()-host._ambient_continued_at < 150.0 and host._ambient_audible(company,45.0) and company.all(func(id): return not host._authored_holds(str(id)) and host.characters.has(id) and host.ambient_chatter.eligible(host.characters[id].node,host.player_head,45.0)):
 			host._current = company[0]; host._turn_id += 1; host._player_text = ""; host._rewrite_used = false
 			_begin_group(company,true); return
+	if _lesson(): return
 	var chance := clampf(float(host.config.get_value("group_conversations/ambient_chance_per_pony_second",.012)),0.0,1.0)
 	# Time of day and the player's chattiness setting (world/ai/chattiness.gd).
 	var clock: Node = host.get_node_or_null("/root/TimeOfDay")
@@ -639,6 +772,58 @@ func _tick_ambient(delta: float) -> void:
 	host._player_text = ""
 	host._rewrite_used = false
 	_begin_group(ids, true)
+
+
+## A scripted moment among ponies a day step asks for (the Crusaders planning their crusade, crusade.gd): an
+## exchange among `ids` written to `request`, when the director is free and Anon near enough to hear; else nothing.
+func request_scene(ids: Array, request: String) -> bool:
+	var members: Array[String] = []
+	for id: Variant in ids:
+		if host.characters.has(str(id)) and not host._authored_holds(str(id)) and host.ambient_chatter.eligible(host.characters[str(id)].node, host.player_head, 45.0): members.append(str(id))
+	if members.size() < 2 or host.state != "idle" or host.group.active() or not is_instance_valid(host.player_head) or not host.ambient_budget.available(): return false
+	if not host._ambient_audible(members, 30.0): return false
+	host._current = members[0]; host._turn_id += 1; host._player_text = ""; host._rewrite_used = false
+	host._group_request = request
+	_begin_group(members, true)
+	return host.group.active()
+
+
+## A lesson when a class is in session near Anon: the teacher and the seated pupils nearest her (the group's size).
+func _lesson() -> bool:
+	if host._now() - _last_lesson < LESSON_EVERY: return false
+	var teacher := ""
+	var school := 0
+	for id: String in host.characters:
+		var node: Variant = host.characters[id].node
+		if not is_instance_valid(node) or not (node as Node).has_meta("school_class"): continue
+		var row: Dictionary = (node as Node).get_meta("school_class")
+		if str(row.get("role", "")) == "teacher": teacher = id; school = int(row.get("school", 0)); break
+	if teacher == "" or host._authored_holds(teacher) or not host.ambient_chatter.eligible(host.characters[teacher].node, host.player_head, 30.0): return false
+	var at: Vector3 = (host.characters[teacher].node as Node3D).global_position
+	var pupils: Array = []
+	for id: String in host.characters:
+		var node: Variant = host.characters[id].node
+		if id == teacher or not is_instance_valid(node) or not (node as Node).has_meta("school_class"): continue
+		var row: Dictionary = (node as Node).get_meta("school_class")
+		if str(row.get("role", "")) != "pupil" or int(row.get("school", 0)) != school or host._authored_holds(id): continue
+		if not host.ambient_chatter.eligible(node, host.player_head, 30.0): continue
+		pupils.append([(node as Node3D).global_position.distance_to(at), id])
+	if pupils.size() < LESSON_PUPILS: return false
+	pupils.sort()
+	var ids: Array[String] = [teacher]
+	for pair: Array in pupils.slice(0, GROUP.MAX_MEMBERS - 1): ids.append(str(pair[1]))
+	if not host._ambient_audible(ids, 30.0): return false
+	_last_lesson = host._now()
+	host._current = teacher; host._turn_id += 1; host._player_text = ""; host._rewrite_used = false
+	host._group_request = ("School is in session in the schoolyard, and %s is teaching her class. Write the lesson now, all at once. She chooses one " +
+		"thing foals at school in Ponyville would learn (anything that fits: a bit of Equestrian history, nature, counting or simple sums, " +
+		"spelling, manners, the seasons, a little science), and if she has taught something earlier today she carries on from it or moves to " +
+		"the next thing. She teaches it in her own warm way: she explains, asks the class a question or two, the pupils answer (some right, " +
+		"some wrong or silly, each in character) and she responds. Script every line in speaking order, %s leading; about 4 to 8 short " +
+		"lines. Mark each line [to: listener_id]. Continue only from completed shared speech. Anon being nearby is not a cue to greet or " +
+		"address him.") % [teacher, teacher]
+	_begin_group(ids, true)
+	return true
 
 
 func _ambient_radius() -> float:

@@ -20,6 +20,15 @@ const REPLIES := {
 		"Thank you for writing, I suppose. Next time, maybe put a little more thought into it.",
 		"I read your letter. It was a bit hard to follow. If there is something you want to tell me, just come and say it."]}
 const NOTES := {
+	# (Ponyville overhaul 2026-11-19 play test: a pony asking a favour wrote "hopeful", which had no lines of its own,
+	# and her note borrowed a reply's: "I got your letter this morning", to a letter Anon never sent. A note she
+	# writes on her own never mentions a letter of his.)
+	"hopeful": [
+		"I hope you are doing well. I was wondering if you could lend me a hoof with something soon. Come and find me when you have a moment!",
+		"I have a little favour to ask, if you have the time. Come and see me when you can. It would mean a lot!"],
+	"neutral": [
+		"I was thinking of you today and wanted to say hello. I hope Ponyville is treating you well!",
+		"Just a quick note to say hello. Come by and visit when you have a moment."],
 	"annoyed": [
 		"I waited for you like we agreed, and you never came. I hope you had a good reason. Next time, please tell me if you can't make it.",
 		"I was there at the time we agreed and waited, but you didn't show up. That wasn't very nice. I'd like to hear why."],
@@ -47,9 +56,12 @@ static func reply(her_name: String, his_name: String, score: int, seed: String, 
 	return "Dear %s,\n%s\n%s\n%s" % [his_name if not his_name.is_empty() else "Anon", body, CLOSINGS[t], her_name]
 
 ## A note she writes on her own, in `mood` (annoyed, sad, happy; anything else reads neutral).
-static func note(her_name: String, mood: String, seed: String) -> String:
-	var options: Array = NOTES.get(mood, REPLIES.neutral)
+static func note(her_name: String, mood: String, seed: String, about := "") -> String:
+	var options: Array = NOTES.get(mood, NOTES.neutral)
 	var body: String = options[_roll(seed, options.size())]
+	# a favour (asks.gd): say what it is
+	if about.begins_with("favour: "):
+		body = "Could you lend me a hoof? I'd be so grateful if you could %s. Come and find me if you can. Thank you!" % about.trim_prefix("favour: ")
 	return "Dear Anon,\n%s\n%s\n%s" % [body, "Love," if mood == "happy" else "From,", her_name]
 
 ## {"place", "day", "time"} when the clean letter asks to meet with a day, a time and a place

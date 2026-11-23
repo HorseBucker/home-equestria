@@ -6,7 +6,7 @@ extends Node3D
 ##   fountain on the plaza (silent while iced over) · the windmill · chickens at the barn and at
 ##   Fluttershy's cottage · wind chimes at the cottage and the boutique on a breezy day ·
 ##   a hearth at the nearest lit house ·
-##   frogs at the nearest water on warm nights · an owl in a nearby tree at night ·
+##   frogs at the nearest water on warm nights · a soft brook along the nearest rivers · an owl in a nearby tree at night ·
 ##   the town bell on the hour · a rooster at dawn · a distant train now and then ·
 ##   a storm wind in a blizzard or gale · bees over the meadows and cicadas on hot afternoons ·
 ##   drips while snow thaws · sparrows in the town's trees by day · sleigh bells far off in winter.
@@ -26,13 +26,18 @@ extends Node3D
 const ENABLED := true
 const DIR := "res://world/audio/soundscape/"
 const GLOW := preload("res://world/buildings/window_glow/window_glow.gd")
-const TOWN := Vector3(117.0, 0.0, -164.0)
+const TOWN := Vector3(135.5, 0.0, -175.89)
 const STEP := 0.5
 const SILENT := -60.0
 
 ## Placed loops: name -> [file, world x, world z, volume dB, unit size, max distance].
+## The fountain's row position is only a placeholder: it plays at the Town Square fountain's water
+## (world/water/fountain_water.gd sound_point, found at run time since a town build may move it) and
+## is silent until that is found. Play test 2026-11-16 ("this water should be much quieter, or make
+## no sound, since it's not flowing like the rivers"): 10 dB down from -9 and a short reach (unit 5 -> 2,
+## gone by 14 m instead of 55), so it is only just heard beside the basin.
 const PLACED := {
-	"fountain": ["fountain", 244.0, -262.0, -9.0, 5.0, 55.0],
+	"fountain": ["fountain", 114.0, -189.4, -19.0, 2.0, 14.0],
 	"windmill": ["windmill", -190.0, -335.0, -10.0, 7.0, 70.0],
 	"chickens_barn": ["chickens", 20.0, -430.0, -13.0, 5.0, 45.0],
 	"chickens_cottage": ["chickens", 158.0, -4.0, -15.0, 5.0, 40.0],
@@ -49,12 +54,30 @@ const BEDS := {
 ## No bed plays inside a home (dev 2026-11-11: a clock ticked in the Mayor's house with no clock
 ## in the room, a fire crackled over empty hearths). A room sound needs a thing in the room that
 ## makes it, placed at that thing; until then a room is quiet.
-const BELL_AT := Vector3(105.0, 0.0, -216.0)
-const ROOSTER_AT := Vector3(13.0, 0.0, -440.0)
+const BELL_AT := Vector3(135.5, 0.0, -175.89)
+const ROOSTER_AT := Vector3(-27.4, 0.0, 51.52)
 const TRAIN_AT := Vector3(-700.0, 0.0, -330.0)
 ## Sparrow groups: how far one is heard, and the least distance between two groups (metres).
 const SPARROW_REACH := 48.0
 const SPARROW_APART := 9.0
+## The brook (2026-11-15, "quiet, subtle water-flow sound"): three voices of one synthesised loop
+## (tools/town_planner/build/make_stream_sound.py) glide to the nearest stretches of the rivers
+## (WorldWater.flow_streams, from world/water/ponyville_flow.json) within STREAM_NEAR metres of the
+## listener, at least STREAM_APART apart. Small sources: heard close, gone by STREAM_REACH.
+const STREAM_VOICES := 3
+## Third play test (2026-11-16): "only audible if you're standing in it". The first voices (unit 2.8 m,
+## -22 dB, gone by 22 m) were 11 dB down at 10 m from the bank. Now a wider source: full level out
+## to 6 m, about 5 dB down at 10 m and 12 dB at 20 m, never louder than its level when one stands in it.
+const STREAM_NEAR := 42.0
+const STREAM_APART := 14.0
+const STREAM_REACH := 40.0
+const STREAM_UNIT := 6.0
+## Play test 2026-11-16 ("decrease the volume of water just a bit"): 3 dB down from -17, same reach.
+## The loop was resynthesised the same day without its bubbles, at the same RMS.
+const STREAM_DB := -20.0
+## How far over its level a brook voice may rise close up (the bank at 4 m is 3.5 dB over; a bridge deck 2 m
+## above the water was 9.5 dB over, and three voices can be that near at a confluence).
+const STREAM_NEAR_GAIN_DB := 3.0
 
 var _ambience: Node3D
 var _rng := RandomNumberGenerator.new()
@@ -68,6 +91,7 @@ var _shots: Dictionary = {}      # name -> AudioStreamPlayer3D
 var _hearth: AudioStreamPlayer3D
 var _frogs: AudioStreamPlayer3D
 var _sparrows: Array = []        # AudioStreamPlayer3D, one per group
+var _streams: Array[AudioStreamPlayer3D] = []   # brook voices; meta "spot" = where each is gliding to
 var _sleigh_wait := 240.0
 var _seek_wait := 0.0
 var _owl_wait := 40.0
@@ -76,6 +100,7 @@ var _drip_wait := 8.0
 var _last_hour := -1
 var _weather: Node
 var _seasons: Node
+var _fountain: Node3D
 
 
 func _ready() -> void:
@@ -112,6 +137,20 @@ func _ready() -> void:
 		# -17 dB measured 7 dB under the night's crickets on a recording of the square; a town at
 		# noon is at least as present as a field at night.
 		_register("sparrows_%d" % index, group, -12.0 - 2.0 * index)
+	for index: int in STREAM_VOICES:
+		var voice := _spatial("stream", true, bus, STREAM_UNIT, STREAM_REACH)
+		if voice == null: continue
+		# Never louder than its own level (play test 2026-11-16: "too loud when going over it on a bridge"). The
+		# engine's cap, max_db, is on the level after distance: at 0 dB it let a voice 2 m under a bridge play
+		# 9 dB over its level (inverse distance: unit 6 m / 2 m). _process keeps the cap STREAM_NEAR_GAIN_DB over the
+		# voice's level: flat from about 4 m inward; beyond that nothing changes.
+		voice.set_meta("flat_near", true)
+		voice.max_db = SILENT
+		# One loop three times over must not sound like one: its own pitch and its own place in the loop.
+		voice.pitch_scale = [0.95, 1.03, 1.1][index % 3]
+		voice.set_meta("spread_start", true)
+		_streams.append(voice)
+		_register("stream_%d" % index, voice, STREAM_DB - 1.0 * index)
 	for name: String in ["owl", "bell", "rooster", "train_distant", "train_whistle", "droplets", "sleigh_bells"]:
 		var shot := _spatial(name, false, bus, 12.0, 400.0)
 		if shot != null: _shots[name] = shot
@@ -155,6 +194,12 @@ func _process(delta: float) -> void:
 		_decide()
 		# The targets may have moved; one pass also restarts a loop that stopped on its own.
 		_settled = false
+	# Brook voices glide toward their spots (a few metres a second; a jump would be heard as one).
+	for voice: AudioStreamPlayer3D in _streams:
+		if not voice.has_meta("spot"): continue
+		var spot: Vector3 = voice.get_meta("spot")
+		if voice.global_position.distance_squared_to(spot) > 0.01:
+			voice.global_position = voice.global_position.lerp(spot, 1.0 - exp(-delta * 1.2))
 	# Every loop sits at its target: nothing to fade until the next decision.
 	if _settled: return
 	_settled = true
@@ -171,8 +216,12 @@ func _process(delta: float) -> void:
 		if level <= SILENT + 0.01:
 			if playing: player.call("stop")
 			continue
-		if not playing: player.call("play", _rng.randf() * 4.0)
+		if not playing:
+			var stream: AudioStream = player.get("stream")
+			var spread := player.has_meta("spread_start") and stream != null and stream.get_length() > 1.0
+			player.call("play", _rng.randf() * (stream.get_length() - 0.5 if spread else 4.0))
 		player.set("volume_db", level)
+		if player.has_meta("flat_near"): player.set("max_db", level + STREAM_NEAR_GAIN_DB)
 
 
 func _listener() -> Node3D:
@@ -230,12 +279,20 @@ func _decide() -> void:
 		if placed == null: continue
 		if placed.position.y == 0.0: placed.position = _ground(placed.position)
 		placed.max_distance = float((PLACED[name] as Array)[5]) * lerpf(1.0, 0.7, muffle)
-	_want("fountain", outdoor * hush * (1.0 - smoothstep(0.3, 0.7, ice)))
+	_want("fountain", outdoor * hush * (1.0 - smoothstep(0.3, 0.7, ice)) * (1.0 if _place_fountain() else 0.0))
 	_want("windmill", outdoor * hush * clampf(0.35 + gust, 0.0, 1.0))
 	var hens := outdoor * hush * smoothstep(0.25, 0.6, daylight) * (1.0 if dry else 0.0) * (0.6 if season == "winter" else 1.0)
 	_want("chickens_barn", hens); _want("chickens_cottage", hens)
 	var breeze := outdoor * hush * smoothstep(0.08, 0.5, gust)
 	_want("chimes_cottage", breeze); _want("chimes_boutique", breeze)
+	# The brook: like the fountain, silent under ice and turned down indoors; a voice with no river
+	# stretch near the listener is silent.
+	_place_streams(at)
+	var running := outdoor * hush * (1.0 - smoothstep(0.3, 0.7, ice))
+	for index: int in _streams.size():
+		var voice := _streams[index]
+		voice.max_distance = STREAM_REACH * lerpf(1.0, 0.7, muffle)
+		_want("stream_%d" % index, running if voice.has_meta("spot") else 0.0)
 
 	# Beds.
 	_want("storm_wind", outdoor * smoothstep(0.55, 1.0, gust))
@@ -345,6 +402,61 @@ func _place_sparrows(at: Vector3) -> void:
 			continue
 		group.global_position = where
 		group.set_meta("perch", true)
+
+
+## The brook voices' spots: the nearest point of the nearest river first, then the next nearest
+## river points at least STREAM_APART from every spot taken, all within STREAM_NEAR. Each voice
+## takes the spot nearest where it already is (so they do not swap sides); a voice that is silent
+## jumps straight there, one that is sounding glides (_process).
+func _place_streams(at: Vector3) -> void:
+	if _streams.is_empty(): return
+	var lines: Array[PackedVector3Array] = []
+	if is_instance_valid(WorldWater.instance): lines = WorldWater.instance.flow_streams
+	var flat := Vector2(at.x, at.z)
+	var near: Array = []   # [distance, point]
+	for line: PackedVector3Array in lines:
+		for i: int in line.size() - 1:
+			var a := line[i]
+			var b := line[i + 1]
+			var ab := Vector2(b.x - a.x, b.z - a.z)
+			var k := clampf((flat - Vector2(a.x, a.z)).dot(ab) / maxf(ab.length_squared(), 0.0001), 0.0, 1.0)
+			var p := a.lerp(b, k)
+			var d := Vector2(p.x, p.z).distance_to(flat)
+			if d <= STREAM_NEAR: near.append([d, p])
+	near.sort_custom(func(x: Array, y: Array) -> bool: return float(x[0]) < float(y[0]))
+	var spots: Array[Vector3] = []
+	for item: Array in near:
+		if spots.size() >= _streams.size(): break
+		var p: Vector3 = item[1]
+		var apart := true
+		for s: Vector3 in spots:
+			if Vector2(s.x - p.x, s.z - p.z).length() < STREAM_APART:
+				apart = false; break
+		if apart: spots.append(p + Vector3(0.0, 0.3, 0.0))
+	var free: Array[AudioStreamPlayer3D] = []
+	free.assign(_streams)
+	for spot: Vector3 in spots:
+		var best: AudioStreamPlayer3D = null
+		var best_d := INF
+		for voice: AudioStreamPlayer3D in free:
+			var d := voice.global_position.distance_squared_to(spot) if voice.has_meta("spot") else INF * 0.5
+			if best == null or d < best_d:
+				best = voice; best_d = d
+		free.erase(best)
+		if not best.has_meta("spot") or not best.playing: best.global_position = spot
+		best.set_meta("spot", spot)
+	for voice: AudioStreamPlayer3D in free:
+		voice.remove_meta("spot")
+
+
+## The fountain sound at the real fountain's water; false (silent) while no fountain is loaded.
+func _place_fountain() -> bool:
+	var placed := _loops.get("fountain") as AudioStreamPlayer3D
+	if placed == null: return false
+	if not is_instance_valid(_fountain): _fountain = get_tree().get_first_node_in_group("town_fountains") as Node3D
+	if not is_instance_valid(_fountain) or not _fountain.is_inside_tree() or not _fountain.has_method("sound_point"): return false
+	placed.global_position = _fountain.call("sound_point")
+	return true
 
 
 func _place_frogs(at: Vector3) -> void:

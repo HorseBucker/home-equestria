@@ -7,29 +7,26 @@
 script = ExtResource("2")
 
 [node name="goldenoaklibrary_01" parent="West/Library"]
-position = Vector3(-13.206, -13.163347, -254.363)
+position = Vector3(-15.5, -12.62, -267)
 scale = Vector3(2, 2, 2)
 
 [node name="snazzys_fluttershy_cottage_01" parent="Everfree/Fluttershy"]
-position = Vector3(151.0, -19.863147, -10.0)
+position = Vector3(407.9, -10.98, 1.08)
 
 [node name="henhouse_02" parent="Everfree/Fluttershy"]
-position = Vector3(133.0, -20.344723, 16.0)
+position = Vector3(428, -11.22, 11.5)
 
 [node name="rosecluster_2_01" parent="Everfree/Fluttershy"]
-position = Vector3(167.0, -18.690531, -26.0)
+position = Vector3(407.44, -11.675, -21.543)
 
 [node name="flower_cluster_01_small_01" parent="Everfree/Fluttershy"]
-position = Vector3(171.0, -19.658356, -2.0)
+position = Vector3(427.522, -11.202, -7.806)
 
 [node name="flower_cluster_01_large_01" parent="Everfree/Fluttershy"]
-position = Vector3(134.148998, -18.794775, -31.036011000000002)
-
-[node name="bush1_small_01" parent="Everfree/Fluttershy"]
-position = Vector3(123.0, -19.733178, -12.0)
+position = Vector3(378.055, -11.06, 3.862)
 
 [node name="schoolhouse_01" parent="South/School"]
-position = Vector3(28.0, -15.59692, -80.0)
+position = Vector3(30.5, -12.028, -50)
 
 [editable path="South/School"]
 
