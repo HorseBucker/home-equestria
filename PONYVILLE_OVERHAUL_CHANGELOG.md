@@ -2,6 +2,57 @@
 
 By HorseBucker. For Home: Equestria **0.3.1.2-maredev** only.
 
+## 1.0.1: fixes from the first player report
+
+- **Ponies home spot fixed.** Each pony's home spot, where she and her friends meet up, was set
+  wherever she happened to be standing the first time the game saw her, and kept for good. Some ended up in the
+  carrot fields and open country east of town (one 160 m from the pony's home), and other ponies kept gathering
+  there. They're now set by each pony's own front door (or where she stands, if that's in town), and a world from
+  before forgets the meeting spots it had out in the fields, once. A pony who ends up out of town with nowhere to go
+  heads back in instead of standing there waiting.
+- **Class at the schoolhouse after a night's sleep.** Sleeping from one school day's class into the next left the
+  first class open, and the two fought over the fillies every frame. The old class now ends. Sleeping also no longer
+  makes the game think a pony has been stuck all day and send her home.
+- **Everypony vanished with modChad's Pathfinding Fix installed.** Its pack clashes with the copy built into the
+  overhaul and left Ponyville with no navigation, so no pony could be placed. Its pack is now switched off when the
+  town loads (it isn't needed: everything it does is built in).
+- **Garden cypresses removed.** The tall bushes beside houses poked through the walls into the rooms, and looked out
+  of place next to the town's other trees.
+- **Changing the town density** no longer leaves a tree, bench or lamp standing inside your home when the setting
+  you switch to didn't have a house there.
+- **Sounds.** The windmill sound comes from the new windmills (both now), and the hens and wind chimes moved with the
+  barn, Fluttershy's cottage and the Carousel Boutique.
+- **Rivers and lakes, reworked.**
+  - The banks follow a smooth outline of the water, with a low lip rising out of it, so the waterline curves
+    naturally instead of stepping in a sawtooth. The bed slopes smoothly across every stream, so the narrow branches
+    are one stream instead of a string of puddles.
+  - The channels are a wide, gentle bowl rather than a ditch, and the roads beside them keep their level.
+  - A new stream bed under the water and a little way up the bank: light, sandy earth with fine grit, in place of
+    grass and of the game's blue river texture, fading softly into the grass.
+  - The water shows the bed through it tinted teal in the shallows and deepens to blue, fading in at its edge. The
+    shore has a faint soft edge instead of a hard white line, and the ripples are at stream scale and follow each branch round the forks.
+  - Reeds and cattails, shore grass and stones gather at the forks, bends and bridge ends, with smaller clusters
+    along the banks. They're batched like the gardens, so they cost little to draw.
+  - Every bridge's posts reach down into the stream bed.
+  - The lake beside the farmyard windmill has a proper bank instead of a straight cliff level with the water.
+  - Ponies may hesitate for a minute or two the first time, while the game maps the new banks.
+- **The spa's hoof file** is never put in the Town Hall chest. The spa always lays out its own, so a chested one
+  was a copy, and copies already in the chest are removed.
+- **Old saves:** gifts the ponies had set out in their old houses (Flower Gifts' bunches included) are set out again
+  in their new homes instead of going into the chest. With unfplap, its footstools in ponies' houses are let go and
+  it lays new ones in the new houses. This applies to worlds converted from now on. In a world already converted,
+  those things stay in the chest.
+- **Flower Gifts:** its town flower patches grow beside the new town's gardens, spread across the whole town, as
+  they grew beside the old town's. Never on a roof, inside a house, under water, or on a street, path or dirt road.
+  The snapdragons and moonflowers moved with the windmill and Fluttershy's cottage.
+- **Mailboxes.** Every real home now has exactly one red mailbox (a quarter had none), off the street and clear of
+  the door path, lamps, benches, trees and the neighbours' houses (one stood inside a lamp post), at every density.
+- **Anon's Mailbox:** the green mailbox takes the place of your house's own red mailbox, instead of standing out in
+  the street.
+- **Watch Party 1.2.0 and earlier:** the television stand and the remote's counter are in the market's white tent
+  instead of on a stream bank where the old market stood, and the vintage set lies at the Everfree's edge behind
+  Fluttershy's new cottage.
+
 ## 1.0.0: first release
 
 Ponyville is rebuilt from the ground up based on the official town map from Tails of Equestria. Everything below is a
@@ -140,8 +191,8 @@ A world started in the old town is brought over once, and a backup is kept in th
   is merged into the overhaul's copy of the same file, and does nothing without the mod.
 - **Pedal Copter.** It parks by Sugarcube Corner.
 - **Watch Party** places its TVs in the new town.
-- **modChad's Pathfinding Fix** is built in (route choice, house ceilings, crowd spacing by size). It's safe to leave
-  installed alongside.
+- **modChad's Pathfinding Fix** is built in (route choice, house ceilings, crowd spacing by size), so its own pack
+  isn't needed. Since 1.0.1, if it's installed anyway it is switched off when the town loads; you can remove it.
 - **Checked against the rest.** Every other bundled mod and the community mods tested (Queen Chrysalis, Cadance,
   Anonfilly, Mare Care, Fishing, Mailbox, Move In With Player, Pantyhose and others) work as they are.
 
@@ -156,7 +207,8 @@ A world started in the old town is brought over once, and a backup is kept in th
   - Fluttershy's Birdseed (the birdhouse grove);
   - Rainbow Dash's Rain Clouds (where Dash waits).
 
-  They need their coordinates updated. Other mods that put things at fixed spots in the old town may need the same.
+  They need their coordinates updated. Other mods that put things at fixed spots in the old town may need the same
+  (Flower Gifts and Anon's Mailbox are handled since 1.0.1).
 - **Mirror Pool with Pantyhose.** A few rendering errors were seen once in testing, and Pantyhose's shop items couldn't
   be sold. It's a load-order issue between those two mods.
 

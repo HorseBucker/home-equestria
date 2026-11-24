@@ -280,6 +280,25 @@ func _build_canals(doc: Dictionary) -> void:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var canals := _add_water(mesh, "PonyvilleCanals", false, Transform3D.IDENTITY, ICE_STILL)
+	# The town's streams over their stream bed (2026-11-24 play test: "Soften/feather the hard white shoreline border so
+	# the water edge blends naturally into the damp bank ... keeping a nice shallow-to-deep water color gradient"): the
+	# shore foam is a faint fade over the first 0.6 m of depth instead of a thin white line, and the colour deepens a
+	# little sooner, so the shallows show the bed and the middle reads as water.
+	var look := canals.material_override as ShaderMaterial
+	look.set_shader_parameter("foam_width", 0.4)
+	look.set_shader_parameter("foam_edge_softness", 1.0)
+	look.set_shader_parameter("foam_strength", 0.18)
+	# (lighter, clearer: 0.42, 0.66, 0.74 read dull over the deeper bed, 2026-11-24 third pass)
+	look.set_shader_parameter("shallow_tint", Color(0.55, 0.8, 0.9))
+	look.set_shader_parameter("shallow_tint_depth", 0.45)
+	# the toon pattern at stream scale (cells of about 5 m over the 800 m mesh, not 44 m: its white cells lay over
+	# whole stretches of a 3 m brook as milky patches), its white cells faint
+	look.set_shader_parameter("tile", Vector2(160.0, 160.0))
+	look.set_shader_parameter("pattern_foam", 0.3)
+	# its colour fades in over the first 25 cm of depth, so the blue does not stop short against the bank
+	look.set_shader_parameter("edge_fade", 0.25)
+	look.set_shader_parameter("water_depth_factor", 0.6)
+	look.set_shader_parameter("water_transparency", 0.8)
 	print("[water] Ponyville canals: ", tris.size() / 3, " triangles")
 	_apply_flow(canals.material_override as ShaderMaterial, cell * float(w))
 

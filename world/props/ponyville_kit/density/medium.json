@@ -3,30 +3,6 @@
 	"note": "Gardens of the town at this density (tools/town_planner/build/build_density.py): they replace placements.json's garden rows (group house:*, id *_ovNNNN) when the town is loaded at this setting.",
 	"entries": [
 		{
-			"blocking": true,
-			"group": "house:plot_002",
-			"id": "cypress_ovd0000",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 24.387,
-			"y": -12.0,
-			"yaw": 0.1421,
-			"z": -183.796
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_002",
-			"id": "cypress_ovd0001",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 33.821,
-			"y": -12.0,
-			"yaw": -0.0251,
-			"z": -185.542
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_002",
 			"id": "daisy_clump_ovd0002",
@@ -73,18 +49,6 @@
 			"y": -12.0,
 			"yaw": 0.125,
 			"z": -184.504
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_004",
-			"id": "cypress_ovd0006",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 77.084,
-			"y": -12.0,
-			"yaw": -0.59,
-			"z": -213.421
 		},
 		{
 			"blocking": false,
@@ -171,18 +135,6 @@
 			"z": -230.99
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_007",
-			"id": "cypress_ovd0014",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 86.679,
-			"y": -12.0,
-			"yaw": 1.8512,
-			"z": -224.962
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_007",
 			"id": "sunflower_clump_ovd0015",
@@ -217,18 +169,6 @@
 			"y": -12.0,
 			"yaw": 2.2631,
 			"z": -224.581
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_007",
-			"id": "cypress_ovd0018",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 64.997,
-			"y": -12.0,
-			"yaw": 2.1725,
-			"z": -259.133
 		},
 		{
 			"blocking": false,
@@ -315,18 +255,6 @@
 			"z": -265.728
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_008",
-			"id": "mailbox_ovd0026",
-			"kind": "mailbox",
-			"origin": "base",
-			"radius": 0.3,
-			"x": 56.544,
-			"y": -12.0,
-			"yaw": 2.3381,
-			"z": -271.376
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_009",
 			"id": "lupin_clump_ovd0027",
@@ -399,18 +327,6 @@
 			"z": -215.073
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_010",
-			"id": "cypress_ovd0033",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 117.228,
-			"y": -12.0,
-			"yaw": 1.7206,
-			"z": -229.845
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_010",
 			"id": "grass_tuft_a_ovd0034",
@@ -445,18 +361,6 @@
 			"y": -12.0,
 			"yaw": 1.3846,
 			"z": -229.635
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_011",
-			"id": "cypress_ovd0037",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 45.265,
-			"y": -12.0,
-			"yaw": 1.7119,
-			"z": -203.397
 		},
 		{
 			"blocking": false,
@@ -519,18 +423,6 @@
 			"z": -203.057
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_012",
-			"id": "cypress_ovd0043",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 61.924,
-			"y": -12.0,
-			"yaw": 0.9561,
-			"z": -234.45
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_012",
 			"id": "lupin_clump_ovd0044",
@@ -579,18 +471,6 @@
 			"z": -239.876
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_013",
-			"id": "cypress_ovd0048",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 98.891,
-			"y": -12.0,
-			"yaw": -2.6886,
-			"z": -245.092
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_013",
 			"id": "daisy_clump_ovd0049",
@@ -625,30 +505,6 @@
 			"y": -12.0,
 			"yaw": -2.8585,
 			"z": -242.711
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_013",
-			"id": "mailbox_ovd0052",
-			"kind": "mailbox",
-			"origin": "base",
-			"radius": 0.3,
-			"x": 98.921,
-			"y": -12.0,
-			"yaw": -2.8007,
-			"z": -246.136
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_015",
-			"id": "cypress_ovd0053",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 70.766,
-			"y": -12.0,
-			"yaw": 0.2453,
-			"z": -287.526
 		},
 		{
 			"blocking": false,
@@ -793,18 +649,6 @@
 			"y": -12.0,
 			"yaw": -1.376,
 			"z": -225.628
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_019",
-			"id": "cypress_ovd0066",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -49.884,
-			"y": -12.0,
-			"yaw": 1.77,
-			"z": -299.422
 		},
 		{
 			"blocking": false,
@@ -961,18 +805,6 @@
 			"y": -12.0,
 			"yaw": 1.9213,
 			"z": -197.142
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_022",
-			"id": "cypress_ovd0080",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -37.721,
-			"y": -12.0,
-			"yaw": 1.3076,
-			"z": -158.103
 		},
 		{
 			"blocking": false,
@@ -1287,30 +1119,6 @@
 			"z": -142.106
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_035",
-			"id": "cypress_ovd0107",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 158.227,
-			"y": -12.0,
-			"yaw": -0.1175,
-			"z": -262.352
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_035",
-			"id": "cypress_ovd0108",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 170.973,
-			"y": -12.0,
-			"yaw": 0.2719,
-			"z": -262.352
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_035",
 			"id": "lupin_clump_ovd0109",
@@ -1357,18 +1165,6 @@
 			"y": -12.0,
 			"yaw": -0.007,
 			"z": -259.752
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_036",
-			"id": "cypress_ovd0113",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 133.078,
-			"y": -12.0,
-			"yaw": 3.0145,
-			"z": -251.116
 		},
 		{
 			"blocking": false,
@@ -1453,18 +1249,6 @@
 			"y": -12.0,
 			"yaw": 3.1755,
 			"z": -252.406
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_037",
-			"id": "mailbox_ovd0121",
-			"kind": "mailbox",
-			"origin": "base",
-			"radius": 0.3,
-			"x": 144.968,
-			"y": -12.0,
-			"yaw": 3.2043,
-			"z": -252.106
 		},
 		{
 			"blocking": false,
@@ -1563,18 +1347,6 @@
 			"z": -313.098
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_040",
-			"id": "cypress_ovd0130",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 154.721,
-			"y": -12.0,
-			"yaw": -1.4135,
-			"z": -284.103
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_040",
 			"id": "grass_tuft_a_ovd0131",
@@ -1623,30 +1395,6 @@
 			"z": -284.203
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_041",
-			"id": "cypress_ovd0135",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 173.656,
-			"y": -12.0,
-			"yaw": 1.283,
-			"z": -315.915
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_041",
-			"id": "cypress_ovd0136",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 173.978,
-			"y": -12.0,
-			"yaw": 1.7485,
-			"z": -325.079
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_041",
 			"id": "daisy_clump_ovd0137",
@@ -1693,18 +1441,6 @@
 			"y": -12.0,
 			"yaw": 1.7182,
 			"z": -324.744
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_042",
-			"id": "cypress_ovd0141",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 182.967,
-			"y": -12.0,
-			"yaw": -1.4161,
-			"z": -305.173
 		},
 		{
 			"blocking": false,
@@ -1777,18 +1513,6 @@
 			"y": -12.0,
 			"yaw": -1.8329,
 			"z": -305.49
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_043",
-			"id": "cypress_ovd0148",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 200.819,
-			"y": -12.0,
-			"yaw": 1.3251,
-			"z": -299.966
 		},
 		{
 			"blocking": false,
@@ -1911,18 +1635,6 @@
 			"z": -336.641
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_045",
-			"id": "cypress_ovd0159",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 196.095,
-			"y": -12.0,
-			"yaw": -0.2772,
-			"z": -347.491
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_045",
 			"id": "lupin_clump_ovd0160",
@@ -1993,18 +1705,6 @@
 			"y": -12.0,
 			"yaw": -0.4059,
 			"z": -349.102
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_045",
-			"id": "mailbox_ovd0166",
-			"kind": "mailbox",
-			"origin": "base",
-			"radius": 0.3,
-			"x": 203.546,
-			"y": -12.0,
-			"yaw": -0.2037,
-			"z": -346.164
 		},
 		{
 			"blocking": false,
@@ -2127,18 +1827,6 @@
 			"z": -193.7
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_050",
-			"id": "cypress_ovd0177",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 164.725,
-			"y": -11.993,
-			"yaw": -0.7968,
-			"z": -109.962
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_050",
 			"id": "sunflower_clump_ovd0178",
@@ -2173,18 +1861,6 @@
 			"y": -11.993,
 			"yaw": -1.1931,
 			"z": -120.423
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_050",
-			"id": "cypress_ovd0181",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 58.833,
-			"y": -11.856,
-			"yaw": -3.0739,
-			"z": -23.21
 		},
 		{
 			"blocking": false,
@@ -2233,18 +1909,6 @@
 			"y": -11.856,
 			"yaw": -2.9554,
 			"z": -23.432
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_051",
-			"id": "cypress_ovd0186",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 256.886,
-			"y": -11.689,
-			"yaw": 3.0236,
-			"z": -67.73
 		},
 		{
 			"blocking": false,
@@ -2331,30 +1995,6 @@
 			"z": -70.841
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_053",
-			"id": "cypress_ovd0194",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -223.127,
-			"y": -11.9,
-			"yaw": 0.933,
-			"z": -151.369
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_053",
-			"id": "cypress_ovd0195",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -216.932,
-			"y": -11.9,
-			"yaw": 0.753,
-			"z": -157.564
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_053",
 			"id": "lupin_clump_ovd0196",
@@ -2425,30 +2065,6 @@
 			"y": -11.9,
 			"yaw": 0.7361,
 			"z": -152.454
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_053",
-			"id": "cypress_ovd0202",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 264.044,
-			"y": -11.997,
-			"yaw": -1.4692,
-			"z": -299.118
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_053",
-			"id": "cypress_ovd0203",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 264.044,
-			"y": -11.997,
-			"yaw": -1.5919,
-			"z": -289.948
 		},
 		{
 			"blocking": false,
@@ -2535,18 +2151,6 @@
 			"z": -290.248
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_055",
-			"id": "cypress_ovd0211",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 422.907,
-			"y": -10.912,
-			"yaw": 0.5586,
-			"z": -53.033
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_055",
 			"id": "lupin_clump_ovd0212",
@@ -2593,18 +2197,6 @@
 			"y": -10.906,
 			"yaw": 0.8441,
 			"z": -60.471
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_055",
-			"id": "cypress_ovd0216",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -5.396,
-			"y": -10.542,
-			"yaw": -1.3794,
-			"z": 47.022
 		},
 		{
 			"blocking": false,
@@ -2751,18 +2343,6 @@
 			"z": -175.259
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_060",
-			"id": "cypress_ovd0229",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 22.95,
-			"y": -12.0,
-			"yaw": -3.2004,
-			"z": -173.005
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_060",
 			"id": "grass_tuft_a_ovd0230",
@@ -2773,18 +2353,6 @@
 			"y": -12.0,
 			"yaw": -2.9125,
 			"z": -167.068
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_058",
-			"id": "cypress_ovd0231",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -4.789,
-			"y": -12.0,
-			"yaw": -3.3073,
-			"z": -167.8
 		},
 		{
 			"blocking": false,
@@ -2845,18 +2413,6 @@
 			"y": -12.0,
 			"yaw": -3.1619,
 			"z": -167.987
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_060",
-			"id": "cypress_ovd0237",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 64.041,
-			"y": -12.0,
-			"yaw": 0.3755,
-			"z": -189.166
 		},
 		{
 			"blocking": false,
@@ -2977,18 +2533,6 @@
 			"y": -12.0,
 			"yaw": -0.0274,
 			"z": -191.979
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_061",
-			"id": "cypress_ovd0248",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 28.862,
-			"y": -12.0,
-			"yaw": 2.6448,
-			"z": -227.86
 		},
 		{
 			"blocking": false,
@@ -3135,30 +2679,6 @@
 			"z": -242.482
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_080",
-			"id": "cypress_ovd0261",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 84.541,
-			"y": -12.0,
-			"yaw": 2.2264,
-			"z": -231.446
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_080",
-			"id": "cypress_ovd0262",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 81.579,
-			"y": -12.0,
-			"yaw": 2.1829,
-			"z": -236.511
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_080",
 			"id": "sunflower_clump_ovd0263",
@@ -3229,18 +2749,6 @@
 			"y": -12.0,
 			"yaw": 2.6588,
 			"z": -279.216
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_084",
-			"id": "cypress_ovd0269",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 108.887,
-			"y": -12.0,
-			"yaw": 0.1401,
-			"z": -205.639
 		},
 		{
 			"blocking": false,
@@ -3351,30 +2859,6 @@
 			"z": -259.116
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_065",
-			"id": "cypress_ovd0279",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 45.952,
-			"y": -12.0,
-			"yaw": -0.5251,
-			"z": -290.964
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_065",
-			"id": "cypress_ovd0280",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 53.828,
-			"y": -12.0,
-			"yaw": -0.6424,
-			"z": -285.485
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_065",
 			"id": "grass_tuft_b_ovd0281",
@@ -3459,30 +2943,6 @@
 			"z": -260.032
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_501",
-			"id": "cypress_ovd0288",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 111.96,
-			"y": -12.0,
-			"yaw": -1.2409,
-			"z": -303.044
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_501",
-			"id": "cypress_ovd0289",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 115.267,
-			"y": -12.0,
-			"yaw": -1.0746,
-			"z": -292.023
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_501",
 			"id": "lupin_clump_ovd0290",
@@ -3529,18 +2989,6 @@
 			"y": -12.0,
 			"yaw": -1.1316,
 			"z": -301.933
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_501",
-			"id": "mailbox_ovd0294",
-			"kind": "mailbox",
-			"origin": "base",
-			"radius": 0.3,
-			"x": 112.69,
-			"y": -12.0,
-			"yaw": -1.4661,
-			"z": -291.563
 		},
 		{
 			"blocking": false,
@@ -3615,18 +3063,6 @@
 			"z": -259.726
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_103",
-			"id": "cypress_ovd0301",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 2.316,
-			"y": -12.0,
-			"yaw": 1.4554,
-			"z": -197.101
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_103",
 			"id": "sunflower_clump_ovd0302",
@@ -3675,18 +3111,6 @@
 			"z": -200.436
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_502",
-			"id": "cypress_ovd0306",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 26.501,
-			"y": -12.0,
-			"yaw": 1.1261,
-			"z": -257.057
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_502",
 			"id": "grass_tuft_b_ovd0307",
@@ -3721,30 +3145,6 @@
 			"y": -12.0,
 			"yaw": 0.8194,
 			"z": -257.013
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_109",
-			"id": "cypress_ovd0310",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 79.252,
-			"y": -12.0,
-			"yaw": 0.264,
-			"z": -290.314
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_109",
-			"id": "cypress_ovd0311",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 84.945,
-			"y": -12.0,
-			"yaw": 0.1108,
-			"z": -291.738
 		},
 		{
 			"blocking": false,
@@ -3867,18 +3267,6 @@
 			"z": -293.029
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_503",
-			"id": "cypress_ovd0322",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 42.514,
-			"y": -12.0,
-			"yaw": -2.6673,
-			"z": -261.296
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_503",
 			"id": "daisy_clump_ovd0323",
@@ -3939,30 +3327,6 @@
 			"z": -255.04
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_504",
-			"id": "cypress_ovd0328",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -40.416,
-			"y": -12.0,
-			"yaw": -1.8691,
-			"z": -311.998
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_504",
-			"id": "cypress_ovd0329",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -40.416,
-			"y": -12.0,
-			"yaw": -1.7501,
-			"z": -302.828
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_504",
 			"id": "lupin_clump_ovd0330",
@@ -3973,30 +3337,6 @@
 			"y": -12.0,
 			"yaw": -1.6892,
 			"z": -311.898
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_504",
-			"id": "mailbox_ovd0331",
-			"kind": "mailbox",
-			"origin": "base",
-			"radius": 0.3,
-			"x": -41.416,
-			"y": -12.0,
-			"yaw": -1.3028,
-			"z": -303.128
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_122",
-			"id": "cypress_ovd0332",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -36.982,
-			"y": -12.0,
-			"yaw": -1.6463,
-			"z": -260.263
 		},
 		{
 			"blocking": false,
@@ -4021,18 +3361,6 @@
 			"y": -12.0,
 			"yaw": -1.1826,
 			"z": -261.645
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_125",
-			"id": "cypress_ovd0335",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -4.675,
-			"y": -12.0,
-			"yaw": -0.5399,
-			"z": -118.328
 		},
 		{
 			"blocking": false,
@@ -4107,30 +3435,6 @@
 			"z": -291.083
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_076",
-			"id": "cypress_ovd0342",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 7.882,
-			"y": -12.0,
-			"yaw": 3.3265,
-			"z": -277.693
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_076",
-			"id": "cypress_ovd0343",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 0.421,
-			"y": -12.0,
-			"yaw": 2.9697,
-			"z": -277.98
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_076",
 			"id": "lupin_clump_ovd0344",
@@ -4179,18 +3483,6 @@
 			"z": -278.184
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_142",
-			"id": "cypress_ovd0348",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 27.162,
-			"y": -12.0,
-			"yaw": -2.405,
-			"z": -287.053
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_142",
 			"id": "daisy_clump_ovd0349",
@@ -4225,18 +3517,6 @@
 			"y": -12.0,
 			"yaw": -2.338,
 			"z": -279.977
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_508",
-			"id": "cypress_ovd0352",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 69.77,
-			"y": -12.0,
-			"yaw": -0.021,
-			"z": -160.691
 		},
 		{
 			"blocking": false,
@@ -4299,18 +3579,6 @@
 			"z": -161.091
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_509",
-			"id": "cypress_ovd0358",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 55.506,
-			"y": -12.0,
-			"yaw": 0.0162,
-			"z": -110.568
-		},
-		{
 			"blocking": false,
 			"group": "house:plot_509",
 			"id": "grass_tuft_b_ovd0359",
@@ -4357,18 +3625,6 @@
 			"y": -12.0,
 			"yaw": -0.186,
 			"z": -110.6
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_162",
-			"id": "cypress_ovd0363",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 19.76,
-			"y": -12.0,
-			"yaw": 2.9419,
-			"z": -103.525
 		},
 		{
 			"blocking": false,
@@ -4441,18 +3697,6 @@
 			"y": -12.0,
 			"yaw": 3.0272,
 			"z": -103.99
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_080",
-			"id": "cypress_ovd0370",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 55.928,
-			"y": -12.0,
-			"yaw": 2.9262,
-			"z": -101.323
 		},
 		{
 			"blocking": false,
@@ -4549,30 +3793,6 @@
 			"y": -12.0,
 			"yaw": -2.9243,
 			"z": -103.094
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_167",
-			"id": "cypress_ovd0379",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 11.561,
-			"y": -12.0,
-			"yaw": -1.7356,
-			"z": -165.049
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_167",
-			"id": "cypress_ovd0380",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 11.005,
-			"y": -12.0,
-			"yaw": -1.7602,
-			"z": -159.208
 		},
 		{
 			"blocking": false,
@@ -4683,18 +3903,6 @@
 			"z": -266.084
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_173",
-			"id": "cypress_ovd0390",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 177.126,
-			"y": -12.0,
-			"yaw": 2.9269,
-			"z": -250.302
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_173",
 			"id": "daisy_clump_ovd0391",
@@ -4801,18 +4009,6 @@
 			"y": -12.0,
 			"yaw": 1.8142,
 			"z": -309.956
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_512",
-			"id": "cypress_ovd0400",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 146.85,
-			"y": -12.0,
-			"yaw": 1.5835,
-			"z": -334.474
 		},
 		{
 			"blocking": false,
@@ -4983,18 +4179,6 @@
 			"z": -306.633
 		},
 		{
-			"blocking": true,
-			"group": "house:plot_082",
-			"id": "mailbox_ovd0415",
-			"kind": "mailbox",
-			"origin": "base",
-			"radius": 0.3,
-			"x": 153.591,
-			"y": -12.0,
-			"yaw": -1.6339,
-			"z": -302.348
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_178",
 			"id": "grass_tuft_a_ovd0416",
@@ -5103,18 +4287,6 @@
 			"z": -335.914
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_181",
-			"id": "cypress_ovd0425",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 173.837,
-			"y": -12.0,
-			"yaw": 1.5484,
-			"z": -282.036
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_181",
 			"id": "lupin_clump_ovd0426",
@@ -5185,18 +4357,6 @@
 			"y": -12.0,
 			"yaw": 1.8479,
 			"z": -287.804
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_085",
-			"id": "cypress_ovd0432",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 182.991,
-			"y": -12.0,
-			"yaw": -1.7132,
-			"z": -275.068
 		},
 		{
 			"blocking": false,
@@ -5295,18 +4455,6 @@
 			"z": -275.368
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_188",
-			"id": "cypress_ovd0441",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 182.76,
-			"y": -12.0,
-			"yaw": -1.5765,
-			"z": -323.927
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_188",
 			"id": "lupin_clump_ovd0442",
@@ -5343,18 +4491,6 @@
 			"z": -317.4
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_190",
-			"id": "cypress_ovd0445",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 201.52,
-			"y": -12.0,
-			"yaw": 1.6262,
-			"z": -270.922
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_190",
 			"id": "sunflower_clump_ovd0446",
@@ -5377,18 +4513,6 @@
 			"y": -12.0,
 			"yaw": 1.7282,
 			"z": -271.07
-		},
-		{
-			"blocking": true,
-			"group": "house:plot_087",
-			"id": "cypress_ovd0448",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 210.548,
-			"y": -12.0,
-			"yaw": -1.8594,
-			"z": -283.87
 		},
 		{
 			"blocking": false,
@@ -5499,18 +4623,6 @@
 			"z": -347.112
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_206",
-			"id": "cypress_ovd0458",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 141.704,
-			"y": -11.999,
-			"yaw": 2.0119,
-			"z": -116.945
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_206",
 			"id": "sunflower_clump_ovd0459",
@@ -5545,30 +4657,6 @@
 			"y": -11.999,
 			"yaw": 1.9571,
 			"z": -116.435
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_211",
-			"id": "cypress_ovd0462",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 235.615,
-			"y": -12.073,
-			"yaw": 2.7955,
-			"z": -73.942
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_221",
-			"id": "cypress_ovd0463",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -240.829,
-			"y": -11.203,
-			"yaw": 0.1342,
-			"z": -142.819
 		},
 		{
 			"blocking": false,
@@ -5667,18 +4755,6 @@
 			"z": -123.671
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_226",
-			"id": "cypress_ovd0472",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -87.844,
-			"y": -11.973,
-			"yaw": 1.3844,
-			"z": -260.297
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_226",
 			"id": "grass_tuft_a_ovd0473",
@@ -5775,18 +4851,6 @@
 			"z": -188.846
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_233",
-			"id": "cypress_ovd0481",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 168.912,
-			"y": -11.996,
-			"yaw": -2.0804,
-			"z": -134.853
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_233",
 			"id": "grass_tuft_b_ovd0482",
@@ -5871,18 +4935,6 @@
 			"z": -177.283
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_235",
-			"id": "cypress_ovd0489",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -214.828,
-			"y": -12.432,
-			"yaw": -2.0082,
-			"z": -141.461
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_235",
 			"id": "grass_tuft_b_ovd0490",
@@ -5905,18 +4957,6 @@
 			"y": -12.432,
 			"yaw": -2.3185,
 			"z": -139.945
-		},
-		{
-			"blocking": true,
-			"group": "house:overhaul_238",
-			"id": "cypress_ovd0492",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": 127.533,
-			"y": -12.0,
-			"yaw": -1.5577,
-			"z": -229.286
 		},
 		{
 			"blocking": false,
@@ -6087,18 +5127,6 @@
 			"z": -138.151
 		},
 		{
-			"blocking": true,
-			"group": "house:overhaul_256",
-			"id": "cypress_ovd0507",
-			"kind": "cypress",
-			"origin": "base",
-			"radius": 0.5,
-			"x": -12.578,
-			"y": -12.0,
-			"yaw": 2.3121,
-			"z": -224.024
-		},
-		{
 			"blocking": false,
 			"group": "house:overhaul_256",
 			"id": "sunflower_clump_ovd0508",
@@ -6205,6 +5233,174 @@
 			"y": -12.0,
 			"yaw": 2.0311,
 			"z": -131.5
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_001",
+			"id": "mailbox_mbme0443",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 95.929,
+			"y": -12.0,
+			"yaw": 1.5603,
+			"z": -182.111
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_008",
+			"id": "mailbox_mbme0443",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 56.289,
+			"y": -12.0,
+			"yaw": 2.3086,
+			"z": -271.212
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_013",
+			"id": "mailbox_mbme0443",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 98.899,
+			"y": -12.0,
+			"yaw": -2.8795,
+			"z": -246.026
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_032",
+			"id": "mailbox_mbme0444",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 79.052,
+			"y": -12.0,
+			"yaw": 0.0333,
+			"z": -136.066
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_033",
+			"id": "mailbox_mbme0445",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 37.097,
+			"y": -12.0,
+			"yaw": -0.0172,
+			"z": -135.227
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_037",
+			"id": "mailbox_mbme0445",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 145.168,
+			"y": -12.0,
+			"yaw": 3.1416,
+			"z": -252.256
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_039",
+			"id": "mailbox_mbme0446",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 146.748,
+			"y": -12.0,
+			"yaw": 1.5357,
+			"z": -321.698
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_045",
+			"id": "mailbox_mbme0446",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 202.601,
+			"y": -12.0,
+			"yaw": -0.1498,
+			"z": -345.599
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_056",
+			"id": "mailbox_mbme0447",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 51.702,
+			"y": -12.0,
+			"yaw": -2.9997,
+			"z": -177.624
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_057",
+			"id": "mailbox_mbme0448",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 29.054,
+			"y": -12.0,
+			"yaw": -2.969,
+			"z": -173.83
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_501",
+			"id": "mailbox_mbme0448",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 113.854,
+			"y": -12.0,
+			"yaw": -1.2793,
+			"z": -291.86
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_068",
+			"id": "mailbox_mbme0449",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 101.973,
+			"y": -12.0,
+			"yaw": 0.3218,
+			"z": -254.447
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_504",
+			"id": "mailbox_mbme0449",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": -41.316,
+			"y": -12.0,
+			"yaw": -1.5708,
+			"z": -303.078
+		},
+		{
+			"blocking": true,
+			"group": "house:plot_082",
+			"id": "mailbox_mbme0449",
+			"kind": "mailbox",
+			"origin": "base",
+			"radius": 0.3,
+			"x": 153.891,
+			"y": -12.0,
+			"yaw": -1.5708,
+			"z": -302.298
 		}
 	]
 }

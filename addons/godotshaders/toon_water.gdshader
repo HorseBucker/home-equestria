@@ -36,6 +36,17 @@ uniform float foam_edge_softness = 0.05;
 uniform float foam_smoothness = 0.03;
 uniform float foam_distortion_speed = 0.5;
 uniform float foam_distortion_amount = 0.1;
+// How much of the foam shows (1: as the original). The Ponyville canals use a faint, wide, soft fade along the
+// shore instead of a hard white rim (world_water.gd, 2026-11-24 play test).
+uniform float foam_strength = 1.0;
+// What the water does to the ground seen through it: the colour it takes on at `shallow_tint_depth` metres and
+// deeper (white: nothing, as the original). The canals tint their stream bed teal and darker, as water does.
+uniform vec3 shallow_tint : source_color = vec3(1.0);
+uniform float shallow_tint_depth = 0.5;
+// How much of the toon pattern's white cells show (1: as the original).
+uniform float pattern_foam = 1.0;
+// Metres of depth over which the water's own colour fades in from its edge (0: none, as the original).
+uniform float edge_fade = 0.0;
 
 // Ice (world/seasons/ice_slabs.gd). 0 never freezes (sea, zone water); 1 still water (lake,
 // canals): a skim creeps out from the banks, then a whole sheet while a walkable slab lies on it;
@@ -315,7 +326,7 @@ vec4 water(vec2 uv, vec3 cdir, float iTime) {
     );
 
     vec4 ret = mix(WATER_COL, WATER2_COL, waterlayer(uv + dist.xy));
-    ret = mix(ret, FOAM_COL, waterlayer(vec2(1.0) - uv - dist.yx));
+    ret = mix(ret, FOAM_COL, waterlayer(vec2(1.0) - uv - dist.yx) * pattern_foam);
     return ret;
 }
 
@@ -415,12 +426,14 @@ void fragment() {
         
         // Calculate water opacity based on depth
         float water_opacity = clamp(depth_diff * water_depth_factor, 0.0, 1.0);
+        if (edge_fade > 0.0) water_opacity *= smoothstep(0.0, edge_fade, depth_diff);
         
-        // Mix water color with the scene behind it
-        final_color = mix(background, water_color, water_opacity * water_transparency);
+        // Mix water color with the scene behind it (seen through the water: tinted)
+        vec4 seen = vec4(background.rgb * mix(vec3(1.0), shallow_tint, smoothstep(0.0, shallow_tint_depth, depth_diff)), background.a);
+        final_color = mix(seen, water_color, water_opacity * water_transparency);
         
         // Add foam
-        final_color = mix(final_color, FOAM_COL, foam);
+        final_color = mix(final_color, FOAM_COL, foam * foam_strength);
         if (fleck > 0.0) final_color.rgb = mix(final_color.rgb, FOAM_COL.rgb, fleck * smoothstep(0.0, 0.3, water_opacity));
 
         // Rain rings on open water near the eye

@@ -349,7 +349,30 @@ static func keep_homes(town: Node3D) -> void:
 		town.add_child(house)
 		restored.append(str(house.name))
 		houses = _houses(town)
-		print("[town] kept a home at this density: %s (%s) at %s" % [house.name, design, at])
+		var cleared := _clear_ground(town, _footprint(design, t))
+		print("[town] kept a home at this density: %s (%s) at %s%s" % [house.name, design, at, " (%d trees and props on its spot taken away)" % cleared if cleared > 0 else ""])
+
+
+## A kept home stands where this setting's own trees and street things may have been planted, as the house was not
+## in its plan (2026-11-23 player report: "Changing from high to minimum density caused a tree to spawn in the house I
+## claimed"): the trees within TREE_ROOM m of its footprint (a crown reaches that far), and the props (benches,
+## lamps, flowerbeds) within PROP_ROOM m, are taken away. Returns how many went.
+const TREE_ROOM := 2.5
+const PROP_ROOM := 0.6
+static func _clear_ground(town: Node3D, foot: PackedVector2Array) -> int:
+	if foot.size() < 3: return 0
+	var gone := 0
+	for pair: Array in [["TownTrees", TREE_ROOM], ["OutdoorProps", PROP_ROOM]]:
+		var holder := town.get_node_or_null(str(pair[0])) as Node3D
+		var grown := Geometry2D.offset_polygon(foot, float(pair[1]))
+		if holder == null or grown.is_empty(): continue
+		var area: PackedVector2Array = grown[0]
+		for child: Node in holder.get_children():
+			if not child is Node3D: continue
+			var p := holder.transform * (child as Node3D).position
+			if not Geometry2D.is_point_in_polygon(Vector2(p.x, p.z), area): continue
+			holder.remove_child(child); child.free(); gone += 1
+	return gone
 
 
 # ---- the gardens ----

@@ -321,9 +321,21 @@
 			"detiling_shift": 0.35,
 			"navigation_trail": true,
 			"height_alpha": true
+		},
+		{
+			"id": 23,
+			"name": "stream_bed",
+			"file": "res://world/terrain/textures_gen/pv_stream_bed.png",
+			"aliases": [],
+			"uv_scale": 0.16666666666666666,
+			"tile_m": 6,
+			"detiling_rotation": 0.65,
+			"detiling_shift": 0.35,
+			"height_alpha": true
 		}
 	],
 	"_comment_ponyville_2026_10_13": "Ids 0-5 use hand-painted Ponyville textures (tools/ground_textures/paint.py in the private root) matching the Golden Oak reference; height_alpha keeps the PNG alpha as Terrain3D blend height so lawn edges break up over paths.",
 	"_comment_wild_2026_10_17": "redacted",
-	"_comment_town_sage_2026_11_14": "Id 22 town_sage: Ponyville's packed sage-green town ground as the show draws it (tools/town_planner/build/make_sage_texture.py); a path for navigation, no grass blades."
+	"_comment_town_sage_2026_11_14": "Id 22 town_sage: Ponyville's packed sage-green town ground as the show draws it (tools/town_planner/build/make_sage_texture.py); a path for navigation, no grass blades.",
+	"_comment_stream_bed_2026_11_24": "Id 23 stream_bed: Ponyville's stream beds and wet banks, damp sandy earth with pebbles in clusters (tools/town_planner/build/make_stream_bed_texture.py); no grass blades."
 }

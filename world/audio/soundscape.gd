@@ -38,11 +38,15 @@ const SILENT := -60.0
 ## gone by 14 m instead of 55), so it is only just heard beside the basin.
 const PLACED := {
 	"fountain": ["fountain", 114.0, -189.4, -19.0, 2.0, 14.0],
-	"windmill": ["windmill", -190.0, -335.0, -10.0, 7.0, 70.0],
-	"chickens_barn": ["chickens", 20.0, -430.0, -13.0, 5.0, 45.0],
-	"chickens_cottage": ["chickens", 158.0, -4.0, -15.0, 5.0, 40.0],
-	"chimes_cottage": ["chimes", 151.0, -10.0, -14.0, 4.0, 35.0],
-	"chimes_boutique": ["chimes", 45.0, -169.0, -15.0, 4.0, 35.0],
+	# (Ponyville overhaul, 2026-11-23 player report: "The windmill soundscape is still where the old windmill location
+	# was": at each of the remade town's windmills, and the hens and chimes moved with the barn, Fluttershy's cottage
+	# and the Carousel Boutique, at the same spot beside each as before)
+	"windmill": ["windmill", 310.0, -200.8, -10.0, 7.0, 70.0],
+	"windmill_2": ["windmill", -8.4, -77.5, -10.0, 7.0, 70.0],
+	"chickens_barn": ["chickens", -15.5, 51.4, -13.0, 5.0, 45.0],
+	"chickens_cottage": ["chickens", 417.1, 0.2, -15.0, 5.0, 40.0],
+	"chimes_cottage": ["chimes", 407.9, 1.1, -14.0, 4.0, 35.0],
+	"chimes_boutique": ["chimes", 106.0, -96.0, -15.0, 4.0, 35.0],
 }
 ## Beds that are not at a place: name -> [file, volume dB].
 const BEDS := {
@@ -280,7 +284,8 @@ func _decide() -> void:
 		if placed.position.y == 0.0: placed.position = _ground(placed.position)
 		placed.max_distance = float((PLACED[name] as Array)[5]) * lerpf(1.0, 0.7, muffle)
 	_want("fountain", outdoor * hush * (1.0 - smoothstep(0.3, 0.7, ice)) * (1.0 if _place_fountain() else 0.0))
-	_want("windmill", outdoor * hush * clampf(0.35 + gust, 0.0, 1.0))
+	var turning := outdoor * hush * clampf(0.35 + gust, 0.0, 1.0)
+	_want("windmill", turning); _want("windmill_2", turning)
 	var hens := outdoor * hush * smoothstep(0.25, 0.6, daylight) * (1.0 if dry else 0.0) * (0.6 if season == "winter" else 1.0)
 	_want("chickens_barn", hens); _want("chickens_cottage", hens)
 	var breeze := outdoor * hush * smoothstep(0.08, 0.5, gust)

@@ -172,8 +172,8 @@ void vertex() {
 		float blend = float((c >> 14u) & 255u) / 255.0;
 		bool hole = ((c >> 2u) & 1u) == 1u;
 		density = hole ? 0.0 : mix(id_density[base], id_density[over], smoothstep(0.25, 0.75, blend));
-		// River bed (id 18) reads as water: no blades even where it only half-blends in.
-		float river = (base == 18 ? 1.0 - blend : 0.0) + (over == 18 ? blend : 0.0);
+		// River bed (id 18, and Ponyville's stream bed 23) reads as water: no blades even where it only half-blends in.
+		float river = (base == 18 || base == 23 ? 1.0 - blend : 0.0) + (over == 18 || over == 23 ? blend : 0.0);
 		density *= clamp(1.0 - river * 4.0, 0.0, 1.0);
 		ground_n = slope_n;
 		density *= smoothstep(0.76, 0.88, ground_n.y);

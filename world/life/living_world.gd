@@ -429,13 +429,30 @@ func _decide(id: String) -> void:
 	resident.wants.curiosity = minf(1, float(resident.wants.curiosity) + .015)
 	resident.wants.energy = maxf(0, float(resident.wants.energy) - .005)
 	var choice := _choose_activity(resident)
+	# Stranded (Ponyville overhaul, 2026-11-24 play test: Starlight Glimmer stood by Carrot Top's farm "Waiting for an
+	# available supported place or route"): no place within STRANDED m, so every place was a long trip with no route
+	# checked yet, which is never chosen while she is in view. Then the nearest ones (and her own spot) may be chosen
+	# anyway (and her own house to rest in, by day too, and whether or not her last outings ended somewhere settled);
+	# her navigator finds the way.
+	if choice.is_empty() and _stranded(resident):
+		# her count of outings that ended nowhere settled made every place over 180 m a trip between towns, which needs
+		# a known spot to set out from: out here she starts afresh
+		resident["wander_stops"] = 0
+		choice = _choose_activity(resident, true)
 	if choice.is_empty():
 		resident.last_reason = "Waiting for an available supported place or route"
 		return
 	var companions := _choose_companions(resident, choice)
 	propose(id, choice.kind, choice.place, companions)
 
-func _choose_activity(resident: Dictionary) -> Dictionary:
+const STRANDED := 40.0
+func _stranded(resident: Dictionary) -> bool:
+	var here := point(resident.position)
+	for place: Dictionary in state.places.values():
+		if place.region == resident.region and here.distance_to(point(place.position)) <= STRANDED: return false
+	return true
+
+func _choose_activity(resident: Dictionary, stranded := false) -> Dictionary:
 	var demand:=train_demand() if transport_available else {"target":0,"travelling":0}
 	var encourage_trip:bool=demand.travelling<demand.target and float(state.elapsed)-float(resident.get("last_train_arrival",-TRAIN_LEISURE_BREAK))>=TRAIN_LEISURE_BREAK
 	var needs := {
@@ -457,9 +474,11 @@ func _choose_activity(resident: Dictionary) -> Dictionary:
 	for place_id: String in places:
 		var candidate: Dictionary = state.places[place_id]
 		if candidate.region != resident.region or not candidate.enabled or not candidate.reserved.is_empty(): continue
+		# stranded: the nearest places she can spend time at (not somepony else's house), six of them
+		if stranded and (("HOUSE" in candidate.tags and not "home:" + str(resident.id) in candidate.tags) or not KINDS.keys().any(func(k): return _supports(candidate, k))): continue
 		nearby.append({"id":place_id,"distance":origin.distance_squared_to(point(candidate.position))})
 		nearby.sort_custom(func(a,b): return a.distance < b.distance if a.distance != b.distance else a.id < b.id)
-		nearby.resize(mini(3,nearby.size()))
+		nearby.resize(mini(6 if stranded else 3,nearby.size()))
 	# Her own house is always a candidate, wherever she is in town.
 	for place_id: String in places:
 		var own: Dictionary = state.places[place_id]
@@ -493,7 +512,7 @@ func _choose_activity(resident: Dictionary) -> Dictionary:
 		# hangs about in somepony else's house, or indoors all day (dev 2026-09-23).
 		if "HOUSE" in place.tags:
 			if kind != "rest" or not ("home:" + str(resident.id) in place.tags): continue
-			if daylight > 0.6 and _roll(resident.id, str(place.id) + str(int(float(state.elapsed) / 600.0))) > 0.2: continue
+			if daylight > 0.6 and not stranded and _roll(resident.id, str(place.id) + str(int(float(state.elapsed) / 600.0))) > 0.2: continue
 		# Population demand admits new autonomous train trips; explicit proposals
 		# still use their ordinary availability/route checks. Never interrupt a trip
 		# already under way just because roster size or demand changed.
@@ -505,7 +524,7 @@ func _choose_activity(resident: Dictionary) -> Dictionary:
 		# While town navigation warms, start a nearby outing rather than reserve
 		# a distant unknown route and stand waiting for its entire corridor.
 		# Verified longer trips and regional train visits remain candidates.
-		if place.region == resident.region and distance > 40 and _leases.has(resident.id) and not state.routes.has(str(resident.place) + ">" + str(place.id)):
+		if not stranded and place.region == resident.region and distance > 40 and _leases.has(resident.id) and not state.routes.has(str(resident.place) + ">" + str(place.id)):
 			continue
 		# Company needs actual company. Count willing, available neighbours before
 		# scoring: an empty private spot must not beat a reachable social outing.
@@ -516,7 +535,7 @@ func _choose_activity(resident: Dictionary) -> Dictionary:
 		var returning:=int(resident.get("wander_stops",0))>=3 and settled
 		if (place.region==resident.region and distance > reach and not returning) or distance < float(KINDS[kind].get("min_distance", 0)):
 			continue
-		if int(resident.get("wander_stops",0))>=3 and not settled:continue
+		if int(resident.get("wander_stops",0))>=3 and not settled and not stranded:continue
 		var distance_cost := minf(distance,180) / (80.0 if place.region == resident.region else 600.0)
 		var score := .4 + _roll(resident.id, str(place.id) + kind) * .25 - distance_cost
 		score += .45 * int(settled)
@@ -740,7 +759,56 @@ func restore(value: Dictionary) -> bool:
 			var resident:Dictionary=state.residents[id]
 			if resident.region!=state.places[activity.place].region and not resident.journey.has("legs"):
 				cancel(activity.id,"Regional visit needs a train connection");break
+	_relearn_town_spots()
 	return true
+
+## Ponyville overhaul (2026-11-24 play test: Starlight Glimmer spent her afternoons in Carrot Top's carrot field, and
+## Amethyst Star, White Lightning, Cloudchaser, Twilight and Rarity met out in the fields east of town). Each pony's
+## "anchor" place, where outings meet and which counts as her home spot, used to be made where she happened to stand
+## the first time she was seen, and kept for good; ponies seen out in the fields left anchors there (and meeting
+## spots, "outdoor", made from where they stood), which every pony then used for company and strolls. Anchors are now
+## made at her own door, or where she stands among the houses (living_world_runtime.gd _discover). A world that
+## learnt them before forgets, once (stamp "anchors_town"), the town's anchors and outdoor spots more than NEAR_HOME m
+## from every house that is a real home at any density and NEAR_TOWN m from every landmark but the windmills
+## (density/houses.json "houses", "town_points": the Town Hall square counts, a field does not), its outings to them
+## called off: each
+## is made again in town the next time she is seen. (The first version forgot all of them, and the town was slow to
+## learn them again: twenty ponies stood waiting for somewhere to go.)
+const ANCHORS_TOWN := "ponyville_overhaul_3"
+const NEAR_HOME := 25.0
+const NEAR_TOWN := 30.0
+func _relearn_town_spots() -> void:
+	if str(state.get("anchors_town", "")) == ANCHORS_TOWN: return
+	state["anchors_town"] = ANCHORS_TOWN
+	var homes: Array[Vector2] = []
+	var doc: Variant = JSON.parse_string(FileAccess.get_file_as_string("res://world/towns/ponyville/density/houses.json")) if FileAccess.file_exists("res://world/towns/ponyville/density/houses.json") else null
+	if doc is Dictionary:
+		for house: Variant in ((doc as Dictionary).get("houses", {}) as Dictionary).values():
+			var t: Variant = (house as Dictionary).get("transform") if house is Dictionary else null
+			if t is Array and (t as Array).size() >= 12: homes.append(Vector2(float(t[9]), float(t[11])))
+	var sights: Array[Vector2] = []
+	for p: Variant in ((doc as Dictionary).get("town_points", []) if doc is Dictionary else []):
+		if p is Array and (p as Array).size() >= 2: sights.append(Vector2(float(p[0]), float(p[1])))
+	if homes.is_empty(): return
+	var gone: Array = []
+	for place_id: String in state.places.keys():
+		if str(state.places[place_id].get("region", "")) != "ponyville" or not (":anchor:" in place_id or ":outdoor:" in place_id): continue
+		var at := point(state.places[place_id].position)
+		var flat := Vector2(at.x, at.z)
+		if homes.any(func(h: Vector2) -> bool: return h.distance_to(flat) <= NEAR_HOME): continue
+		if sights.any(func(h: Vector2) -> bool: return h.distance_to(flat) <= NEAR_TOWN): continue
+		gone.append(place_id)
+	if gone.is_empty(): return
+	for ticket: String in state.activities.keys().duplicate():
+		if state.activities.has(ticket) and str(state.activities[ticket].place) in gone: cancel(ticket, "Town meeting spots relearnt")
+	for place_id: String in gone: state.places.erase(place_id)
+	for key: String in state.routes.keys().duplicate():
+		var route: Dictionary = state.routes[key]
+		if str(route.get("from", "")) in gone or str(route.get("to", "")) in gone: state.routes.erase(key)
+	for resident: Dictionary in state.residents.values():
+		if str(resident.get("place", "")) in gone: resident.place = ""
+	state.revision += 1
+	print("[life] Ponyville's %d meeting spots out of town forgotten once, to be made again in town (overhaul)" % gone.size())
 
 ## Explicit long journeys traverse the certified coarse graph; local stroll selection
 ## keeps its leisure radius. Callers refine each returned leg through the live navigator.

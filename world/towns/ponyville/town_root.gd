@@ -4,6 +4,8 @@ extends Node3D
 ## attaches its buildings. So the game's own scripts (game.gd, which other mods replace too) need no change.
 
 func _ready() -> void:
+	# built-in mods' own packs stand down first, before any house or walk grid is made (built_in_mods.gd)
+	preload("res://world/towns/ponyville/built_in_mods.gd").stand_down(get_tree())
 	preload("res://world/towns/ponyville/town_density.gd").fill(self)
 	# the Board Games mod's chess table, at the remade town's spot (plaza_table_spot.gd)
 	preload("res://world/towns/ponyville/plaza_table_spot.gd").watch(self)
@@ -17,3 +19,5 @@ func _ready() -> void:
 	preload("res://world/towns/ponyville/quit_watch.gd").attach(self)
 	# the watch's day: counted from the world's first day, with the day of the week (watch_day.gd, world_days.gd)
 	preload("res://world/towns/ponyville/watch_day.gd").attach(self)
+	# Flower Gifts' patches and Anon's Mailbox, set off the old town's spots (mod_spots.gd)
+	preload("res://world/towns/ponyville/mod_spots.gd").attach(self)

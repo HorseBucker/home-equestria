@@ -275,7 +275,33 @@ tex[rail] = GRAVEL; mix[rail] = 0.0
 
 # ---- water: river bed under it and up the first metre of bank ----
 wet = ndimage.binary_dilation(water, iterations=1)
-tex[wet] = RIVER_BED; mix[wet] = 0.0
+# Shores reshaped by fix_shore.py (2026-11-23 play test: "I want the underwater terrain texture to come up a little bit
+# higher so that it reaches up to the water's edge, and maybe even a bit beyond the waterline ... Right now the grass is
+# going down into the water by a few inches"; 2026-11-24: the game's river bed is painted blue water with pebbles,
+# which read as blue patches in the shallows): Ponyville's own stream bed (23, make_stream_bed_texture.py, damp sandy
+# earth with pebble clusters) under all the water and up the bank, BANK_M m out from the waterline or WET_ABOVE m
+# above the water, whichever comes first; the edge blending below fades it into the grass.
+STREAM_BED = 23
+# (2026-11-24 third pass: "pull the sandy bank material down inside the carved channel rather than spilling wide onto
+# the flat ground beside the stream": 1.6 m and 0.6 m before)
+BANK_M, WET_ABOVE = 1.0, 0.3
+shore_path = os.path.join(OUT, "shore_distance.npy")
+bed_id = RIVER_BED
+bank_edge = None          # metres past the bank's edge (negative: on the bed), a smooth field, for the blend below
+tex_dry = tex.copy()      # what each cell would be without the bed
+if os.path.exists(shore_path):
+    shore = np.load(shore_path)
+    gpath = os.path.join(OUT, f"density_{DENSITY}", "ground.f32") if DENSITY else os.path.join(OUT, "ground.f32")
+    ground_here = np.fromfile(gpath, "<f4").reshape(NZ, NX)
+    level_ = np.fromfile(os.path.join(OUT, "surface.f32"), "<f4").reshape(NZ, NX)
+    _, (lz_, lx_) = ndimage.distance_transform_edt(~water, return_indices=True)
+    bed_id = STREAM_BED
+    # the bank's edge as a distance (the height limit measured along a 0.32 slope, fix_shore.py's banks), smoothed;
+    # the bed is where it is negative, so the cells painted and the blend below agree everywhere
+    bank_edge = ndimage.gaussian_filter(np.minimum(np.maximum(shore - BANK_M, (ground_here - level_[lz_, lx_] - WET_ABOVE) / 0.32),
+                                                   np.where(shore < 0.25, shore - 0.25, 9.0)).astype(np.float32), 0.7)
+    wet = (bank_edge < 0) | water
+tex[wet] = bed_id; mix[wet] = 0.0
 
 # ---- under the bridges: the banks are grass (2026-11-23 play test: "where bridges are, the roads tend to go down
 # under the bridge and into the water ... I think it'd look better as grass"). Under a bridge the bank slopes down to the
@@ -297,7 +323,8 @@ for b_ in plan.get("bridges", []):
     side_ = np.abs((gx_ - ax_) * -uz_ + (gz_ - az_) * ux_)
     end_ = min(ground_[int(round(az_)) - Z0, int(round(ax_)) - X0], ground_[int(round(bz_)) - Z0, int(round(bx_)) - X0])
     banks |= (along_ >= 0) & (along_ <= length_) & (side_ <= b_.get("width", 4.0) / 2 + BANK_SIDE) & (ground_ < end_ - BANK_DROP)
-banks &= np.isin(tex, [SAGE, TRAIL, TOWN_DIRT, RIVER_BED]) & ~water
+# (not on the stream bed's own band: there the grass poked down into the bank under the bridges, 2026-11-24)
+banks &= np.isin(tex, [SAGE, TRAIL, TOWN_DIRT, RIVER_BED]) & ~water & ~wet
 tex[banks] = GRASS; mix[banks] = 0.0
 print(f"bridge banks: {int(banks.sum())} m2 of road under the bridges turned to grass")
 
@@ -324,6 +351,27 @@ blend[edge] = fade[edge]
 # where there is no neighbour, the overlay is the drift texture at its mix
 blend = np.clip(blend, 0.0, 1.0)
 blend[clean_paths & (base == SAGE)] = 0.0          # long door paths: plain sage (the lawn beside fades into them)
+# The stream bed's edge on the grass (2026-11-24 play test: "the slight jagged/sawtooth edge where the dirt bank texture
+# blends into the surrounding grass"): the cell-by-cell fade above follows the 1 m cells, so along a slanting bank it
+# stepped. Within BANK_FEATHER m of the bank's edge, the two blend by the smooth distance to it instead: half and half
+# on the edge, the bed alone BANK_FEATHER m in, the grass alone BANK_FEATHER m out. Only against grass and lawn.
+BANK_FEATHER = 0.9
+if bank_edge is not None:
+    lawn = np.isin(tex_dry, [GRASS, GRASS_LIGHT, BRIGHT, GLOOMY]) & ~banks
+    near = lawn & (np.abs(bank_edge) < BANK_FEATHER) & np.isin(tex, [STREAM_BED, GRASS, GRASS_LIGHT, BRIGHT, GLOOMY])
+    t_ = np.clip(np.abs(bank_edge) / BANK_FEATHER, 0.0, 1.0)
+    half = 0.5 * (1.0 - t_ * t_ * (3.0 - 2.0 * t_))
+    on_bed = near & (bank_edge < 0)
+    base[on_bed] = STREAM_BED; overlay[on_bed] = tex_dry[on_bed]; blend[on_bed] = half[on_bed]
+    on_grass = near & (bank_edge >= 0)
+    base[on_grass] = tex_dry[on_grass]; overlay[on_grass] = STREAM_BED; blend[on_grass] = half[on_grass]
+    # beyond the feather the cell-by-cell fade above is not used either way (2026-11-24 third pass: "stray green grass
+    # squares ... randomly poke down into the bank"): the bed's own cells are the bed alone, the grass beyond is grass
+    inner = (base == STREAM_BED) & (bank_edge <= -BANK_FEATHER)
+    blend[inner] = 0.0
+    outer = lawn & (bank_edge >= BANK_FEATHER) & (overlay == STREAM_BED)
+    blend[outer] = 0.0
+    print(f"stream bank: {int(near.sum())} m2 of its edge blended by the smooth shore")
 control = ((base.astype(np.uint32) & 31) << 27) | ((overlay.astype(np.uint32) & 31) << 22) | ((np.round(blend * 255).astype(np.uint32) & 255) << 14)
 control.astype("<u4").tofile(os.path.join(OUT, "control.u32"))
 
@@ -383,7 +431,7 @@ elif bundle:
 else:
     json.dump(index, open(index_path, "w"), indent=2)
 names = {GRASS: "grass", TRAIL: "dirt road", GRASS_LIGHT: "light grass", FIELD: "field dirt", TOWN_DIRT: "farmyard", GRAVEL: "gravel",
-         GLOOMY: "Everfree", FOREST_FLOOR: "forest floor", BRIGHT: "bright grass", RIVER_BED: "river bed", SAGE: "town sage"}
+         GLOOMY: "Everfree", FOREST_FLOOR: "forest floor", BRIGHT: "bright grass", RIVER_BED: "river bed", SAGE: "town sage", 23: "stream bed"}
 counts = {names.get(int(t), str(t)): int((tex == t).sum()) for t in np.unique(tex)}
 print("painted (m2):", dict(sorted(counts.items(), key=lambda kv: -kv[1])))
 print(f"door paths: {skirted}; overlays: " + ", ".join(f"{k} (over {o})" for k, o in written))

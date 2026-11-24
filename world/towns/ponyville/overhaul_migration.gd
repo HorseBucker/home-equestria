@@ -11,7 +11,11 @@ extends RefCounted
 ##   in the Town Hall chest, and that he is welcome to move into another house. Nothing says the town changed.
 ## - everything of his out in the world that the new town could have buried or walled in (furniture placed in the
 ##   old home, things left lying in town) goes into the storage chest in the Town Hall (chest_store.gd), never the
-##   briefcase, which may be full;
+##   briefcase, which may be full; but not what is laid out for him again anyway (2026-11-23 player report): the spa's
+##   hoof file (the spa lays a new one) and, with unfplap on, its footstools left in ponies' houses (it lays new ones
+##   in the new houses), which are let go;
+## - what the ponies keep set out in their old houses (gifts, Flower Gifts' bunches) is set out again in their new
+##   homes (mechanics/gifts/belongings.gd finds each a new spot), not put in the chest;
 ## - the player saved in town is put at the Town Hall's door; ponies saved out in town (and their resumed day plans)
 ##   start at home instead; the balloon goes back to its pad.
 ## Before changing anything, the world's state and autosave are copied into its saves/archive folder
@@ -38,7 +42,7 @@ static func run(arrival: Node, resumed: Dictionary) -> void:
 	if context == null or context.get("_read_only") == true: return
 	var state: Dictionary = context.get("state")
 	if state.has(STAMP):
-		_soften(context); _tidy(game, context); return
+		_soften(context); _tidy(game, context); _tidy_spa_tools(game, context); return
 	var fresh := resumed.is_empty() and (state.get("events", []) as Array).is_empty() and str(arrival.call("stage")) in ["wake", "found", "rescue"]
 	if fresh:
 		_stamp(context, {"version": VERSION, "new": true}); return
@@ -62,7 +66,7 @@ static func run(arrival: Node, resumed: Dictionary) -> void:
 		context.call("record", "home", HOME_NOTE % _name(giver), [giver], [giver])
 	# ---- his things out in the world: into the Town Hall chest ----
 	var store: RefCounted = CHEST.briefcase(game)
-	var chested := 0; var left := 0; var carried := 0
+	var chested := 0; var left := 0; var carried := 0; var let_go := 0
 	if store != null:
 		var loans: Dictionary = (store.get("loans") as Dictionary).duplicate(true)
 		for token: String in loans:
@@ -71,6 +75,9 @@ static func run(arrival: Node, resumed: Dictionary) -> void:
 			var pose := STORE.decode_pose(loan.world_transform)
 			var homeless := loan.has("furnishing_home") and FURNISHING.home(tree, str(loan.furnishing_home)) == null
 			if not homeless and not (not loan.has("furnishing_home") and in_town.call(pose.origin)): continue
+			if CHEST.spa_tool(str(loan.get("id", ""))) or (_lays_stools() and not loan.has("furnishing_home") and STOOL_IDS.has(str(loan.get("id", "")))):
+				if bool(store.call("consume", token)): let_go += 1
+				continue
 			# a mod's item (the Pedal Copter, Watch Party's sets) into the briefcase, not the chest: its mod looks
 			# for it there and would make another (2026-11-18 play test); with the case full, by the Town Hall door
 			if CHEST.from_mod(str(loan.get("id", ""))):
@@ -84,9 +91,9 @@ static func run(arrival: Node, resumed: Dictionary) -> void:
 		if chested + carried > 0 and briefcase is Object and (briefcase as Object).has_method("restore_drops"): (briefcase as Object).call("restore_drops")
 	if giver != "":
 		notes.append("Your house is closed for repairs. %s will give you a new one whenever you ask." % _name(giver))
-	# gifts the ponies keep set out in their old houses (a fish Twilight left on her library's floor) cannot be
-	# picked up, and their places in the old houses are gone: into the chest too
-	chested += _gifts_to_chest(game, context)
+	# gifts the ponies keep set out in their old houses (a fish Twilight left on her library's floor): set out again
+	# in their new homes
+	var rehomed := _gifts_rehome(context)
 	if chested > 0:
 		notes.append("Your belongings are safe in the storage chest in the Town Hall.")
 	# ---- the player, the ponies, the balloon ----
@@ -113,12 +120,12 @@ static func run(arrival: Node, resumed: Dictionary) -> void:
 			var riders: Variant = balloon.get("saved_passengers")
 			if riders is Dictionary: (riders as Dictionary).clear()
 	_stamp(context, {"version": VERSION, "migrated": Time.get_datetime_string_from_system(), "old_home": old_place, "told": giver,
-		"to_chest": chested, "carried": carried, "left": left, "tidied": true})
+		"to_chest": chested, "carried": carried, "left": left, "let_go": let_go, "gifts_rehomed": rehomed, "tidied": true, "spa_tools": true})
 	var saves: Node = game.get("saves")
 	if is_instance_valid(saves) and not notes.is_empty():
 		saves.set("message", (str(saves.get("message")) + " " + " ".join(notes)).strip_edges())
 		if saves.has_signal("changed"): saves.emit_signal("changed")
-	print("[overhaul] old world brought up to date: home %s let go (told %s), %d things to the Town Hall chest, %d left" % [old_place, giver, chested, left])
+	print("[overhaul] old world brought up to date: home %s let go (told %s), %d things to the Town Hall chest, %d left, %d let go (laid out again by the spa or a mod), %d ponies' gifts set out in their new homes" % [old_place, giver, chested, left, let_go, rehomed])
 
 
 ## The Town Hall's door (where a pony goes in from), or INF.
@@ -128,27 +135,50 @@ static func _hall_door(tree: SceneTree) -> Vector3:
 	return Vector3.INF
 
 
-## The ponies' belongings set out in their houses (pony_belongings rows with a "pose": mechanics/gifts/belongings.gd)
-## go into the chest; those only kept (no pose) stay hers. Returns how many went.
-static func _gifts_to_chest(game: Node, context: Node) -> int:
+## The ponies' belongings set out in their old houses (pony_belongings rows with a "pose": mechanics/gifts/belongings.gd)
+## lose their spot, so each is set out again in her home in the new town the next time it is near (belongings.gd
+## places a row with no pose). (Until 2026-11-23 they went into the chest: "All the flowers you gave to ponies are
+## relocated to the town hall chest".) Returns how many.
+static func _gifts_rehome(context: Node) -> int:
 	var block: Variant = (context.get("state") as Dictionary).get("pony_belongings")
 	if not block is Dictionary: return 0
 	var moved := 0
 	for pony: String in (block as Dictionary).keys():
 		var rows: Variant = block[pony]
 		if not rows is Array: continue
-		var keep: Array = []
 		for row: Variant in rows:
-			if row is Dictionary and (row as Dictionary).get("pose") is Array and CHEST.add(game, str(row.get("id", "")), 1): moved += 1
-			else: keep.append(row)
-		block[pony] = keep
+			if not row is Dictionary or not (row as Dictionary).has("pose"): continue
+			(row as Dictionary).erase("pose"); (row as Dictionary).erase("home"); (row as Dictionary).erase("no_spot")
+			moved += 1
 	if moved > 0 and context.has_method("_changed"): context.call("_changed")
 	return moved
 
 
+## unfplap lays footstools in ponies' houses near the player whenever he owns none (its stool/supply.gd).
+const STOOL_IDS := ["goods:footstool"]
+static func _lays_stools() -> bool:
+	var tree := Engine.get_main_loop() as SceneTree
+	var mods: Node = tree.root.get_node_or_null("Mods") if tree != null else null
+	return mods != null and mods.has_method("is_active") and bool(mods.call("is_active", "unfplap"))
+
+
+## A world brought up to date before 2026-11-23: a hoof file the spa had laid out went into the chest, and the spa
+## laid another. The chest's copies go. Once (stamp "spa_tools").
+static func _tidy_spa_tools(game: Node, context: Node) -> void:
+	var stamp: Variant = (context.get("state") as Dictionary).get(STAMP)
+	if not stamp is Dictionary or bool((stamp as Dictionary).get("spa_tools", false)): return
+	var rows := CHEST.entries(game)
+	var kept: Array = rows.filter(func(row: Dictionary) -> bool: return not CHEST.spa_tool(str(row.get("id", ""))))
+	if kept.size() != rows.size():
+		(context.get("state") as Dictionary)[CHEST.KEY] = {"entries": kept}
+		print("[overhaul] tidied: the spa's hoof file taken out of the Town Hall chest (the spa keeps its own)")
+	(stamp as Dictionary).spa_tools = true
+	if context.has_method("_changed"): context.call("_changed")
+
+
 ## A world brought up to date by version 2 (2026-11-18 play test): the Pedal Copter and Watch Party sets it put in
 ## the chest go back to the briefcase, or are let go where the player already has another (their mod made a new
-## one); the gifts ponies had set out in their old houses go into the chest. Once (stamp "tidied").
+## one); the gifts ponies had set out in their old houses are set out again in their new homes. Once (stamp "tidied").
 static func _tidy(game: Node, context: Node) -> void:
 	var stamp: Variant = (context.get("state") as Dictionary).get(STAMP)
 	if not stamp is Dictionary or bool((stamp as Dictionary).get("tidied", false)) or (stamp as Dictionary).get("new", false): return
@@ -170,10 +200,10 @@ static func _tidy(game: Node, context: Node) -> void:
 		else: kept.append(row)
 	if back + dropped > 0:
 		(context.get("state") as Dictionary)[CHEST.KEY] = {"entries": kept}
-	var gifts := _gifts_to_chest(game, context)
+	var gifts := _gifts_rehome(context)
 	(stamp as Dictionary).tidied = true
 	if context.has_method("_changed"): context.call("_changed")
-	print("[overhaul] tidied: %d mod items back to the briefcase, %d copies let go, %d ponies' gifts to the chest" % [back, dropped, gifts])
+	print("[overhaul] tidied: %d mod items back to the briefcase, %d copies let go, %d ponies' gifts set out again in their homes" % [back, dropped, gifts])
 
 
 ## A world brought up to date by an earlier version: its giver's memory of the old house, told in vivid detail

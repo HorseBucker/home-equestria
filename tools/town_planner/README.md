@@ -80,6 +80,20 @@ python tools/town_planner/build/build_density.py . tools/town_planner/ponyville_
 Each setting gets its own `town_<setting>.tscn`, ground, paint and gardens, and its own trees
 (`plan_density_trees.py`: every lawn filled until nowhere is more than 10 m from a tree).
 
+Then the shores, the mailboxes and the banks' dressing (each once, in this order), and the repaint below:
+
+```
+python tools/town_planner/build/fix_shore.py .
+python tools/town_planner/build/fix_mailboxes.py .
+python tools/town_planner/build/bake_flow.py . tools/town_planner/ponyville_planV28_high.json
+godot --headless --xr-mode off --path . --script res://tools/town_planner/build/make_river_dressing.gd
+python tools/town_planner/build/place_river_dressing.py .
+```
+
+`fix_shore.py` reshapes every bank from a smooth outline of the water and lays the water surface over it;
+`fix_mailboxes.py` gives every real home a clear mailbox; `make_river_dressing.gd` and `place_river_dressing.py`
+make and set the reeds, shore grass and stones. The stream bed texture is `make_stream_bed_texture.py`'s.
+
 To repaint only (after changing roads or paths in a plan):
 
 ```

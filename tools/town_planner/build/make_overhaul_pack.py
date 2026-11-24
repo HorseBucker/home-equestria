@@ -59,7 +59,7 @@ def changed(base):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default="8919fff")
-    parser.add_argument("--version", default="1.0.0")
+    parser.add_argument("--version", default="1.0.1")
     parser.add_argument("--out", default=os.path.join(HERE, "out", MOD_ID + ".pck"))
     args = parser.parse_args()
     paths, gone = changed(args.base)

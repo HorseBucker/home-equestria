@@ -261,10 +261,12 @@ for note in high.get("notes", []):
     y = float(ground[min(NZ - 1, max(0, round(cz) - Z0)), min(NX - 1, max(0, round(cx) - X0))])
     chess = {"x": round(cx, 2), "y": round(y, 3), "z": round(cz, 2), "yaw": round(yaw, 4)}
 print("chess table:", chess)
+town_points = [[round(m["x"], 2), round(m["z"], 2)] for m in json.load(open(HIGH, encoding="utf-8")).get("landmarks", []) if "windmill" not in m["id"]]
 json.dump({"note": "Every house that is a real home at any town density (build_density.py): where it stands at every setting it "
            "is real at, and each design's footprint at scale 1 (x, z), for town_density.gd keep_homes(). chess_table: where the "
-           "Board Games mod's public table stands (plaza_table_spot.gd).",
-           "houses": houses_out, "footprints": footprints, "chess_table": chess}, open(os.path.join(TOWN_DIR, "density/houses.json"), "w", encoding="utf-8"), indent="\t")
+           "Board Games mod's public table stands (plaza_table_spot.gd). town_points: the plan's landmarks but the windmills (which "
+           "stand in the fields), for living_world.gd _relearn_town_spots: a meeting spot near one is in town.",
+           "houses": houses_out, "footprints": footprints, "chess_table": chess, "town_points": town_points}, open(os.path.join(TOWN_DIR, "density/houses.json"), "w", encoding="utf-8"), indent="\t")
 print(f"houses.json: {len(houses_out)} houses real at some setting ({len(extra_real)} only below high); {len(extra_bg)} of the full town's homes are background below high")
 
 # each density's own ground (its own rises: apply_ground.py --density) and paint (door paths only to the houses it

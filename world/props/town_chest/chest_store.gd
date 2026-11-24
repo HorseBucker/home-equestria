@@ -180,6 +180,14 @@ static func add(game: Node, id: String, count: int = 1, bites: int = 0) -> bool:
 	return _write(game, rows)
 
 
+## The spa's hoof file (world/minigames/spa/spa_hands.gd) is never kept in the chest: the spa lays a new one on its
+## counter whenever the player has none, so one in the chest is a copy (2026-11-23 player report: "A duplicate hoof
+## file from the spa ended up in the town hall chest").
+const SPA_TOOLS := ["hoof-file"]
+static func spa_tool(id: String) -> bool:
+	return CATALOG.canonical(id) in SPA_TOOLS
+
+
 ## An item a mod adds (2026-11-18 play test: the Pedal Copter mod and Watch Party give a new copter or put a set
 ## back on sale when they find none in the briefcase or out in the world, so one simply listed in the chest came
 ## back twice): goods the game's own list does not have (Watch Party adds its sets as goods), or anything drawn
@@ -212,6 +220,7 @@ static func store_slot(game: Node, index: int, amount: int = -1) -> String:
 	var slots: Array = store.get("slots")
 	if index < 0 or index >= slots.size() or (slots[index] as Dictionary).is_empty(): return ""
 	var slot: Dictionary = slots[index]
+	if spa_tool(str(slot.id)): return "The hoof file stays at the spa."
 	var free: int = int(store.call("available", index))
 	if from_mod(str(slot.id)): return _store_mod_slot(game, index, free if amount < 0 else mini(amount, free))
 	var moving: int = free if amount < 0 else mini(amount, free)

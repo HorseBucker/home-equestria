@@ -38,11 +38,20 @@ var _clock := 0.0
 func setup(people: Node) -> void:
 	population = people; clock = get_node("/root/TimeOfDay")
 
+## Hours the clock may move between two checks of one pony (at the fastest day, 15 real minutes, a check every 20 s
+## or so is half an hour); more is a night slept or a wait, which does not count toward her day (Ponyville overhaul,
+## 2026-11-24 log: Anon slept 23.9 h through a school day, and the whole class and seven others were sent home
+## "after a full day stuck", from their desks).
+const SKIPPED_HOURS := 3.0
+
 func stationary(id: String, actor_id: int, at: Vector3, hour: float, exempt := false) -> bool:
 	var previous: Dictionary = _records.get(id,{})
 	if exempt or previous.is_empty() or previous.actor!=actor_id or hour<float(previous.hour) or at.distance_squared_to(previous.at)>MOVED_SQUARED:
-		_records[id] = {"actor":actor_id,"at":at,"hour":hour}
+		_records[id] = {"actor":actor_id,"at":at,"hour":hour,"seen":hour}
 		return false
+	var seen := float(previous.get("seen", previous.hour))
+	if hour - seen > SKIPPED_HOURS: previous.hour = float(previous.hour) + hour - seen
+	previous.seen = hour
 	return hour-float(previous.hour)>=DAY_HOURS
 
 func _physics_process(delta: float) -> void:

@@ -537,10 +537,11 @@ for n, h in enumerate(plan["houses"]):
     group = f"house:plot_{real_number:03d}" if real else f"house:overhaul_{n:03d}"
     hr = np.random.default_rng(keyh)
     local = []
-    # cypress at the front corners
+    # no cypress at the front corners any more (2026-11-23 player report: they clipped through the walls; play test
+    # the same day: "Just remove the cypresses entirely. They stand out in a bad way compared to the other trees around
+    # them"). The draws stay, so every other garden plant lands where it did.
     for sx in (x0 - 0.7, x1 + 0.7):
-        if hr.random() < 0.7:
-            local.append(("cypress", sx, z1 - 0.4))
+        hr.random()
     # flower clumps and tufts along the sides and back
     for _ in range(int(hr.integers(3, 7))):
         side = int(hr.integers(0, 3))

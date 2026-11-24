@@ -833,7 +833,7 @@ func _build_cell(cell: Vector2i) -> void:
 		# Terrain3DData.get_control already returns the packed integer. Reinterpreting
 		# it as an RF pixel corrupts path/water/blocked flags and plants trees there.
 		var control: int = int(terrain.terrain.data.get_control(world))
-		if ((control >> 27) & 31) in [1, 4, 5, 6, 7, 18] or (control & 4) != 0: continue
+		if ((control >> 27) & 31) in [1, 4, 5, 6, 7, 18, 23] or (control & 4) != 0: continue
 		var blocked := false
 		var clearance := maxf(2.5, spacing * 0.45) if tree else 2.0
 		for trunk in native_points:
@@ -956,7 +956,7 @@ func _build_cell_native(cell: Vector2i, result: Dictionary) -> void:
 		if family == "meadow": family = "woodland"
 		var spacing := spacings[k]
 		var control: int = int(terrain.terrain.data.get_control(world))
-		if ((control >> 27) & 31) in [1, 4, 5, 6, 7, 18] or (control & 4) != 0: continue
+		if ((control >> 27) & 31) in [1, 4, 5, 6, 7, 18, 23] or (control & 4) != 0: continue
 		var blocked := false
 		var clearance := maxf(2.5, spacing * 0.45) if tree else 2.0
 		for trunk in native_points:

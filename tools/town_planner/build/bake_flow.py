@@ -5,7 +5,7 @@ usage: python tools/town_planner/build/bake_flow.py <project> <plan.json>
 Reads the build's 1 m water mask (tools/town_planner/build/out/water.u8, grid.json) and the plan's lakes
 and rivers, and writes world/water/ponyville_flow.json:
   origin [x, z]   the grid's corner; texel (i, j) is centred at origin + (i + 0.5, j + 0.5) * cell
-  cell            metres per texel (2)
+  cell            metres per texel (1)
   width, depth    texels along x and z
   rgba            base64 RGBA8, rows by z: R, G = flow direction * 0.5 + 0.5 (world x, z), B = speed 0..1, A 255
   streams         every plan river as [x, y, z] points at the water surface, about 2 m apart, the first point
@@ -34,9 +34,10 @@ from scipy.sparse.csgraph import dijkstra
 ROOT, PLAN = sys.argv[1], sys.argv[2]
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "out")
-CELL = 2
+CELL = 1               # (2 until 2026-11-24: "ensure the water ripple/caustic flow follows each branch direction cleanly
+                       # (including around the fork)": at 2 m, with a 2 m smoothing, a 3 m branch took on its neighbour's way)
 LAKE_FADE = 8.0        # metres into a lake over which the current dies away
-SMOOTH = 2.0           # gaussian sigma of the direction smoothing, metres
+SMOOTH = 1.2           # gaussian sigma of the direction smoothing, metres
 BANK_RING = 3          # metres of dry bank that get the nearest water's values
 
 meta = json.load(open(os.path.join(OUT, "grid.json")))

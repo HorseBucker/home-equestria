@@ -5,6 +5,9 @@ extends SceneTree
 ## the model's posts end in flat feet 4.24 units under its node, its only vertices that low, and squashed to a
 ## bridge's height they stopped half way down the stream). A post is only ever lengthened. Safe to run again: it
 ## starts each copy from the model itself.
+## Since 2026-11-24 every bridge gets its posts lengthened this way (bridge_posts.py measures "post_floors" for each,
+## after fix_shore.py deepened the banks: "the bridge's wooden support posts sit awkwardly on the steep slope with gaps
+## underneath"); only those marked "round" (the three) are also filled under their deck ends.
 ##   godot --headless --xr-mode off --path <project> --script res://tools/town_planner/build/round_bridges.gd
 
 const SCENE := "res://world/props/ponyville/rnl_scenery.scn"
@@ -46,13 +49,13 @@ func _init() -> void:
 		var mesh := ArrayMesh.new()
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		mesh.surface_set_material(0, source.surface_get_material(0))
-		mesh.resource_name = "Rounder %s (round_bridges.gd)" % id
+		mesh.resource_name = "%s %s (round_bridges.gd)" % ["Rounder" if bool(m.get("round", true)) else "Posts to the bed:", id]
 		var path := OUT % id
 		print("ROUND %s: scale %s, %d foot vertices lowered (post bottoms %s), save %d" % [id, bridge.scale, moved, floors, ResourceSaver.save(mesh, path)])
 		root.set_editable_instance(bridge, true)
 		var shown := bridge.get_node("Mesh1") as MeshInstance3D
 		shown.mesh = load(path)
-		_fill_feet(root, bridge, model, sy)
+		if bool(m.get("round", true)): _fill_feet(root, bridge, model, sy)
 		done += 1
 	var packed := PackedScene.new()
 	var err := packed.pack(root)

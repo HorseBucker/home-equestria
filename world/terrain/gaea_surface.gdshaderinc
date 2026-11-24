@@ -155,7 +155,7 @@ float gaea_rock(int id) {
     return (id==6 || id==7 || id==12 || id==13 || id==14 || id==15 || id==21) ? 1.0 : 0.0;
 }
 float gaea_natural(int id) {
-    return (id==0 || id==2 || id==3 || id==17 || id==18) ? 1.0 : gaea_rock(id);
+    return (id==0 || id==2 || id==3 || id==17 || id==18 || id==23) ? 1.0 : gaea_rock(id);
 }
 
 // Ground seasons (W2-SEAS-B 2026-11-08). Trodden ids: dirt trail, town dirt, gravel, and the town's sage

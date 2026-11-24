@@ -549,10 +549,22 @@ func _discover(id: String) -> void:
 	var station:String=railway.station_place_near(at) if is_instance_valid(railway) else ""
 	# Perf 0.1.0: the named-place list (a scan of painted spots and authored places) is only read
 	# by the "named place" branch below; the anchor, station and outdoor branches skip building it.
+	var home_spot := false
 	var choices: Array = [] if index == 0 or index % 2 != 0 or (not station.is_empty() and index % 3 == 0) else nav.command_places()
 	if index==0:
 		place_id="%s:anchor:%s"%[region,id]
 		if core.state.residents[id].home_region==region:tags.append("home:"+id)
+		# (Ponyville overhaul, 2026-11-24: at her own door, not wherever she first stood, which left ponies' home spots
+		# and meeting places out in the fields; living_world.gd _relearn_town_spots) Wherever she is in town: a pony out
+		# in the fields with no spot of her own had nowhere to go and stood waiting there (second play test the same
+		# day). A pony with no house here keeps the old way.
+		var door := _home_spot(id, actor, nav, service)
+		if door.is_finite():
+			at = door
+			home_spot = true
+		# she has a house, but no spot by it has room yet: where she stands, if that is among the houses (the old way,
+		# which is fine in town and quick), else the next try
+		elif not is_inf(door.x) and region == "ponyville" and not _near_house(actor.global_position): return
 	elif not station.is_empty() and index%3==0:
 		place_id=station;at=railway.station_exits[station.trim_prefix("rail:")];tags.append("station")
 	elif not choices.is_empty() and index % 2 == 0:
@@ -571,7 +583,10 @@ func _discover(id: String) -> void:
 		# 2026-11-15). Spots on her own bank only; the far bank is found from the far bank.
 		var here := actor.global_position
 		if preload("res://world/navigation/river_crossings.gd").crosses(Vector2(here.x, here.z), Vector2(at.x, at.z)): return
-	if not at.is_finite() or at.distance_to(actor.global_position) > 90:
+		# In Ponyville, only among its houses (Ponyville overhaul, 2026-11-24 play test: spots made from where ponies stood
+		# out in the carrot fields and open country drew others to meet there): within TOWN_SPOT m of a house.
+		if region == "ponyville" and not _near_house(at): return
+	if not at.is_finite() or (at.distance_to(actor.global_position) > 90 and not home_spot):
 		return
 	at = nav.command_support(at)
 	if not at.is_finite():
@@ -630,6 +645,59 @@ func _discover(id: String) -> void:
 	if is_instance_valid(railway):railway.publish_connections()
 	statistics.places += 1
 	_certify_next_route(service, actor.profile, place_id)
+
+## Whether `at` is within TOWN_SPOT m of a house ponies live in (house_interiors), on the ground.
+const TOWN_SPOT := 30.0
+var _house_points: PackedVector2Array = []
+var _house_count := -1
+func _near_house(at: Vector3) -> bool:
+	var houses := get_tree().get_nodes_in_group("house_interiors")
+	if houses.size() != _house_count:
+		_house_count = houses.size()
+		_house_points = PackedVector2Array()
+		for house: Node in houses:
+			if house is Node3D: _house_points.append(Vector2((house as Node3D).global_position.x, (house as Node3D).global_position.z))
+	var here := Vector2(at.x, at.z)
+	for point: Vector2 in _house_points:
+		if point.distance_squared_to(here) < TOWN_SPOT * TOWN_SPOT: return true
+	return false
+
+## In front of her house's door (house_interior.gd outside()), out on its lawn or in the street before it, or INF when
+## she has no house loaded here. Right at the door the porch, its flowerbed, the mailbox and the path left no room for
+## the spot's seats (nine tries in ten failed, 2026-11-24): the first of HOME_SPOTS (metres out from the door, and to
+## either side) with room for two seats, as _discover tests them; INF when none has yet (the next try looks again: the
+## first look at ground nopony has walked queues its sampling).
+const HOME_SPOTS := [Vector2(3.0, 0.0), Vector2(4.5, 0.0), Vector2(3.5, 2.5), Vector2(3.5, -2.5), Vector2(6.0, 0.0),
+	Vector2(5.0, 4.0), Vector2(5.0, -4.0), Vector2(8.0, 0.0), Vector2(7.0, 3.0), Vector2(7.0, -3.0), Vector2(10.0, 0.0),
+	Vector2(12.0, 0.0), Vector2(10.0, 4.0), Vector2(10.0, -4.0)]
+func _home_spot(id: String, actor: Node3D, nav: Node, service: Node) -> Vector3:
+	if _home_door(id, 0) == Vector3.INF: return Vector3.INF
+	var spacing: float = maxf(.85, actor.profile.radius * 2.5)
+	for attempt in HOME_SPOTS.size():
+		var at: Vector3 = nav.command_support(_home_door(id, attempt))
+		if not at.is_finite() or REST_PLACEMENT.passage(get_tree(), at, actor.profile.radius): continue
+		var room := 0
+		for offset in [Vector3.LEFT, Vector3.RIGHT, Vector3.FORWARD * 1.8, Vector3.BACK * 1.8]:
+			var seat: Vector3 = nav.command_support(at + offset * spacing)
+			if REST_PLACEMENT.passage(get_tree(), seat, actor.profile.radius): continue
+			if not seat.is_finite() or not service.steering_segment_clear(at, seat, actor.profile): break
+			if not PLACEMENT.support(actor.get_world_3d().direct_space_state, seat, actor.profile).is_finite(): break
+			room += 1
+		if room >= 2: return at
+	return Vector3(NAN, NAN, NAN)
+
+func _home_door(id: String, attempt := 0) -> Vector3:
+	if not is_instance_valid(population) or not population.has_method("home_house"): return Vector3.INF
+	var house: Variant = population.call("home_house", id)
+	if not house is Node3D or not is_instance_valid(house) or not (house as Node).has_method("outside"): return Vector3.INF
+	var door: Vector3 = (house as Node).call("outside")
+	var middle: Vector3 = (house as Node).call("center") if (house as Node).has_method("center") else (house as Node3D).global_position
+	var out := Vector3(door.x - middle.x, 0.0, door.z - middle.z)
+	if out.length_squared() < 0.01: return door
+	out = out.normalized()
+	var side := out.cross(Vector3.UP)
+	var step: Vector2 = HOME_SPOTS[posmod(attempt, HOME_SPOTS.size())]
+	return door + out * step.x + side * step.y
 
 func _discover_house(actor:Node3D,nav:Node,region:String) -> void:
 	var homes:Array=get_tree().get_nodes_in_group("house_interiors")

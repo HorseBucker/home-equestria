@@ -175,6 +175,7 @@ var _debug_press := false
 var _debug_class := false
 var _anon_door_at := -1000.0
 var _class_opened := false          # the class opened the door (and shuts it after the last one)
+var _closed_old := false            # out of school hours, classes left open were looked for once (_close_classes)
 var _leavers: Array = []
 var _leaving_until := -1.0
 var _extras: Array = []             # foals with no desk, in class today, in BACK_SPOTS order
@@ -255,7 +256,10 @@ func _physics_process(delta: float) -> void:
 	_keep_door(phase)
 	if phase.is_empty():
 		if not _members.is_empty() or _state().has("class_day"): _end_class()
+		elif not _closed_old: _close_classes(-1)
+		_closed_old = true
 	else:
+		_closed_old = false
 		_keep_class(phase)
 	_keep_things()
 	_reconcile_carried()
@@ -910,6 +914,7 @@ func _begin_encounter() -> void:
 	var encounters: Variant = _game.get("encounters")
 	if not is_instance_valid(encounters): return
 	var key := ENCOUNTER % _today()
+	_close_classes(_today())
 	if bool((encounters as Node).call("active", key)): return
 	var movers := {}
 	for id: String in _class_ids(): movers[id] = [OWNER]
@@ -924,9 +929,23 @@ func _begin_encounter() -> void:
 
 
 func _end_encounter() -> void:
+	_close_classes(-1)
+
+
+## Every class still open but today's (`keep`; -1: every one) is over. A school day that ended without three o'clock
+## passing here (a save loaded, or a night slept, from one school day into the next) left its class open, and two
+## open classes took the pupils from each other every frame (2026-11-24 log: "reserved by schoolhouse:class:36",
+## then ":37", ten thousand times each).
+func _close_classes(keep: int) -> void:
 	var encounters: Variant = _game.get("encounters") if is_instance_valid(_game) else null
-	if is_instance_valid(encounters) and bool((encounters as Node).call("active", ENCOUNTER % _today())):
-		(encounters as Node).call("complete", ENCOUNTER % _today())
+	if not is_instance_valid(encounters) or not (encounters as Node).has_method("_store"): return
+	var store: Variant = (encounters as Node).call("_store")
+	if not store is Dictionary: return
+	for key: String in (store as Dictionary).keys():
+		if not key.begins_with(ENCOUNTER.get_slice("%", 0)) or key == (ENCOUNTER % keep if keep >= 0 else ""): continue
+		if bool((encounters as Node).call("active", key)):
+			(encounters as Node).call("complete", key)
+			print("[schoolhouse] %s was still open: closed" % key)
 
 
 func _class_knows(id: String) -> String:

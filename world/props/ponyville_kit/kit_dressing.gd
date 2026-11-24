@@ -6,7 +6,8 @@ const PLACEMENTS := "res://world/props/ponyville_kit/placements.json"
 const FOLDER := "res://world/props/ponyville_kit/"
 const CELL := 48.0
 ## Visible distance per kind family (small 45 m, medium 90 m, tall 160 m; perf pass 2026-10-13).
-const SMALL := ["grass_tuft_a", "grass_tuft_b", "daisy_clump", "lupin_clump", "stepping_stones_b"]
+const SMALL := ["grass_tuft_a", "grass_tuft_b", "daisy_clump", "lupin_clump", "stepping_stones_b",
+	"shore_grass", "river_pebbles"]   # (the streams' banks, 2026-11-24: tools/town_planner/build/make_river_dressing.gd)
 const TALL := ["cypress", "tiered_fir", "broadleaf_tree", "bush_cluster_large", "well", "hay_cart"]
 ## Solid kinds whose drawn mesh is wider than the planned radius suggests. The cypress column
 ## measures 1.22 m from its trunk (player bug board #9, 2026-10-26: walking 0.7 m into it).
@@ -73,7 +74,7 @@ func _field_dots(kind: String, rows: Array) -> void:
 ## Low or thin props whose shadow is barely visible but costs a shadow pass per cell; trees,
 ## well, carts, barrels and benches keep theirs. October 13 also removes bush,
 ## flowering-shrub, log-pile and crop-row shadows, including bush proxy meshes.
-const NO_SHADOW := ["grass_tuft_a", "grass_tuft_b", "daisy_clump", "lupin_clump", "sunflower_clump",
+const NO_SHADOW := ["shore_grass", "reed_clump", "river_pebbles", "grass_tuft_a", "grass_tuft_b", "daisy_clump", "lupin_clump", "sunflower_clump",
 	"rose_bed", "stepping_stones_a", "stepping_stones_b", "heart_fence", "heart_fence_post",
 	"white_picket", "white_picket_post", "rail_fence", "rail_fence_broken", "rail_fence_post",
 	"mailbox", "signpost", "tree_stump", "produce_crate",
