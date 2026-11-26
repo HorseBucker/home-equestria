@@ -2,6 +2,11 @@
 
 By HorseBucker. For Home: Equestria **0.3.1.2-maredev** only.
 
+## 1.0.3
+
+- **Day counter in the save list.** 1.0.2 fixed the day shown in game for worlds started before the game's 0.3.1
+  update, but the save list kept showing the wrong day for saves made before 1.0.2. It shows the real day now.
+
 ## 1.0.2
 
 - **Day counter for older worlds.** The overhaul counts days from the day your world began, so a new world's first

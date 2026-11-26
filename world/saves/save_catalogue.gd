@@ -135,6 +135,9 @@ static func game_time_text(entry: Dictionary) -> String:
 	var hours := clampf(float(entry.get("hours", 0.0)), 0.0, 23.99)
 	var day := int(entry.get("day", 0))
 	var start := int(entry.get("start_day")) if entry.get("start_day") != null else start_day_for(day)
+	# a world made before late-summer starts began on day 0, whatever its save's header kept (the .preview.meta of a
+	# save written by 1.0 or 1.0.1 has the late-summer start they guessed: 1.0.2 player report, "it's not" fixed)
+	if preload("res://world/life/world_days.gd").began_at_zero(str(entry.get("world_id", ""))) and str(entry.get("world_id", "")) != "": start = 0
 	return "Day %d, %02d:%02d" % [maxi(0, day - start) + 1, int(hours), int((hours - int(hours)) * 60.0)]
 
 
