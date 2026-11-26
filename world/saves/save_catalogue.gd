@@ -64,7 +64,7 @@ static func header_from_doc(doc: Dictionary, path: String) -> Dictionary:
 	var clock: Dictionary = doc.get("clock") if doc.get("clock") is Dictionary else {}
 	return {"format": format_of(doc), "world_id": str(doc.get("world_id", _world_of(path))),
 		"saved_at": _number(doc.get("saved_at")), "day": _number(doc.get("day")), "hours": _number(doc.get("hours")),
-		"start_day": _number(context.get("world_start_day")) if context.get("world_start_day") != null else start_day_for(_number(doc.get("day"))),
+		"start_day": 0 if preload("res://world/life/world_days.gd").began_at_zero(str(doc.get("world_id", _world_of(path)))) else (_number(context.get("world_start_day")) if context.get("world_start_day") != null else start_day_for(_number(doc.get("day")))),
 		"kind": kind, "place": place, "form": form_text(FORM.saved(context)),
 		"play_seconds": _number(clock.get("active_seconds"))}
 

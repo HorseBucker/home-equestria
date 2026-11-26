@@ -17,6 +17,18 @@ extends RefCounted
 
 const KEY := "world_start_day"
 const SHORT := ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+## New worlds have started in late summer since the game's build 0.3.1-maredev of 2026-11-12; a world made before it
+## began on day 0, however far its clock has run since (1.0.1 player report: a world played from Day 1 to Day 53 showed
+## "Day 19", taken for one begun in late summer). A world's id carries the date it was made ("world-2026-11-04-...");
+## an id without one is older still.
+const LATE_START_SINCE := "2026-11-12"
+
+
+## Whether the world `world_id` was made before new worlds started in late summer (it began on day 0).
+static func began_at_zero(world_id: String) -> bool:
+	var parts := world_id.split("-")
+	if parts.size() < 4 or parts[0] != "world" or not parts[1].is_valid_int(): return true
+	return "%s-%s-%s" % [parts[1], parts[2], parts[3]] < LATE_START_SINCE
 
 
 ## The day the world began (on the game's clock).
@@ -24,6 +36,12 @@ static func start_day(tree: SceneTree, clock_day: int) -> int:
 	var seasons: Node = tree.get_first_node_in_group("season_state") if tree != null else null
 	var context: Variant = seasons.get("context") if seasons != null else null
 	var state: Variant = (context as Object).get("state") if context is Object and is_instance_valid(context) else null
+	var world_id := str((context as Object).get("world_id")) if context is Object and is_instance_valid(context) else ""
+	if not world_id.is_empty() and began_at_zero(world_id):
+		# (also over a late-summer start this counter guessed and kept for it in 1.0 and 1.0.1)
+		if state is Dictionary and int((state as Dictionary).get(KEY, 0)) != 0 and not bool((context as Object).get("_read_only")):
+			(state as Dictionary)[KEY] = 0
+		return 0
 	if state is Dictionary and (state as Dictionary).get(KEY) != null:
 		return int((state as Dictionary)[KEY])
 	var days := 20

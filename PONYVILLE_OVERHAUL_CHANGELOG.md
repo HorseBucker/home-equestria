@@ -2,6 +2,12 @@
 
 By HorseBucker. For Home: Equestria **0.3.1.2-maredev** only.
 
+## 1.0.2
+
+- **Day counter for older worlds.** The overhaul counts days from the day your world began, so a new world's first
+  day is Day 1 instead of the base game's Day 35. Worlds started before the game's 0.3.1 update began on day 0, but
+  were counted as if they'd begun in late summer, so a world on Day 53 showed Day 19. They show their real day again.
+
 ## 1.0.1: fixes from the first player report
 
 - **Ponies home spot fixed.** Each pony's home spot, where she and her friends meet up, was set
